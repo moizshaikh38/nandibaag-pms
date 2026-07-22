@@ -1,0 +1,15 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: en-US
+branch: Q0DeR-MaG1C-BrAnCh-Fo2-NoN-GiT-Or-No-C0MmIt
+nodes_managed: true
+exported_at: "2026-07-16T10:58:54Z"
+modules:
+    "":
+        dir_name: Nandibaag Resort WhatsApp Bot (Full-Stack)
+        title: Nandibaag Resort WhatsApp Bot (Full-Stack)
+        scope: []
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []

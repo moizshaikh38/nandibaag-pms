@@ -1,0 +1,1 @@
+Full-stack WhatsApp bot for Nandibaag Resort that auto-replies to customer inquiries via AI, manages bookings and inventory, and exposes a real-time admin dashboard.
