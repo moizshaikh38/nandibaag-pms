@@ -1,46 +1,27 @@
 {
-  "name": "nandibaag-backend",
+  "name": "nandibaag-bot-backend",
   "version": "1.0.0",
-  "description": "Backend for Nandibaag WhatsApp Bot",
+  "description": "Backend service for Nandibaag PMS with integrated AI chatbot",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js",
-    "setup": "node src/scripts/setupEnv.js",
-    "check-ports": "node src/scripts/checkPorts.js",
-    "smoke-test": "node src/scripts/smokeTest.js",
-    "seed-rooms": "node src/scripts/seedRoomInventory.js",
-    "test-ai": "node src/scripts/testAIReply.js",
-    "test-availability": "node src/scripts/testAvailability.js"
+    "dev": "nodemon src/server.js"
   },
-  "keywords": [
-    "whatsapp",
-    "bot",
-    "nandibaag"
-  ],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
-    "bcryptjs": "^2.4.3",
-    "compression": "^1.7.4",
+    "@google/generative-ai": "^0.1.1",
+    "@hapi/boom": "^10.0.1",
+    "@whiskeysockets/baileys": "^6.6.0",
     "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
-    "express": "^4.18.2",
-    "express-rate-limit": "^7.1.5",
-    "helmet": "^7.1.0",
-    "joi": "^17.11.0",
-    "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.0.3",
-    "morgan": "^1.10.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "mongoose": "^8.2.1",
     "node-cron": "^3.0.3",
-    "openai": "^4.24.1",
+    "openai": "^4.28.4",
+    "pino": "^9.0.0",
     "qrcode": "^1.5.3",
-    "socket.io": "^4.6.1",
-    "whatsapp-web.js": "^1.23.0",
-    "winston": "^3.11.0"
+    "socket.io": "^4.7.4"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2"
+    "nodemon": "^3.1.0"
   }
 }
