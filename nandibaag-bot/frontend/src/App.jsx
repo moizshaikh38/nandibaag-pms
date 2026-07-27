@@ -14,6 +14,7 @@ import CalendarPage from './pages/CalendarPage';
 import AvailabilityPage from './pages/AvailabilityPage';
 import PublicWidgetPage from './pages/PublicWidgetPage';
 import Sidebar from './components/Sidebar';
+import BottomNav from './components/BottomNav';
 
 // Protected Route wrapper component
 function ProtectedRoute({ children }) {
@@ -34,17 +35,18 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
-// Protected layout that includes vertical Sidebar
+// Protected layout that includes vertical Sidebar & BottomNav for mobile
 function ProtectedLayout({ children }) {
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-slate-50 flex">
+      <div className="min-h-screen bg-slate-50 flex flex-col lg:flex-row">
         <Sidebar />
         <div className="flex-1 min-w-0 lg:pl-64 flex flex-col transition-all duration-300">
-          <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 pb-24 lg:pb-8">
             {children}
           </main>
         </div>
+        <BottomNav />
       </div>
     </ProtectedRoute>
   );

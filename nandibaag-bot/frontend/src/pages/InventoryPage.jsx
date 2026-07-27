@@ -309,7 +309,7 @@ export default function InventoryPage() {
                                     setEditingRoom(room);
                                     setEditCapacity(room.capacity);
                                   }}
-                                  className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-emerald-600 transition-opacity p-0.5"
+                                  className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 text-slate-500 hover:text-emerald-600 transition-opacity p-1"
                                   title="Edit Room Capacity"
                                 >
                                   <Edit size={13} />
@@ -317,7 +317,7 @@ export default function InventoryPage() {
                                 {isAdmin && (
                                   <button
                                     onClick={() => handleDeleteRoom(room._id, s._id)}
-                                    className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-600 transition-opacity p-0.5"
+                                    className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 text-slate-500 hover:text-rose-600 transition-opacity p-1"
                                     title="Delete Room"
                                   >
                                     <Trash2 size={13} />
