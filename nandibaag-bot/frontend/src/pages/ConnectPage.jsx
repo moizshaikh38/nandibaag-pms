@@ -342,18 +342,34 @@ export default function ConnectPage() {
                     </div>
 
                     {isAdmin && (
-                      <button
-                        onClick={() => setShowDisconnectConfirm(sessionId)}
-                        className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors"
-                        title="Disconnect Session"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        {status === 'disconnected' && (
+                          <button
+                            onClick={() => {
+                              setNewSessionLabel(sessionId);
+                              setShowAddModal(true);
+                              setConnState('idle');
+                            }}
+                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 shadow-xs"
+                            title="Reconnect this number via QR code or Pairing Code"
+                          >
+                            <QrCode size={13} />
+                            <span>Reconnect</span>
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setShowDisconnectConfirm(sessionId)}
+                          className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors"
+                          title="Disconnect Session"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     )}
                   </div>
 
                   <div className="text-xs text-slate-500 pt-2 border-t border-slate-100 flex items-center justify-between">
-                    <span>Auto AI Reply: <strong className="text-emerald-700">Active</strong></span>
+                    <span>Auto AI Reply: <strong className={status === 'connected' ? 'text-emerald-700' : 'text-slate-500'}>{status === 'connected' ? 'Active' : 'Paused'}</strong></span>
                     <span>Role: <strong className="text-slate-700">Primary</strong></span>
                   </div>
                 </div>
