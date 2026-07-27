@@ -34,25 +34,32 @@ router.get('/stats', verifyToken, async (req, res, next) => {
     const sessionStatuses = getAllSessionsStatus(whatsappNumbers);
     const activeSessions = Object.values(sessionStatuses).filter(status => status === 'connected').length;
     
+    // Confirmed bookings count (active confirmed/checked-in/checked-out)
+    const confirmedBookingsCount = await Booking.countDocuments({
+      status: { $in: ['confirmed', 'checked_in', 'checked_out'] }
+    });
+
     // Bookings this week
     const bookingsThisWeek = await Booking.countDocuments({
-      createdAt: { $gte: weekStart }
+      createdAt: { $gte: weekStart },
+      status: { $ne: 'cancelled' }
     });
     
     // Total chats (all time)
     const totalChats = await Chat.countDocuments({ isArchived: false });
     
-    // Total bookings
-    const totalBookings = await Booking.countDocuments();
+    // Total active non-cancelled bookings
+    const totalBookings = await Booking.countDocuments({ status: { $ne: 'cancelled' } });
     
     // Conversion rate
-    const conversionRate = totalChats > 0 ? (totalBookings / totalChats * 100).toFixed(1) : 0;
+    const conversionRate = totalChats > 0 ? (confirmedBookingsCount / totalChats * 100).toFixed(1) : 0;
     
     res.json({
       success: true,
       stats: {
         chatsToday,
         hotLeadsCount,
+        confirmedBookingsCount,
         aiFailuresLast24h,
         activeSessions,
         bookingsThisWeek,
