@@ -46,8 +46,11 @@ if (error) {
   console.warn('Environment validation warning:', error.message);
 }
 
+const rawMongoUri = envVars.MONGO_URI || 'mongodb+srv://moizsh786786_db_user:RvSja2R0ytcXg6QZ@cluster0.ly5dxxy.mongodb.net/nandibaag-pms?retryWrites=true&w=majority';
+const cleanMongoUri = rawMongoUri.replace(/<|>/g, '').trim();
+
 module.exports = {
-  mongoUri: envVars.MONGO_URI,
+  mongoUri: cleanMongoUri,
   jwtSecret: envVars.JWT_SECRET,
   jwtExpiresIn: envVars.JWT_EXPIRES_IN,
   openrouterApiKey: envVars.OPENROUTER_API_KEY,

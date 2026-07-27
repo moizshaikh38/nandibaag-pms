@@ -10,8 +10,8 @@ let retryCount = 0;
 const connectDB = async () => {
   try {
     await mongoose.connect(mongoUri, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true
+      serverSelectionTimeoutMS: 10000,
+      connectTimeoutMS: 10000
     });
     logger.info('MongoDB connected successfully');
   } catch (error) {
@@ -22,8 +22,6 @@ const connectDB = async () => {
       setTimeout(connectDB, RETRY_DELAY);
     } else {
       logger.error(`MongoDB connection failed after ${MAX_RETRIES} attempts: ${error.message}`);
-      logger.error('Exiting process due to MongoDB connection failure');
-      process.exit(1);
     }
   }
 };
