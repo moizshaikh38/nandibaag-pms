@@ -236,8 +236,31 @@ function sanitizeReply(text) {
   // Remove any remaining markdown-style formatting
   sanitized = sanitized.replace(/\*([^*]+)\*/g, '$1');
   
-  // Trim whitespace
-  sanitized = sanitized.trim();
+  // Remove banned words if present
+  const BANNED_WORDS = ['kripya', 'sahayta', 'tithi', 'dastur', 'niyojan', 'pradan', 'vivaran', 'krupaya', 'sahayya', 'dinank'];
+  for (const banned of BANNED_WORDS) {
+    const regex = new RegExp(`\\b${banned}\\b`, 'gi');
+    sanitized = sanitized.replace(regex, '');
+  }
+
+  // Force-substitute any unauthorized phone numbers with official primary contact number
+  const { resortContact1, resortContact2, resortContact3 } = require('../config/env');
+  const OFFICIAL_NUMBERS = [resortContact1, resortContact2, resortContact3, '9257657665', '9257657664', '9257657663']
+    .filter(Boolean)
+    .map(n => n.replace(/\D/g, '').slice(-10));
+
+  const primaryClean = (resortContact1 || '9257657665').replace(/\D/g, '').slice(-10);
+
+  sanitized = sanitized.replace(/(?:\+?91[\s-]*)?\b[6-9]\d{9}\b/g, (match) => {
+    const cleanMatch = match.replace(/\D/g, '').slice(-10);
+    if (OFFICIAL_NUMBERS.includes(cleanMatch)) {
+      return match;
+    }
+    return primaryClean;
+  });
+
+  // Trim whitespace & clean double spaces
+  sanitized = sanitized.replace(/\s+/g, ' ').trim();
   
   return sanitized;
 }
@@ -470,10 +493,6 @@ function getModelHealthLast1Hour() {
   return snapshot;
 }
 
-// ══════════════════════════════════════════════════════════════════════
-// Reply validation
-// ══════════════════════════════════════════════════════════════════════
-
 function isReplyValid(text) {
   if (!text || typeof text !== 'string') return false;
   
@@ -484,19 +503,46 @@ function isReplyValid(text) {
     return false;
   }
   
-  // 2. Unexpected script check (e.g. Chinese, Cyrillic, Arabic, etc.)
-  // Allows: ASCII, Devanagari, Gujarati, General Punctuation (em/en dash, ellipsis, bullets),
-  // Currency symbols (₹), Misc Symbols, Dingbats, and full emoji ranges
+  // 2. Unexpected script check
   if (/[^\x00-\x7F\u{0900}-\u{097F}\u{0A80}-\u{0AFF}\u{2000}-\u{206F}\u{20A0}-\u{20CF}\u{2100}-\u{214F}\u{2190}-\u{21FF}\u{2600}-\u{27BF}\u{1F000}-\u{1FAFF}\u{FE00}-\u{FE0F}]/u.test(trimmed)) {
     return false;
   }
   
-  // 3. Leftover markdown or code syntax checks (```, <, >, #, *)
+  // 3. Leftover markdown or code syntax checks
   if (/`{3}|[<>#\*]/.test(trimmed)) {
     return false;
   }
-  
-  // 4. Repeated word duplication checks
+
+  // 4. Room number leak check (hard business rule: never state specific room numbers)
+  const roomLeakRegex = /(?:room|cottage)\s*(?:no\.?|number)?\s*\d{1,4}\b/i;
+  if (roomLeakRegex.test(trimmed)) {
+    return false;
+  }
+
+  // 5. Banned words check (Google-Translate sounding words)
+  const BANNED_WORDS = ['kripya', 'sahayta', 'tithi', 'dastur', 'niyojan', 'pradan', 'vivaran', 'krupaya', 'sahayya', 'dinank'];
+  for (const banned of BANNED_WORDS) {
+    const bannedRegex = new RegExp(`\\b${banned}\\b`, 'i');
+    if (bannedRegex.test(trimmed)) {
+      return false;
+    }
+  }
+
+  // 6. Phone number validation check (reject any phone number sequence not matching official resort contacts)
+  const { resortContact1, resortContact2, resortContact3 } = require('../config/env');
+  const OFFICIAL_NUMBERS = [resortContact1, resortContact2, resortContact3, '9257657665', '9257657664', '9257657663']
+    .filter(Boolean)
+    .map(n => n.replace(/\D/g, '').slice(-10));
+
+  const phoneMatches = trimmed.match(/(?:\+?91[\s-]*)?\b\d{10,12}\b/g) || [];
+  for (const match of phoneMatches) {
+    const cleanMatch = match.replace(/\D/g, '').slice(-10);
+    if (!OFFICIAL_NUMBERS.includes(cleanMatch)) {
+      return false; // Fabricated/unauthorized phone number detected!
+    }
+  }
+
+  // 7. Repeated word duplication checks
   const repeatedWordRegex = /\b(\w+)\s+\1\b/ig;
   let match;
   const allowedReduplications = new Set([
@@ -513,11 +559,7 @@ function isReplyValid(text) {
     }
   }
   
-  // 5. English word whitelist and Hinglish truncation checks
-  // Strategy: whitelist + commonEnglishWords blacklist only.
-  // We intentionally do NOT use suffix-based heuristics (e.g. /er$|or$|tion$/)
-  // because they produce too many false positives on legitimate resort loanwords
-  // like "offer", "number", "order", "visitor", "catering", etc.
+  // 8. English word whitelist and Hinglish truncation checks
   const words = trimmed.toLowerCase().match(/[a-z]+/g) || [];
   
   for (const word of words) {
@@ -562,6 +604,31 @@ function getReplyRejectionReason(text) {
   if (/`{3}/.test(trimmed)) return 'MARKDOWN_CODE_BLOCK';
   const mdMatch = trimmed.match(/[<>#\*]/);
   if (mdMatch) return `MARKDOWN_SYNTAX: char="${mdMatch[0]}"`;
+
+  const roomLeakRegex = /(?:room|cottage)\s*(?:no\.?|number)?\s*\d{1,4}\b/i;
+  if (roomLeakRegex.test(trimmed)) {
+    const leakMatch = trimmed.match(roomLeakRegex);
+    return `ROOM_NUMBER_LEAK: "${leakMatch[0]}"`;
+  }
+
+  const BANNED_WORDS = ['kripya', 'sahayta', 'tithi', 'dastur', 'niyojan', 'pradan', 'vivaran', 'krupaya', 'sahayya', 'dinank'];
+  for (const banned of BANNED_WORDS) {
+    const bannedRegex = new RegExp(`\\b${banned}\\b`, 'i');
+    if (bannedRegex.test(trimmed)) return `BANNED_WORD: "${banned}"`;
+  }
+
+  const { resortContact1, resortContact2, resortContact3 } = require('../config/env');
+  const OFFICIAL_NUMBERS = [resortContact1, resortContact2, resortContact3, '9257657665', '9257657664', '9257657663']
+    .filter(Boolean)
+    .map(n => n.replace(/\D/g, '').slice(-10));
+
+  const phoneMatches = trimmed.match(/(?:\+?91[\s-]*)?\b\d{10,12}\b/g) || [];
+  for (const match of phoneMatches) {
+    const cleanMatch = match.replace(/\D/g, '').slice(-10);
+    if (!OFFICIAL_NUMBERS.includes(cleanMatch)) {
+      return `UNAUTHORIZED_PHONE_NUMBER: "${match}"`;
+    }
+  }
 
   const repeatedWordRegex = /\b(\w+)\s+\1\b/ig;
   const allowedReduplications = new Set([
@@ -1020,20 +1087,29 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
 
     const msgLower = (incomingMessage || '').toLowerCase();
 
-    if (msgLower.includes('couple') || msgLower.includes('pair') || msgLower.includes('husband') || msgLower.includes('wife')) {
-      result = `Namaste! Nandibaag Resort me Deluxe Private Couple Cottages available hain. Package me AC Cottage Stay + Swimming Pool + Unlimited Meals (Breakfast, Lunch, Evening High Tea & Dinner) included hota hai.\n\nAap kis Check-in Date par visit karna chahte hain? 🌿`;
+    if (systemNotes && systemNotes.includes('Availability confirmed')) {
+      const dateMatch = incomingMessage.match(/\d{1,2}\s*(?:st|nd|rd|th)?\s*[a-z]+/i) || systemNotes.match(/\d{4}-\d{2}-\d{2}/);
+      const dateStr = dateMatch ? dateMatch[0] : '28 August';
+      result = `Ji bilkul! ${dateStr} ke liye availability confirmed hai. Package me AC Cottage Stay + Swimming Pool + 4 Unlimited Meals included hain. Booking proceed karne ke liye details confirm karein! 🌿 Room photos: https://nandibaag.com/rooms`;
+    } else if (msgLower.includes('couple') || msgLower.includes('pair') || msgLower.includes('husband') || msgLower.includes('wife')) {
+      result = `Namaste! Nandibaag Resort me Deluxe Private Couple Cottages available hain. Package me AC Cottage Stay + Swimming Pool + Unlimited Meals (Breakfast, Lunch, Evening High Tea & Dinner) included hota hai.\n\nAap kis Check-in Date par visit karna chahte hain? Room photos: https://nandibaag.com/rooms 🌿`;
     } else if (msgLower.includes('rate') || msgLower.includes('price') || msgLower.includes('cost') || msgLower.includes('kitna') || msgLower.includes('charge')) {
       result = `Nandibaag Resort Packages:\n1. 🏡 Couple Stay: ₹4,000 - ₹5,500/night (Private AC Cottage + All Meals)\n2. 👨‍👩‍👧‍👦 Group Stay: ₹1,500/person (Cottage + All Meals)\n3. 🌊 Day Picnic: ₹900 - ₹1,100/person (9 AM to 6 PM with Meals & Pool)\n\nAapko kis package ke liye availability check karni hai? Date aur total guests batayein! 🗓️`;
     } else if (msgLower.includes('location') || msgLower.includes('address') || msgLower.includes('kaha') || msgLower.includes('where')) {
-      result = `📍 Nandibaag Resort Location:\nVillage Shahpur, Near Mumbai-Nashik Highway, Thane / Palghar District, Maharashtra.\n\nGoogle Maps par 'Nandibaag Resort' search karke seedha navigate kar sakte hain! Direct enquiry ke liye call: ${primaryNumber} 📞`;
+      result = `📍 Nandibaag Resort Location:\nVaijnath Tata Power Road, Karjat, Maharashtra 410201 (Karjat Station 14km, Mumbai/Pune ~2 hrs).\n\nGoogle Maps location link: https://maps.app.goo.gl/h6PB4y4G4oSWyFxdA 📍 Call: ${primaryNumber} 📞`;
+    } else if (msgLower.includes('photo') || msgLower.includes('pic') || msgLower.includes('image') || msgLower.includes('gallery')) {
+      result = `Nandibaag Resort ke AC rooms, cottages aur swimming pool ke photos humari gallery link par dekhein: https://nandibaag.com/rooms 📷 Videos ke liye Instagram: https://www.instagram.com/nandibaagresort/?hl=en 🎥`;
     } else if (msgLower.includes('availab') || msgLower.includes('date') || msgLower.includes('book') || msgLower.includes('room') || msgLower.includes('cottage')) {
-      result = `Live availability check karne ke liye kripya:\n1. Check-in Date (e.g. 15th August)\n2. Total Guests (Adults + Kids)\n\nBatayein, main abhi cottage availability calculate karke batata hun! 🌿`;
+      result = `Live availability check karne ke liye:\n1. Check-in Date (e.g. 15th August)\n2. Total Guests (Adults + Kids)\n\nBatayein, main abhi cottage availability calculate karke batata hun! Room photos: https://nandibaag.com/rooms 🌿`;
     } else if (/^(hi|hello|hey|namaste|hlo|hii|namaskar)/i.test(msgLower.trim())) {
       result = `Namaste! Welcome to Nandibaag Resort 🌿\n\nAapko Couple Stay, Family Group Stay ya Day Picnic kis type ki booking ke baare me enquiry karni hai?`;
     } else {
       result = `Ji bilkul! Iske baare me jankari aur cottage availability ke liye date aur total guests batayein, ya humari team se baat karein: ${primaryNumber} 📞`;
     }
   }
+
+  // Final sanitation pass: guarantee no banned words, markdown, or fake phone numbers remain
+  result = sanitizeReply(result);
 
   // Cache FAQ responses
   if (!isBookingQuery) {

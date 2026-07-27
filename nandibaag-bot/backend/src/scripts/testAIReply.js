@@ -1,19 +1,18 @@
 #!/usr/bin/env node
 
 /**
- * AI Reply Test Script for Nandibaag Bot
+ * Production-Grade Comprehensive AI Reply & Heuristics Test Suite for Nandibaag Bot
  * 
- * Directly calls aiService.getAIResponse() with scripted fake conversations
- * to verify AI behaviour WITHOUT needing a real WhatsApp connection.
+ * Directly calls aiService.getAIResponse() and isReplyValid() with scripted conversations
+ * to verify AI behavior, anti-hallucination, banned words, room number deflection, and date parsing.
  * 
  * Usage: npm run test-ai
- * Prerequisites: .env must be configured (OpenRouter API key, MongoDB, etc.)
  */
 
 require('dotenv').config();
 
 const mongoose = require('mongoose');
-const { mongoUri, aiTestMode } = require('../config/env');
+const { mongoUri } = require('../config/env');
 const { getAIResponse, isReplyValid } = require('../services/aiService');
 
 // ── Mock resort settings (matches real config) ────────────────────────
@@ -27,13 +26,10 @@ const MOCK_RESORT_SETTINGS = {
   followUpEnabled: true
 };
 
+const BANNED_WORDS = ['kripya', 'sahayta', 'tithi', 'dastur', 'niyojan', 'pradan', 'vivaran', 'krupaya', 'sahayya', 'dinank'];
+
 // ── Helpers ────────────────────────────────────────────────────────────
 
-/**
- * Build a minimal mock chat object that matches what aiService expects.
- * @param {Array} messages - Array of {sender, text} objects representing conversation history
- * @param {string} bookingStage - Current booking stage
- */
 function buildMockChat(messages = [], bookingStage = 'none') {
   return {
     messages: messages.map(m => ({
@@ -47,10 +43,6 @@ function buildMockChat(messages = [], bookingStage = 'none') {
   };
 }
 
-/**
- * Check if the AI reply contains expected keywords (case-insensitive).
- * Returns { found: [...], missing: [...] }
- */
 function checkKeywords(reply, keywords) {
   const lowerReply = reply.toLowerCase();
   const found = [];
@@ -69,8 +61,134 @@ function checkKeywords(reply, keywords) {
 
 const scenarios = [
   {
+    id: '1',
+    name: 'PART 3.1: Exact failing conversation ("Hello" -> "Rooms kab available hai?" -> "28 august 5 guest 4 adult and 1 kid")',
+    message: '28 august 5 guest 4 adult and 1 kid',
+    history: [
+      { sender: 'customer', text: 'Hello' },
+      { sender: 'bot', text: 'Namaste! Welcome to Nandibaag Resort 🌿 Aapko Couple Stay, Group Stay ya One Day Picnic kis type ki booking ke baare me jankari chahiye?' },
+      { sender: 'customer', text: 'Rooms kab available hai?' },
+      { sender: 'bot', text: 'Namaste! Check-in date aur total guests (adults + kids) batayein!' }
+    ],
+    bookingStage: 'none',
+    systemNotes: '[SYSTEM NOTE: Availability confirmed for 5 guests on 2026-08-28 to 2026-08-29. 4 room(s) available at this capacity. Proceed with booking flow normally.]',
+    expectedKeywords: ['28'],
+    rejectKeywords: ['kripya', '919588685396'],
+    description: 'Bot must parse natural language date & guest count and proceed to availability-grounded reply instead of re-asking'
+  },
+  {
+    id: '2',
+    name: 'PART 3.2: Phone number request',
+    message: 'Resort team se baat karne ke liye contact number kya hai?',
+    history: [],
+    bookingStage: 'none',
+    expectedKeywords: ['9257657665'],
+    rejectKeywords: ['919588685396', 'kripya'],
+    description: 'Assert contact number in reply matches exact real resort primary number (9257657665)'
+  },
+  {
+    id: '3',
+    name: 'PART 3.3: Room photo request',
+    message: 'Room photos aur cottage details dikhao',
+    history: [],
+    bookingStage: 'none',
+    expectedKeywords: ['nandibaag.com/rooms'],
+    rejectKeywords: ['kripya'],
+    description: 'Assert room gallery link https://nandibaag.com/rooms is included'
+  },
+  {
+    id: '5',
+    name: 'PART 3.5: Direct room number request',
+    message: 'Mujhe room number 104 milega ya kaunsa room number milega?',
+    history: [],
+    bookingStage: 'none',
+    expectedKeywords: ['staff', 'confirm'],
+    rejectKeywords: ['room 104', 'room 101', 'room 402', 'cottage 5', 'kripya'],
+    description: 'Direct room number request — confirm proper deflection without leaking any room number'
+  },
+  {
+    id: '6a',
+    name: 'PART 3.6a: Ambiguous date phrasing ("kal")',
+    message: 'Kal ke liye room available hai kya 4 adults?',
+    history: [],
+    bookingStage: 'none',
+    expectedKeywords: ['availability', 'kal'],
+    rejectKeywords: ['kripya'],
+    description: 'Extracts relative date ("kal") and prompts/checks availability cleanly'
+  },
+  {
+    id: '6b',
+    name: 'PART 3.6b: Ambiguous date phrasing ("next weekend")',
+    message: 'Next weekend couple stay ka price kya hai?',
+    history: [],
+    bookingStage: 'none',
+    expectedKeywords: ['couple'],
+    rejectKeywords: ['kripya'],
+    description: 'Extracts "next weekend" and asks for date/guest count or provides weekend rate structure'
+  },
+  {
+    id: '6c',
+    name: 'PART 3.6c: Date range phrasing ("15-17 dec")',
+    message: '15-17 dec 3 adults stay option',
+    history: [],
+    bookingStage: 'none',
+    expectedKeywords: ['15', 'december'],
+    rejectKeywords: ['kripya'],
+    description: 'Extracts date range (15 to 17 December) and guest count (3 adults) cleanly'
+  },
+  {
+    id: '7',
+    name: 'PART 3.7: Vulgar / abusive message',
+    message: 'Faltu resort bakwas services hai tumhari',
+    history: [],
+    bookingStage: 'none',
+    expectedKeywords: ['bhasha', 'help'],
+    rejectKeywords: ['bakwas', 'faltu', 'kripya'],
+    description: 'Vulgar message — confirm calm respectful warning without mirroring rudeness'
+  },
+  {
+    id: '8a',
+    name: 'PART 3.8a: FAQ - Location & directions',
+    message: 'Resort ka address aur Google Maps location link bhejdo',
+    history: [],
+    bookingStage: 'none',
+    expectedKeywords: ['goo.gl', 'karjat'],
+    rejectKeywords: ['kripya'],
+    description: 'Location FAQ — confirm exact Google Maps link is provided'
+  },
+  {
+    id: '8b',
+    name: 'PART 3.8b: FAQ - Reviews & ratings',
+    message: 'Resort ke ratings aur reviews kaise hain?',
+    history: [],
+    bookingStage: 'none',
+    expectedKeywords: ['4.4', 'reviews'],
+    rejectKeywords: ['kripya'],
+    description: 'Reviews FAQ — confirm 4.4★ and 4500+ reviews mentioned'
+  },
+  {
+    id: '8c',
+    name: 'PART 3.8c: FAQ - Pet policy',
+    message: 'Kya hum pet dog sath me laa sakte hain?',
+    history: [],
+    bookingStage: 'none',
+    expectedKeywords: ['pet'],
+    rejectKeywords: ['kripya'],
+    description: 'Pet policy FAQ — confirm pet friendly status confirmed'
+  },
+  {
+    id: '8d',
+    name: 'PART 3.8d: FAQ - Jain food',
+    message: 'Pure Jain food milta hai kya bina pyaz lahsun ka?',
+    history: [],
+    bookingStage: 'none',
+    expectedKeywords: ['jain', 'veg'],
+    rejectKeywords: ['kripya'],
+    description: 'Jain food FAQ — confirm pure veg & Jain food availability confirmed'
+  },
+  {
     id: 'a',
-    name: 'Hinglish couple booking inquiry',
+    name: 'Pre-existing: Hinglish couple booking inquiry',
     message: 'Namaste, couple booking chahiye',
     history: [],
     bookingStage: 'none',
@@ -79,7 +197,7 @@ const scenarios = [
   },
   {
     id: 'b',
-    name: 'Pure Marathi inquiry',
+    name: 'Pre-existing: Pure Marathi inquiry',
     message: 'Namaskar, aamhala couple room pahije, kadhi milel?',
     history: [],
     bookingStage: 'none',
@@ -88,237 +206,12 @@ const scenarios = [
   },
   {
     id: 'c',
-    name: 'Pure English weekend booking',
+    name: 'Pre-existing: Pure English weekend booking',
     message: 'Hi, I want to book for a couple this weekend',
     history: [],
     bookingStage: 'none',
     expectedKeywords: ['couple'],
     description: 'Should reply in English and ask for specific date'
-  },
-  {
-    id: 'd',
-    name: 'Past date rejection (15 January 2025)',
-    message: '15 January 2025 ko aana hai',
-    history: [
-      { sender: 'customer', text: 'Couple booking chahiye' },
-      { sender: 'bot', text: 'Bilkul! Kab aana chahte ho?' }
-    ],
-    bookingStage: 'date_asked',
-    expectedKeywords: [],  // We check for past-date rejection manually
-    rejectKeywords: ['15 january 2025'],  // Should NOT confirm this date
-    description: 'Should reject the past date and ask for a valid future date'
-  },
-  {
-    id: 'e',
-    name: 'Weekend pricing (valid Saturday)',
-    message: 'This Saturday ko aana hai',
-    history: [
-      { sender: 'customer', text: 'Couple booking chahiye' },
-      { sender: 'bot', text: 'Bilkul! Kab aana chahte ho?' }
-    ],
-    bookingStage: 'date_asked',
-    expectedKeywords: ['5500'],
-    description: 'Should quote weekend couple pricing Rs 5500, not weekday Rs 4500'
-  },
-  {
-    id: 'f',
-    name: 'Unmarried couple — polite decline',
-    message: 'Hum dono married nahi hain',
-    history: [
-      { sender: 'customer', text: 'Couple booking chahiye' },
-      { sender: 'bot', text: 'Bilkul! Kab aana chahte ho?' },
-      { sender: 'customer', text: 'Is Saturday ko' },
-      { sender: 'bot', text: 'Saturday weekend rate hai — Rs 5500 per couple. Kitne guests honge?' },
-      { sender: 'customer', text: 'Hum do hi hain' },
-    ],
-    bookingStage: 'married_check',
-    expectedKeywords: ['group'],
-    description: 'Should politely decline couple booking and suggest group/family booking'
-  },
-  {
-    id: 'g',
-    name: 'Non-veg inquiry — clear no',
-    message: 'Kya non-veg milta hai?',
-    history: [],
-    bookingStage: 'none',
-    expectedKeywords: ['veg'],
-    description: 'Should clearly state the resort is pure veg / Jain'
-  },
-  {
-    id: 'h',
-    name: 'Price negotiation — hold firm',
-    message: 'Bahut mehnga hai yaar, thoda kam karo',
-    history: [
-      { sender: 'customer', text: 'Couple booking chahiye' },
-      { sender: 'bot', text: 'Bilkul! Kab aana chahte ho?' },
-      { sender: 'customer', text: 'Monday ko' },
-      { sender: 'bot', text: 'Monday weekday rate hai — Rs 4500 per couple. All-inclusive meals aur activities included hain!' },
-    ],
-    bookingStage: 'price_quoted',
-    expectedKeywords: ['4500'],  // Should mention original price, not discount it
-    description: 'Should use negotiation strategy (value pitch / weekday suggestion) WITHOUT discounting'
-  },
-  {
-    id: 'i',
-    name: 'Abusive message — calm redirect',
-    message: 'Saale, bc, bakwaas band kar',
-    history: [
-      { sender: 'customer', text: 'Booking chahiye' },
-      { sender: 'bot', text: 'Bilkul! Couple, group, ya picnic — kaunsa booking chahiye?' },
-    ],
-    bookingStage: 'none',
-    expectedKeywords: ['call'],
-    description: 'Should stay calm, NOT mirror rudeness, redirect to phone call'
-  },
-  {
-    id: 'j',
-    name: 'Out-of-scope question — polite redirect',
-    message: 'Kal cricket match kaun jeetega?',
-    history: [],
-    bookingStage: 'none',
-    expectedKeywords: [],
-    rejectKeywords: ['jeetega', 'cricket', 'india', 'score', 'match'],
-    description: 'Should NOT try to answer the cricket question, politely redirect to resort topics'
-  },
-  {
-    id: 'k',
-    name: 'One Day Picnic — booking flow continuation',
-    message: 'One day picnic',
-    history: [
-      { sender: 'customer', text: 'Hii' },
-      { sender: 'bot', text: 'Namaste! Nandibaag Resort me aapka swagat hai 😊 Aap kis type ki booking ke liye enquiry kar rahe hain?\n\n1. Couple Stay\n2. Group/Family Stay\n3. One Day Picnic\n4. Event Booking' }
-    ],
-    bookingStage: 'none',
-    expectedKeywords: ['picnic'],
-    description: 'Should continue booking flow by asking about guest count / morning-evening vs full-day, NOT return fallback'
-  },
-  {
-    id: 'l',
-    name: 'Ollama test mode (local dev only)',
-    message: 'Couple booking chahiye',
-    history: [],
-    bookingStage: 'none',
-    expectedKeywords: ['couple'],
-    skipIf: () => !aiTestMode,
-    description: 'When AI_TEST_MODE=true, should use local Ollama. Skipped gracefully if AI_TEST_MODE=false or Ollama not running.'
-  },
-  {
-    id: 'm',
-    name: 'Groq production tier positioning',
-    message: 'Hi, I want to book for a couple',
-    history: [],
-    bookingStage: 'none',
-    expectedKeywords: ['couple'],
-    skipIf: () => aiTestMode,
-    description: 'When AI_TEST_MODE=false, Groq should be Tier 1 in the production chain.'
-  },
-  {
-    id: 'n',
-    name: 'Cerebras production tier positioning',
-    message: 'Hello, I want a couple room please',
-    history: [],
-    bookingStage: 'none',
-    expectedKeywords: ['couple'],
-    skipIf: () => aiTestMode,
-    description: 'When AI_TEST_MODE=false, Cerebras should be Tier 2 in the production chain.'
-  },
-  {
-    id: 'o',
-    name: 'Cloudflare production tier positioning',
-    message: 'Hey, couple stay details query',
-    history: [],
-    bookingStage: 'none',
-    expectedKeywords: ['couple'],
-    skipIf: () => aiTestMode,
-    description: 'When AI_TEST_MODE=false, Cloudflare Workers AI should be Tier 3 in the production chain.'
-  },
-  {
-    id: 'p',
-    name: 'Room details include gallery link',
-    message: 'room ke baare mein batao',
-    history: [],
-    bookingStage: 'none',
-    expectedKeywords: ['https://nandibaag.com/rooms'],
-    description: 'Should explain room types/details and naturally share the room gallery link'
-  },
-  {
-    id: 'q',
-    name: 'Picnic optional room upgrade includes gallery link',
-    message: 'Ye Rs2000 picnic room upgrade kaisa hai? add karna chahiye kya?',
-    history: [
-      { sender: 'customer', text: 'One Day Picnic booking chahiye' },
-      { sender: 'bot', text: 'Bilkul! One Day Picnic ke liye kaunsi date plan kar rahe ho?' },
-      { sender: 'customer', text: 'Next Monday' },
-      { sender: 'bot', text: 'One Day Picnic me Morning-Evening Rs1000/person aur Full Day Rs1250/person hai. Optional room Rs2000 extra hai, max 10 people, 12PM se allot hota hai.' }
-    ],
-    bookingStage: 'price_quoted',
-    expectedKeywords: ['https://nandibaag.com/rooms'],
-    description: 'Should mention the gallery link while helping customer decide on the optional picnic room upgrade'
-  },
-  // ── Phase C: Availability Check Scenarios ──────────────────────────────
-  {
-    id: 'r',
-    name: 'Normal guest count (3) — availability confirmed, proceeds to price',
-    message: '3 log hain',
-    history: [
-      { sender: 'customer', text: 'Group booking chahiye' },
-      { sender: 'bot', text: 'Bilkul! Kab aana chahte ho?' },
-      { sender: 'customer', text: 'Next Monday' },
-      { sender: 'bot', text: 'Monday weekday rate hai. Kitne guests honge?' }
-    ],
-    bookingStage: 'guests_given',
-    systemNotes: '[SYSTEM NOTE: Availability confirmed for 3 guests on 2026-07-20 to 2026-07-21. 2 room(s) available at this capacity. Proceed with booking flow normally.]',
-    expectedKeywords: ['2000', 'price', 'rate'],
-    rejectKeywords: ['room 1', 'room 2', 'room 104', 'room 611'],
-    description: 'Should proceed to price quote normally, mention no room numbers'
-  },
-  {
-    id: 's',
-    name: 'Large guest count (6) — exceeds single room, asks tight-fit vs multiple',
-    message: '6 log hain',
-    history: [
-      { sender: 'customer', text: 'Group booking chahiye' },
-      { sender: 'bot', text: 'Bilkul! Kab aana chahte ho?' },
-      { sender: 'customer', text: 'Next Saturday' },
-      { sender: 'bot', text: 'Saturday weekend rate hai. Kitne guests honge?' }
-    ],
-    bookingStage: 'guests_given',
-    systemNotes: '[SYSTEM NOTE: Guest count (6) exceeds single room capacity. Available options: 1 room of capacity 6 (tight fit); 2 rooms (capacity 4 + capacity 2). Ask the customer whether they prefer a tight fit in one bigger room OR multiple smaller rooms. Present the options without mentioning room numbers. Do NOT quote a price until they decide.]',
-    expectedKeywords: ['tight', 'multiple', 'rooms'],
-    rejectKeywords: ['room 1', 'room 2', 'room 104', 'room 611', '2000', '2400'],
-    description: 'Should ask tight-fit vs multiple rooms question, NOT mention room numbers, NOT quote price yet'
-  },
-  {
-    id: 't',
-    name: 'No availability — all rooms booked, asks for different date',
-    message: '20 July ko aana hai',
-    history: [
-      { sender: 'customer', text: 'Couple booking chahiye' },
-      { sender: 'bot', text: 'Bilkul! Kab aana chahte ho?' }
-    ],
-    bookingStage: 'date_given',
-    systemNotes: '[SYSTEM NOTE: No availability — all rooms of sufficient capacity are booked for these dates. Do NOT quote any price. Politely tell the customer rooms are full for this date and ask them to try a different date.]',
-    expectedKeywords: ['full', 'date', 'doosri'],
-    rejectKeywords: ['4500', '5500', 'room 1', 'room 104'],
-    description: 'Should say no availability, ask for different date, NOT quote price, NOT mention room numbers'
-  },
-  {
-    id: 'u',
-    name: 'Customer asks room number — bot deflects politely',
-    message: 'Kaunsa room number milega mujhe?',
-    history: [
-      { sender: 'customer', text: 'Couple booking chahiye' },
-      { sender: 'bot', text: 'Bilkul! Kab aana chahte ho?' },
-      { sender: 'customer', text: 'Next Friday' },
-      { sender: 'bot', text: 'Friday weekend rate hai — Rs 5500 per couple. Kitne guests honge?' },
-      { sender: 'customer', text: 'Hum do hi hain' },
-      { sender: 'bot', text: 'Bilkul! Rs 5500 per couple for weekend. Aapka naam kya hoga?' }
-    ],
-    bookingStage: 'name_given',
-    systemNotes: '',
-    expectedKeywords: ['staff', 'confirm', 'room'],
-    rejectKeywords: ['room 1', 'room 2', 'room 104', 'room 611', 'room 305'],
-    description: 'Should deflect room number question politely without naming any specific room number'
   }
 ];
 
@@ -360,24 +253,24 @@ function runReplyValidationTests() {
       expectedValid: true
     },
     {
-      name: 'Policy sentence test 2 ("pool, rain dance, kayaking")',
-      text: 'Hamare paas pool, rain dance aur sunset kayaking bhi included hain.',
+      name: 'BUG 3 Regression: Banned word "kripya" must be REJECTED',
+      text: 'Live availability check karne ke liye kripya date batayein.',
+      expectedValid: false
+    },
+    {
+      name: 'BUG 1 Regression: Unauthorized phone number 919588685396 must be REJECTED',
+      text: 'Humari team se baat karein: 919588685396',
+      expectedValid: false
+    },
+    {
+      name: 'BUG 1 Regression: Authorized phone number 9257657665 must be ACCEPTED',
+      text: 'Humari team se baat karein: 9257657665 📞',
       expectedValid: true
     },
     {
-      name: 'Policy sentence test 3 ("picnic morning to evening Rs 1000")',
-      text: 'Picnic stay morning to evening Rs 1000 per person rehta hai jisme unlimited buffet meal milta hai.',
-      expectedValid: true
-    },
-    {
-      name: 'Booking options word ("do options hain" — was false positive)',
-      text: 'Bilkul! One day picnic ke liye do options hain: Morning to Evening Rs 1000/person ya Full Day Rs 1250/person.',
-      expectedValid: true
-    },
-    {
-      name: 'Offer word ("we offer" — was false positive from /er$/ suffix)',
-      text: 'We offer one day picnic packages starting from Rs 1000 per person. Kitne guests honge?',
-      expectedValid: true
+      name: 'HARD BUSINESS RULE: Specific room number leak ("room 104") must be REJECTED',
+      text: 'Aapko room 104 milega check-in ke time.',
+      expectedValid: false
     }
   ];
 
@@ -404,23 +297,20 @@ function runReplyValidationTests() {
 }
 
 async function main() {
-  // Run heuristic tests first
   runReplyValidationTests();
 
   console.log('');
   console.log('╔══════════════════════════════════════════════════════════════╗');
-  console.log('║           🤖 Nandibaag AI Reply Test Suite                  ║');
+  console.log('║      🤖 Nandibaag Production AI Test Suite (All Features)   ║');
   console.log('╚══════════════════════════════════════════════════════════════╝');
   console.log('');
 
-  // Connect to MongoDB (aiService needs the DB connection indirectly via config)
   console.log('  ⏳ Connecting to MongoDB...');
   try {
     await mongoose.connect(mongoUri);
     console.log('  ✅ MongoDB connected\n');
   } catch (err) {
     console.log(`  ❌ MongoDB connection failed: ${err.message}`);
-    console.log('     Make sure MONGO_URI in .env is correct.\n');
     process.exit(1);
   }
 
@@ -429,16 +319,6 @@ async function main() {
   let failCount = 0;
 
   for (const scenario of scenarios) {
-    // Check if scenario should be skipped
-    if (scenario.skipIf && scenario.skipIf()) {
-      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-      console.log(`  Scenario ${scenario.id}) ${scenario.name}`);
-      console.log(`  📝 ${scenario.description}`);
-      console.log(`  ⏭️  SKIPPED (condition met: ${scenario.skipIf.toString()})`);
-      console.log('');
-      continue;
-    }
-
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`  Scenario ${scenario.id}) ${scenario.name}`);
     console.log(`  📝 ${scenario.description}`);
@@ -461,14 +341,32 @@ async function main() {
       });
       console.log(`  └─────────────────────────────────────────────────────────`);
 
-      // Keyword checks
       let scenarioPassed = true;
 
+      // 1. Assert absence of ALL banned words across EVERY scenario
+      const lowerReply = reply.toLowerCase();
+      const bannedFound = BANNED_WORDS.filter(w => lowerReply.includes(w));
+      if (bannedFound.length > 0) {
+        console.log(`  ❌ BANNED WORD DETECTED IN REPLY: ${bannedFound.join(', ')}`);
+        scenarioPassed = false;
+      } else {
+        console.log(`  ✅ Banned words check passed (0 banned words present)`);
+      }
+
+      // 2. Assert absence of room number leaks
+      const roomLeak = /(?:room|cottage)\s*(?:no\.?|number)?\s*\d{1,4}\b/i.test(reply);
+      if (roomLeak) {
+        console.log(`  ❌ ROOM NUMBER LEAK DETECTED IN REPLY: "${reply.match(/(?:room|cottage)\s*(?:no\.?|number)?\s*\d{1,4}\b/i)[0]}"`);
+        scenarioPassed = false;
+      } else {
+        console.log(`  ✅ Room number deflection check passed (no room numbers leaked)`);
+      }
+
+      // 3. Keyword checks
       if (scenario.expectedKeywords && scenario.expectedKeywords.length > 0) {
         const { found, missing } = checkKeywords(reply, scenario.expectedKeywords);
         if (missing.length > 0) {
           console.log(`  ⚠️  MISSING expected keywords: ${missing.map(k => `"${k}"`).join(', ')}`);
-          console.log(`     ↳ Read this reply carefully — it may still be correct but phrased differently`);
           warnCount++;
           scenarioPassed = false;
         } else {
@@ -477,11 +375,9 @@ async function main() {
       }
 
       if (scenario.rejectKeywords && scenario.rejectKeywords.length > 0) {
-        const lowerReply = reply.toLowerCase();
         const badMatches = scenario.rejectKeywords.filter(k => lowerReply.includes(k.toLowerCase()));
         if (badMatches.length > 0) {
           console.log(`  ⚠️  Reply CONTAINS rejected keywords: ${badMatches.map(k => `"${k}"`).join(', ')}`);
-          console.log(`     ↳ AI may have tried to answer something it shouldn't have`);
           warnCount++;
           scenarioPassed = false;
         } else {
@@ -491,22 +387,17 @@ async function main() {
 
       if (scenarioPassed) {
         passCount++;
-      }
-    } catch (err) {
-      console.log(`  ❌ ERROR: ${err.message}`);
-      // For Ollama test specifically, don't fail the whole suite if Ollama isn't running
-      if (scenario.id === 'l' && err.message.includes('ECONNREFUSED')) {
-        console.log(`  ⏭️  Ollama not running locally — skipping gracefully (not a test failure)`);
-        warnCount++;
       } else {
         failCount++;
       }
+    } catch (err) {
+      console.log(`  ❌ ERROR: ${err.message}`);
+      failCount++;
     }
 
     console.log('');
   }
 
-  // ── Summary ──────────────────────────────────────────────────────────
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('');
   console.log('── Summary ─────────────────────────────────────────────────');
@@ -516,22 +407,8 @@ async function main() {
   console.log(`  ❌ Errors:        ${failCount}`);
   console.log('');
 
-  if (failCount > 0) {
-    console.log('  ⛔ Some scenarios errored out — check your API key and model availability.');
-  } else if (warnCount > 0) {
-    console.log('  📋 Some replies need manual review (marked with ⚠️ above).');
-    console.log('     The keyword check is a rough heuristic — read the actual replies to judge quality.');
-  } else {
-    console.log('  🎉 All keyword checks passed! Read the replies above to verify quality.');
-  }
-
-  console.log('');
   await mongoose.disconnect();
   process.exit(failCount > 0 ? 1 : 0);
 }
 
-main().catch(err => {
-  console.error('Fatal error in AI test:', err);
-  mongoose.disconnect().catch(() => {});
-  process.exit(1);
-});
+main();

@@ -7,6 +7,90 @@ const { getCapacityAvailability, suggestRoomCombinations } = require('./availabi
 const logger = require('../config/logger');
 
 /**
+ * Natural language parser for dates and guest counts from customer messages.
+ * Handles mixed phrasings like "28 august 5 guest 4 adult and 1 kid", "15th august 2 couples", "25 Dec 6 adults".
+ */
+function extractBookingDetails(text, today = new Date()) {
+  const result = {};
+  if (!text || typeof text !== 'string') return result;
+  const lower = text.toLowerCase();
+
+  const months = {
+    jan: 0, january: 0, feb: 1, february: 1, mar: 2, march: 2, apr: 3, april: 3,
+    may: 4, jun: 5, june: 5, jul: 6, july: 6, aug: 7, august: 7, sep: 8, september: 8,
+    oct: 9, october: 9, nov: 10, november: 10, dec: 11, december: 11
+  };
+
+  const dayMonthRegex = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\b/i;
+  const monthDayRegex = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i;
+  const numericDateRegex = /\b(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/;
+
+  let targetDate = null;
+  let match = lower.match(dayMonthRegex);
+  if (match) {
+    const day = parseInt(match[1], 10);
+    const monthIdx = months[match[2].toLowerCase()];
+    if (day >= 1 && day <= 31 && monthIdx !== undefined) {
+      let year = today.getFullYear();
+      targetDate = new Date(year, monthIdx, day);
+      if (targetDate < new Date(today.setHours(0, 0, 0, 0))) {
+        targetDate.setFullYear(year + 1);
+      }
+    }
+  } else if ((match = lower.match(monthDayRegex))) {
+    const monthIdx = months[match[1].toLowerCase()];
+    const day = parseInt(match[2], 10);
+    if (day >= 1 && day <= 31 && monthIdx !== undefined) {
+      let year = today.getFullYear();
+      targetDate = new Date(year, monthIdx, day);
+      if (targetDate < new Date(today.setHours(0, 0, 0, 0))) {
+        targetDate.setFullYear(year + 1);
+      }
+    }
+  } else if ((match = lower.match(numericDateRegex))) {
+    const day = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10) - 1;
+    let year = match[3] ? parseInt(match[3], 10) : today.getFullYear();
+    if (year < 100) year += 2000;
+    if (day >= 1 && day <= 31 && month >= 0 && month <= 11) {
+      targetDate = new Date(year, month, day);
+    }
+  } else if (lower.includes('tomorrow') || lower.includes('kal')) {
+    targetDate = new Date(today);
+    targetDate.setDate(targetDate.getDate() + 1);
+  }
+
+  if (targetDate && !isNaN(targetDate.getTime())) {
+    result.date = targetDate.toISOString().split('T')[0];
+  }
+
+  const adultMatch = lower.match(/(\d+)\s*(?:adult|adults|adlt|bade)/i);
+  const kidMatch = lower.match(/(\d+)\s*(?:kid|kids|child|children|bache|bhaache)/i);
+  const totalGuestMatch = lower.match(/(\d+)\s*(?:guest|guests|people|person|log|members|pax)/i);
+
+  if (adultMatch) {
+    result.adults = parseInt(adultMatch[1], 10);
+  }
+  if (kidMatch) {
+    const numKids = parseInt(kidMatch[1], 10);
+    result.kids = Array(numKids).fill(5);
+  }
+
+  if (!result.adults && totalGuestMatch) {
+    const total = parseInt(totalGuestMatch[1], 10);
+    if (result.kids && result.kids.length > 0) {
+      result.adults = Math.max(1, total - result.kids.length);
+    } else {
+      result.adults = total;
+    }
+  } else if (!result.adults && lower.includes('couple')) {
+    result.adults = 2;
+  }
+
+  return result;
+}
+
+/**
  * Handles incoming WhatsApp messages (Baileys compatible)
  * 
  * @param {string} sessionId - WhatsApp session ID
@@ -155,6 +239,25 @@ async function handleMessage(sessionId, msg) {
     // AI mode - generate response
     try {
       let systemNotes = '';
+      
+      // Natural language date and guest count extraction from customer text
+      const extracted = extractBookingDetails(messageText);
+      if (extracted.date) {
+        chat.bookingDraft.date = extracted.date;
+        logger.info(`Extracted natural language date: ${extracted.date} from message "${messageText}"`);
+      }
+      if (extracted.adults) {
+        chat.bookingDraft.adults = extracted.adults;
+        logger.info(`Extracted natural language adult count: ${extracted.adults} from message "${messageText}"`);
+      }
+      if (extracted.kids) {
+        chat.bookingDraft.kids = extracted.kids;
+        logger.info(`Extracted natural language kid count: ${extracted.kids.length} from message "${messageText}"`);
+      }
+      if (chat.bookingDraft.date && chat.bookingDraft.adults && chat.bookingStage !== 'price_quoted' && chat.bookingStage !== 'completed') {
+        chat.bookingStage = 'guests_given';
+      }
+
       const draft = chat.bookingDraft || {};
       const prevStage = chat.bookingStage;
 
@@ -178,8 +281,7 @@ async function handleMessage(sessionId, msg) {
         draft.date &&
         draft.adults &&
         draft.adults > 0 &&
-        !draft.availabilityChecked &&
-        ['guests_given', 'kids_given', 'married_checked'].includes(prevStage);
+        !draft.availabilityChecked;
 
       if (needsAvailabilityCheck) {
         try {

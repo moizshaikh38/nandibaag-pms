@@ -41,10 +41,35 @@ export default function Navbar() {
     const interval = setInterval(() => {
       fetchSessionStatus();
       fetchPendingHandovers();
-    }, 20000);
+    }, 10000);
+
+    if (socket) {
+      const handleReady = (data) => {
+        setWhatsappStatus('connected');
+        if (data?.sessionId) setActiveSessionId(data.sessionId);
+        fetchSessionStatus();
+      };
+
+      const handleDisconnected = () => {
+        fetchSessionStatus();
+      };
+
+      socket.on('whatsapp:ready', handleReady);
+      socket.on('whatsapp:disconnected', handleDisconnected);
+      socket.on('whatsapp:session_destroyed', handleDisconnected);
+      socket.on('number_deleted', handleDisconnected);
+
+      return () => {
+        clearInterval(interval);
+        socket.off('whatsapp:ready', handleReady);
+        socket.off('whatsapp:disconnected', handleDisconnected);
+        socket.off('whatsapp:session_destroyed', handleDisconnected);
+        socket.off('number_deleted', handleDisconnected);
+      };
+    }
 
     return () => clearInterval(interval);
-  }, []);
+  }, [socket]);
 
   const playWarningAudio = () => {
     try {

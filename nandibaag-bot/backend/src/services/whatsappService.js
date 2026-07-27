@@ -278,27 +278,28 @@ async function autoReconnect(sessionId) {
   }
 }
 
-function getSessionStatus(sessionId) {
+function getSessionStatus(sessionId, dbStatus) {
   const sock = activeSockets.get(sessionId);
-  if (!sock) return 'not_initialized';
-  
-  // check if websocket is open
-  if (sock.ws && sock.ws.readyState === 1) {
+  if (sock) {
+    // If socket exists in activeSockets map, it is connected
     return 'connected';
   }
-  return 'connecting';
+  if (dbStatus === 'connected') {
+    return 'connected';
+  }
+  return 'disconnected';
 }
 
-function getAllSessionsStatus(whatsappNumbers) {
+function getAllSessionsStatus(whatsappNumbers = []) {
   const statusMap = {};
-  for (const numberConfig of whatsappNumbers) {
-    const sessionId = numberConfig.label || numberConfig.number;
-    statusMap[sessionId] = getSessionStatus(sessionId);
+  if (Array.isArray(whatsappNumbers)) {
+    for (const numberConfig of whatsappNumbers) {
+      const sessionId = numberConfig.label || numberConfig.number;
+      statusMap[sessionId] = getSessionStatus(sessionId, numberConfig.status);
+    }
   }
   for (const sessionId of activeSockets.keys()) {
-    if (!statusMap[sessionId]) {
-      statusMap[sessionId] = getSessionStatus(sessionId);
-    }
+    statusMap[sessionId] = 'connected';
   }
   return statusMap;
 }
