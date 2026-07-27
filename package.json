@@ -1,4 +1,10 @@
 {
+  "name": "nandibaag-pms-monorepo",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node nandibaag-bot/backend/src/server.js",
+    "build": "cd nandibaag-bot/backend && npm install"
+  },
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "compression": "^1.8.1",

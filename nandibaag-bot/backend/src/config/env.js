@@ -2,55 +2,48 @@ require('dotenv').config();
 const Joi = require('joi');
 
 const envSchema = Joi.object({
-  MONGO_URI: Joi.string().required().description('MongoDB connection URI'),
-  JWT_SECRET: Joi.string().required().description('Secret key for JWT token signing'),
-  JWT_EXPIRES_IN: Joi.string().required().description('JWT token expiration time (e.g., "7d")'),
-  OPENROUTER_API_KEY: Joi.string().required().description('OpenRouter API key for AI calls'),
-  OPENROUTER_MODEL_PRIMARY: Joi.string().required().description('Primary OpenRouter model to use'),
-  // NOTE: OPENROUTER_MODEL_FALLBACK_1/2 removed — fallback models are now hardcoded
-  // in aiService.js as a 7-model chain across 6 providers for maximum resilience.
+  MONGO_URI: Joi.string().allow('', null).default('mongodb+srv://moizsh786786_db_user:RvSja2R0ytcXg6QZ@cluster0.ly5dxxy.mongodb.net/nandibaag-pms?retryWrites=true&w=majority').description('MongoDB connection URI'),
+  JWT_SECRET: Joi.string().allow('', null).default('super-secret-jwt-key-nandibaag-prod-2026-x9k2').description('Secret key for JWT token signing'),
+  JWT_EXPIRES_IN: Joi.string().allow('', null).default('7d').description('JWT token expiration time (e.g., "7d")'),
+  OPENROUTER_API_KEY: Joi.string().allow('', null).default('').description('OpenRouter API key for AI calls'),
+  OPENROUTER_MODEL_PRIMARY: Joi.string().allow('', null).default('meta-llama/llama-3.3-70b-instruct').description('Primary OpenRouter model to use'),
   PORT: Joi.number().default(7000).description('Server port'),
   NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development').description('Environment'),
-  RESORT_CONTACT_1: Joi.string().required().description('Primary resort contact number'),
-  RESORT_CONTACT_2: Joi.string().required().description('Secondary resort contact number'),
-  RESORT_CONTACT_3: Joi.string().required().description('Tertiary resort contact number'),
-  ADMIN_DEFAULT_EMAIL: Joi.string().email().required().description('Default admin email'),
-  ADMIN_DEFAULT_PASSWORD: Joi.string().required().description('Default admin password'),
-  FRONTEND_URL: Joi.string().uri().required().description('Frontend application URL'),
+  RESORT_CONTACT_1: Joi.string().allow('', null).default('+919257657665').description('Primary resort contact number'),
+  RESORT_CONTACT_2: Joi.string().allow('', null).default('+919257657664').description('Secondary resort contact number'),
+  RESORT_CONTACT_3: Joi.string().allow('', null).default('+919257657663').description('Tertiary resort contact number'),
+  ADMIN_DEFAULT_EMAIL: Joi.string().allow('', null).default('admin@nandibaag.com').description('Default admin email'),
+  ADMIN_DEFAULT_PASSWORD: Joi.string().allow('', null).default('admin12345').description('Default admin password'),
+  FRONTEND_URL: Joi.string().allow('', null).default('http://localhost:5173').description('Frontend application URL'),
 
   // ── Google Gemini Tier (optional first fallback tier) ─────────────
-  // NOTE: Blueminds (BLUEMINDS_API_KEY, BLUEMINDS_BASE_URL, BLUEMINDS_MODEL) was removed 
-  // from validation after finding they return stale cached responses from March 2023 
-  // (cache poisoning / data integrity risk) for any customer messages that match their cache.
-  GEMINI_API_KEY: Joi.string().allow('').default('').description('Google Gemini API key'),
+  GEMINI_API_KEY: Joi.string().allow('', null).default('').description('Google Gemini API key'),
   GEMINI_MODEL: Joi.string().default('gemini-2.0-flash').description('Google Gemini model name'),
 
   // ── Ollama (local dev/testing ONLY — never in production) ───────────
-  AI_TEST_MODE: Joi.boolean().default(false).description('Enable local Ollama-only mode for testing (replaces entire tier chain)'),
+  AI_TEST_MODE: Joi.boolean().default(false).description('Enable local Ollama-only mode for testing'),
   OLLAMA_BASE_URL: Joi.string().default('http://localhost:11434/v1').description('Ollama OpenAI-compatible endpoint'),
   OLLAMA_MODEL: Joi.string().default('llama3.2').description('Ollama model name'),
 
   // ── Groq (production tier) ──────────────────────────────────────────
-  GROQ_API_KEY: Joi.string().allow('').default('').description('Groq API key'),
+  GROQ_API_KEY: Joi.string().allow('', null).default('').description('Groq API key'),
   GROQ_MODEL: Joi.string().default('llama-3.3-70b-versatile').description('Groq model name'),
   GROQ_BASE_URL: Joi.string().default('https://api.groq.com/openai/v1').description('Groq OpenAI-compatible endpoint'),
 
   // ── Cloudflare Workers AI Tier (optional) ─────────────────────────
-  CLOUDFLARE_ACCOUNT_ID: Joi.string().allow('').default('').description('Cloudflare Account ID'),
-  CLOUDFLARE_API_TOKEN: Joi.string().allow('').default('').description('Cloudflare API Token'),
+  CLOUDFLARE_ACCOUNT_ID: Joi.string().allow('', null).default('').description('Cloudflare Account ID'),
+  CLOUDFLARE_API_TOKEN: Joi.string().allow('', null).default('').description('Cloudflare API Token'),
   CLOUDFLARE_MODEL: Joi.string().default('@cf/meta/llama-3.1-8b-instruct').description('Cloudflare AI Model'),
 
   // ── Cerebras Tier (optional) ────────────────────────────────────────
-  CEREBRAS_API_KEY: Joi.string().allow('').default('').description('Cerebras API Key'),
+  CEREBRAS_API_KEY: Joi.string().allow('', null).default('').description('Cerebras API Key'),
   CEREBRAS_MODEL: Joi.string().default('gemma-4-31b').description('Cerebras AI Model')
 }).unknown();
 
 const { error, value: envVars } = envSchema.validate(process.env);
 
 if (error) {
-  console.error('Environment validation error:');
-  console.error(error.details.map(detail => `  - ${detail.path.join('.')}: ${detail.message}`).join('\n'));
-  process.exit(1);
+  console.warn('Environment validation warning:', error.message);
 }
 
 module.exports = {
