@@ -47,6 +47,14 @@ function isValidObjectId(id) {
   return mongoose.Types.ObjectId.isValid(id);
 }
 
+function notifyInventoryChange(req) {
+  const io = req.app.get('io');
+  if (io) {
+    io.emit('inventory:updated', { timestamp: new Date() });
+    io.emit('availability:updated', { timestamp: new Date() });
+  }
+}
+
 async function attachRoomCounts(seriesList) {
   const seriesIds = seriesList.map((s) => s._id);
 
@@ -118,6 +126,8 @@ router.post('/series', verifyToken, requireAdmin, async (req, res, next) => {
 
     const series = new Series({ name: value.name });
     await series.save();
+
+    notifyInventoryChange(req);
 
     res.status(201).json({
       success: true,
@@ -217,6 +227,25 @@ router.delete('/series/:id', verifyToken, requireAdmin, async (req, res, next) =
 });
 
 /**
+ * GET /api/inventory/series/:id/rooms
+ * Alias for fetching rooms by series ID
+ */
+router.get('/series/:id/rooms', verifyToken, async (req, res, next) => {
+  try {
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid series ID' });
+    }
+    const rooms = await Room.find({ seriesId: req.params.id, status: { $ne: 'deleted' } }).sort({ roomNumber: 1 });
+    res.json({
+      success: true,
+      rooms
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * GET /api/inventory/rooms
  */
 router.get('/rooms', verifyToken, async (req, res, next) => {
@@ -286,6 +315,8 @@ router.post('/rooms', verifyToken, requireAdmin, async (req, res, next) => {
     await room.save();
     await room.populate('seriesId', 'name status');
 
+    notifyInventoryChange(req);
+
     res.status(201).json({
       success: true,
       room
@@ -319,7 +350,44 @@ router.patch('/rooms/:id', verifyToken, requireAdmin, async (req, res, next) => 
       return res.status(404).json({ success: false, message: 'Room not found' });
     }
 
+    notifyInventoryChange(req);
+
     res.json({
+      success: true,
+      room
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/inventory/series/:id/rooms (Alias for room creation)
+ */
+router.post('/series/:id/rooms', verifyToken, requireAdmin, async (req, res, next) => {
+  try {
+    const seriesId = req.params.id;
+    const { roomNumber, capacity } = req.body;
+    if (!roomNumber) {
+      return res.status(400).json({ success: false, message: 'roomNumber is required' });
+    }
+
+    const existing = await Room.findOne({ seriesId, roomNumber });
+    if (existing) {
+      return res.status(409).json({ success: false, message: `Room ${roomNumber} already exists in this series` });
+    }
+
+    const room = new Room({
+      seriesId,
+      roomNumber,
+      capacity: Number(capacity) || 4
+    });
+    await room.save();
+    await room.populate('seriesId', 'name status');
+
+    notifyInventoryChange(req);
+
+    res.status(201).json({
       success: true,
       room
     });

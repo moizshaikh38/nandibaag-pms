@@ -28,7 +28,9 @@ const SEED_DATA = [
   },
   {
     name: '200 Series',
-    rooms: []
+    rooms: [
+      { numbers: range(201, 210), capacity: 4 }
+    ]
   },
   {
     name: '500 Series',

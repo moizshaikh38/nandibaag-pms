@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { useSocket } from '../hooks/useSocket';
 import api from '../utils/api';
 import { formatPhoneDisplay, formatRelativeTime, getLanguageBadgeColor } from '../utils/formatters';
-import { Search, MessageSquare, Bot, User, Flame, ChevronRight } from 'lucide-react';
+import { Search, MessageSquare, Bot, User, Flame, ChevronRight, Zap, Filter, Sparkles, Phone, Shield, RefreshCw } from 'lucide-react';
 import ChatWindow from '../components/ChatWindow';
 import toast from 'react-hot-toast';
 
 export default function ChatsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { id: paramChatId } = useParams();
   const socket = useSocket();
   
   const [chats, setChats] = useState([]);
@@ -17,12 +18,11 @@ export default function ChatsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedChatId, setSelectedChatId] = useState(null);
+  const [activeTab, setActiveTab] = useState('all'); // 'all', 'hot', 'ai', 'human'
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768);
 
-  // Refs for in-flight per-chat mode requests (keyed by chatId)
   const pendingModeRequests = useRef({});
 
-  // Check for desktop/mobile
   useEffect(() => {
     const handleResize = () => {
       setIsDesktop(window.innerWidth >= 768);
@@ -31,14 +31,14 @@ export default function ChatsPage() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Fetch chats
   const fetchChats = useCallback(async (search = '') => {
     try {
+      setIsLoading(true);
       const params = new URLSearchParams();
       if (search) params.append('search', search);
       
       const response = await api.get(`/chats?${params.toString()}`);
-      setChats(response.data.chats);
+      setChats(response.data.chats || []);
     } catch (error) {
       console.error('Failed to fetch chats:', error);
     } finally {
@@ -46,7 +46,6 @@ export default function ChatsPage() {
     }
   }, []);
 
-  // Debounced search
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchQuery);
@@ -54,20 +53,23 @@ export default function ChatsPage() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Fetch chats when search changes
   useEffect(() => {
     fetchChats(debouncedSearch);
   }, [debouncedSearch, fetchChats]);
 
-  // Handle URL params for initial selection
   useEffect(() => {
-    const chatIdFromUrl = searchParams.get('chatId');
+    const chatIdFromUrl = paramChatId || searchParams.get('chatId');
     if (chatIdFromUrl) {
       setSelectedChatId(chatIdFromUrl);
     }
-  }, [searchParams]);
+  }, [paramChatId, searchParams]);
 
-  // Socket events
+  useEffect(() => {
+    if (chats.length > 0 && !selectedChatId && isDesktop) {
+      setSelectedChatId(chats[0]._id);
+    }
+  }, [chats, selectedChatId, isDesktop]);
+
   useEffect(() => {
     if (!socket) return;
 
@@ -88,7 +90,6 @@ export default function ChatsPage() {
           return chat;
         });
         
-        // Bump the updated chat to top
         const chatIndex = updated.findIndex(c => c._id === data.chatId);
         if (chatIndex > 0) {
           const [bumpedChat] = updated.splice(chatIndex, 1);
@@ -108,9 +109,7 @@ export default function ChatsPage() {
       );
     };
 
-    // Per-chat mode update from another tab/device
     const handleChatModeUpdated = (data) => {
-      // Only apply if we don't have a pending request for this chat
       if (!pendingModeRequests.current[data.chatId]) {
         setChats(prev =>
           prev.map(chat =>
@@ -131,12 +130,7 @@ export default function ChatsPage() {
     };
   }, [socket]);
 
-  /**
-   * Optimistic mode toggle for list rows.
-   * Also called by ChatWindow via onModeChange callback for instant list sync.
-   */
   const handleListRowToggle = useCallback((chatId, newModeOverride, e) => {
-    // If called from a click event, prevent navigation into the chat
     if (e?.stopPropagation) e.stopPropagation();
 
     const chat = chats.find(c => c._id === chatId);
@@ -144,16 +138,12 @@ export default function ChatsPage() {
 
     const newMode = newModeOverride || (chat.mode === 'ai' ? 'human' : 'ai');
 
-    // Optimistic update
     setChats(prev =>
       prev.map(c => c._id === chatId ? { ...c, mode: newMode } : c)
     );
 
-    // If this is a callback from ChatWindow (newModeOverride provided), don't
-    // fire another API call — ChatWindow already fires its own.
     if (newModeOverride) return;
 
-    // Cancel any in-flight request for this chat
     if (pendingModeRequests.current[chatId]) {
       pendingModeRequests.current[chatId].abort?.();
     }
@@ -169,7 +159,6 @@ export default function ChatsPage() {
         if (err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') return;
         delete pendingModeRequests.current[chatId];
 
-        // Revert
         const revertTo = newMode === 'ai' ? 'human' : 'ai';
         setChats(prev =>
           prev.map(c => c._id === chatId ? { ...c, mode: revertTo } : c)
@@ -185,140 +174,219 @@ export default function ChatsPage() {
     }
   };
 
+  // Filter computation
+  const hotLeads = chats.filter(c => c.leadStatus === 'hot' || (c.leadScore && c.leadScore >= 70));
+  const aiChats = chats.filter(c => c.mode === 'ai');
+  const humanChats = chats.filter(c => c.mode === 'human');
+
+  const filteredChats = chats.filter(chat => {
+    if (activeTab === 'hot') return chat.leadStatus === 'hot' || (chat.leadScore && chat.leadScore >= 70);
+    if (activeTab === 'ai') return chat.mode === 'ai';
+    if (activeTab === 'human') return chat.mode === 'human';
+    return true;
+  });
+
   const selectedChat = chats.find(c => c._id === selectedChatId);
 
   return (
-    <div className="h-screen flex flex-col md:flex-row">
+    <div className="h-[calc(100vh-7rem)] min-h-[600px] flex flex-col md:flex-row glass-card rounded-2xl overflow-hidden border border-slate-200 shadow-xl">
+      
       {/* Chat List Panel */}
-      <div className={`${isDesktop && selectedChat ? 'w-1/3' : 'w-full'} flex flex-col border-r border-gray-200 bg-white`}>
-        {/* Header */}
-        <div className="p-4 border-b border-gray-200">
-          <h1 className="text-2xl font-bold text-gray-800 mb-4">Chats</h1>
-          
-          {/* Search Bar */}
+      <div className={`${selectedChat ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 flex-col bg-white border-r border-slate-200 shrink-0`}>
+        
+        {/* Header & Tabs */}
+        <div className="p-4 border-b border-slate-100 space-y-3 bg-slate-50/50">
+          <div className="flex items-center justify-between">
+            <h1 className="text-lg font-display font-bold text-slate-800 flex items-center gap-2">
+              <MessageSquare size={20} className="text-emerald-600" />
+              <span>Resort WhatsApp Inbox</span>
+            </h1>
+            <span className="text-xs font-semibold px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full border border-slate-200 font-mono">
+              {filteredChats.length} Conversations
+            </span>
+          </div>
+
+          {/* Search Input */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+            <Search className="absolute left-3 top-2.5 text-slate-400" size={15} />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by name or phone..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-whatsapp focus:border-transparent"
+              placeholder="Search guest by name or phone..."
+              className="w-full pl-9 pr-4 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs"
             />
+          </div>
+
+          {/* DEDICATED HOT LEADS & CATEGORY TABS */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+            <button
+              onClick={() => setActiveTab('hot')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
+                activeTab === 'hot'
+                  ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-md shadow-orange-500/20 scale-105'
+                  : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
+              }`}
+            >
+              <Flame size={14} className={activeTab === 'hot' ? 'animate-bounce text-yellow-200' : 'text-amber-600'} />
+              <span>Hot Leads</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                activeTab === 'hot' ? 'bg-white/20 text-white' : 'bg-amber-200 text-amber-900'
+              }`}>
+                {hotLeads.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('all')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shrink-0 ${
+                activeTab === 'all'
+                  ? 'bg-slate-800 text-white shadow-xs'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+              }`}
+            >
+              All ({chats.length})
+            </button>
+
+            <button
+              onClick={() => setActiveTab('ai')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1 shrink-0 ${
+                activeTab === 'ai'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
+              }`}
+            >
+              <Zap size={13} />
+              <span>AI Bot ({aiChats.length})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('human')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1 shrink-0 ${
+                activeTab === 'human'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-indigo-50 text-indigo-800 border border-indigo-200 hover:bg-indigo-100'
+              }`}
+            >
+              <User size={13} />
+              <span>Handover ({humanChats.length})</span>
+            </button>
           </div>
         </div>
 
-        {/* Chat List */}
-        <div className="flex-1 overflow-y-auto chat-scrollbar">
+        {/* Chat List Rows */}
+        <div className="flex-1 overflow-y-auto chat-scrollbar divide-y divide-slate-100">
           {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-whatsapp"></div>
+            <div className="py-16 text-center space-y-3">
+              <RefreshCw size={28} className="animate-spin text-emerald-600 mx-auto" />
+              <p className="text-xs font-semibold text-slate-500">Loading guest messages...</p>
             </div>
-          ) : chats.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-gray-500">
-              <MessageSquare size={48} className="mb-2 text-gray-300" />
-              <p>No chats found</p>
+          ) : filteredChats.length === 0 ? (
+            <div className="py-16 text-center space-y-3 text-slate-400">
+              <MessageSquare size={36} className="mx-auto text-slate-300" />
+              <p className="text-xs font-semibold text-slate-600">No conversations in this section</p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-100">
-              {chats.map((chat) => {
-                const lastMessage = chat.messages[chat.messages.length - 1];
-                const isHot = chat.leadStatus === 'hot';
-                const isAI = chat.mode === 'ai';
-                
-                return (
-                  <div
-                    key={chat._id}
-                    onClick={() => handleChatSelect(chat._id)}
-                    className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors ${
-                      selectedChatId === chat._id ? 'bg-whatsapp bg-opacity-10' : ''
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      {/* Avatar */}
-                      <div className="w-12 h-12 bg-whatsapp rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0">
-                        {chat.customerName?.charAt(0).toUpperCase() || chat.customerPhone?.slice(-2)}
-                      </div>
+            filteredChats.map((chat) => {
+              const lastMessage = chat.messages?.[chat.messages.length - 1];
+              const isHot = chat.leadStatus === 'hot' || (chat.leadScore && chat.leadScore >= 70);
+              const isAI = chat.mode === 'ai';
+              const isSelected = selectedChatId === chat._id;
 
-                      {/* Content */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-1">
-                          <h3 className="font-semibold text-gray-800 truncate">
-                            {chat.customerName || formatPhoneDisplay(chat.customerPhone)}
-                          </h3>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            {isHot && <Flame size={14} className="text-orange-500" />}
+              return (
+                <div
+                  key={chat._id}
+                  onClick={() => handleChatSelect(chat._id)}
+                  className={`p-3.5 cursor-pointer transition-all border-l-4 ${
+                    isSelected
+                      ? 'bg-emerald-50/80 border-emerald-600 shadow-2xs'
+                      : isHot
+                      ? 'border-amber-500 hover:bg-amber-50/50'
+                      : 'border-transparent hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    {/* Avatar */}
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm text-white shrink-0 shadow-xs ${
+                      isHot
+                        ? 'bg-gradient-to-tr from-amber-600 to-orange-500 shadow-orange-500/20'
+                        : isAI
+                        ? 'bg-gradient-to-tr from-emerald-600 to-teal-500 shadow-emerald-600/20'
+                        : 'bg-slate-700'
+                    }`}>
+                      {chat.customerName?.charAt(0).toUpperCase() || chat.customerPhone?.slice(-2) || 'G'}
+                    </div>
 
-                            {/* Compact Instant Mode Toggle */}
-                            <button
-                              onClick={(e) => handleListRowToggle(chat._id, null, e)}
-                              title={isAI ? 'AI replying' : "You're handling this chat"}
-                              className="flex items-center justify-center flex-shrink-0"
-                              style={{
-                                width: '28px',
-                                height: '28px',
-                                borderRadius: '50%',
-                                border: 'none',
-                                cursor: 'pointer',
-                                transition: 'background-color 0.2s ease, transform 0.15s ease',
-                                backgroundColor: isAI ? 'rgba(37, 211, 102, 0.15)' : 'rgba(251, 191, 36, 0.2)',
-                                color: isAI ? '#25D366' : '#D97706',
-                              }}
-                              onMouseDown={(e) => { e.stopPropagation(); e.currentTarget.style.transform = 'scale(0.85)'; }}
-                              onMouseUp={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
-                              onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
-                            >
-                              {isAI ? <Bot size={14} /> : <User size={14} />}
-                            </button>
-
-                            <span className="text-xs text-gray-500">
-                              {formatRelativeTime(chat.lastMessageAt)}
+                    {/* Content */}
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-display font-bold text-xs text-slate-800 truncate flex items-center gap-1.5">
+                          <span>{chat.customerName || formatPhoneDisplay(chat.customerPhone)}</span>
+                          {isHot && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md bg-amber-100 text-amber-900 text-[10px] font-bold border border-amber-300">
+                              <Flame size={10} className="text-orange-600 fill-orange-500" />
+                              <span>Hot</span>
                             </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className={`text-xs px-2 py-0.5 rounded-full border ${getLanguageBadgeColor(chat.language)}`}>
-                            {chat.language}
-                          </span>
-                        </div>
-
-                        <p className="text-sm text-gray-600 truncate">
-                          {lastMessage?.text || 'No messages yet'}
-                        </p>
+                          )}
+                        </h3>
+                        <span className="text-[10px] text-slate-400 shrink-0 font-medium">
+                          {formatRelativeTime(chat.lastMessageAt || chat.updatedAt)}
+                        </span>
                       </div>
 
-                      {/* Chevron for desktop */}
-                      {isDesktop && (
-                        <ChevronRight className="text-gray-400 flex-shrink-0" size={20} />
-                      )}
+                      <p className="text-xs text-slate-500 truncate leading-tight">
+                        {lastMessage?.text || 'No messages yet'}
+                      </p>
+
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          {formatPhoneDisplay(chat.customerPhone)}
+                        </span>
+
+                        {/* Mode Toggle Button */}
+                        <button
+                          onClick={(e) => handleListRowToggle(chat._id, null, e)}
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all flex items-center gap-1 ${
+                            isAI
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                              : 'bg-indigo-50 text-indigo-800 border-indigo-200 hover:bg-indigo-100'
+                          }`}
+                          title="Click to toggle AI / Human mode"
+                        >
+                          {isAI ? <Zap size={10} /> : <User size={10} />}
+                          <span>{isAI ? 'AI Auto' : 'Staff'}</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              );
+            })
           )}
         </div>
       </div>
 
-      {/* Chat Window Panel (Desktop) */}
-      {isDesktop && (
-        <div className={`${selectedChat ? 'w-2/3' : 'w-2/3'} flex flex-col bg-gray-100`}>
-          {selectedChat ? (
-            <ChatWindow
-              chat={selectedChat}
-              onClose={() => setSelectedChatId(null)}
-              onModeChange={(chatId, newMode) => handleListRowToggle(chatId, newMode)}
-            />
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-gray-500">
-              <MessageSquare size={64} className="mb-4 text-gray-300" />
-              <p className="text-lg">Select a chat to view messages</p>
-              <p className="text-sm mt-2">Choose from the list on the left</p>
+      {/* Main Workspace Panel */}
+      <div className={`${selectedChat ? 'flex' : 'hidden md:flex'} flex-1 flex-col bg-slate-100 min-w-0`}>
+        {selectedChat ? (
+          <ChatWindow
+            chat={selectedChat}
+            onClose={() => setSelectedChatId(null)}
+            onModeChange={(newMode) => handleListRowToggle(selectedChat._id, newMode)}
+          />
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-3">
+            <div className="w-16 h-16 rounded-2xl bg-white text-emerald-600 flex items-center justify-center shadow-md border border-slate-200">
+              <MessageSquare size={32} />
             </div>
-          )}
-        </div>
-      )}
+            <h3 className="font-display font-bold text-lg text-slate-800">Select a Guest Conversation</h3>
+            <p className="text-xs text-slate-500 max-w-sm">
+              Click any guest conversation on the left panel or choose **🔥 Hot Leads** to manage high-converting bookings.
+            </p>
+          </div>
+        )}
+      </div>
+
     </div>
   );
 }

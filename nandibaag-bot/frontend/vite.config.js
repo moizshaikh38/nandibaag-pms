@@ -32,6 +32,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        navigateFallbackDenylist: [/^\/api/],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/api\.openrouter\.ai\/.*/i,
@@ -49,13 +50,21 @@ export default defineConfig({
     })
   ],
   server: {
-    port: 7001,
-    strictPort: false, // Allow auto-increment if port is busy
+    port: 7002,
+    strictPort: true,
     host: true,
+    allowedHosts: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:7000',
-        changeOrigin: true
+        target: 'http://127.0.0.1:7000',
+        changeOrigin: true,
+        secure: false
+      },
+      '/socket.io': {
+        target: 'http://127.0.0.1:7000',
+        ws: true,
+        changeOrigin: true,
+        secure: false
       }
     }
   }

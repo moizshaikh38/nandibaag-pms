@@ -13,8 +13,7 @@ const leadSchema = new mongoose.Schema({
   chatId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Chat',
-    required: true,
-    index: true
+    required: true
   },
   customerPhone: {
     type: String,
@@ -30,16 +29,14 @@ const leadSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['cold', 'warm', 'hot', 'converted', 'lost'],
-    default: 'cold',
-    index: true
+    default: 'cold'
   },
   convertedAt: {
     type: Date,
     default: null
   },
   lastActivityAt: {
-    type: Date,
-    index: true
+    type: Date
   }
 }, {
   timestamps: true

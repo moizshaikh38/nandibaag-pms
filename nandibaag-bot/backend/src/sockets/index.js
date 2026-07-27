@@ -18,7 +18,7 @@ let io = null;
 function initializeSocket(httpServer) {
   io = new Server(httpServer, {
     cors: {
-      origin: process.env.FRONTEND_URL || '*',
+      origin: '*',
       methods: ['GET', 'POST']
     }
   });

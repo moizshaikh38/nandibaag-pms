@@ -2,11 +2,12 @@ const rateLimit = require('express-rate-limit');
 
 /**
  * General API rate limiter
- * 200 requests per 15 minutes per IP
+ * Skipped in development mode to prevent polling blocks
  */
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 200,
+  max: 10000,
+  skip: () => process.env.NODE_ENV === 'development',
   message: {
     success: false,
     message: 'Too many requests, please try again later'
@@ -16,12 +17,12 @@ const generalLimiter = rateLimit({
 });
 
 /**
- * Auth login rate limiter (stricter)
- * 5 attempts per 15 minutes per IP to prevent brute force
+ * Auth login rate limiter
  */
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5,
+  max: 1000,
+  skip: () => process.env.NODE_ENV === 'development',
   message: {
     success: false,
     message: 'Too many login attempts, please try again later'

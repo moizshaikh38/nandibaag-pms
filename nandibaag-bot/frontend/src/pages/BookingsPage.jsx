@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
+import { formatDMY } from '../utils/formatters';
 import toast from 'react-hot-toast';
 import {
   Plus,
@@ -19,25 +20,33 @@ import {
   Filter,
   Bed,
   Phone,
-  Users
+  Users,
+  Trash2,
+  BookOpen,
+  DollarSign,
+  Printer,
+  CheckCheck,
+  FileText,
+  Upload,
+  Image as ImageIcon,
+  ExternalLink,
+  Send
 } from 'lucide-react';
 
 const STATUS_CONFIG = {
-  draft: { bg: 'bg-gray-100', text: 'text-gray-700', label: 'Draft' },
-  pending_payment: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Pending Payment' },
-  confirmed: { bg: 'bg-green-100', text: 'text-green-800', label: 'Confirmed' },
-  cancelled: { bg: 'bg-red-100', text: 'text-red-800', label: 'Cancelled' },
-  checked_in: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Checked In' },
-  checked_out: { bg: 'bg-purple-100', text: 'text-purple-800', label: 'Checked Out' },
-  no_show: { bg: 'bg-gray-200', text: 'text-gray-800', label: 'No Show' }
+  draft: { bg: 'bg-slate-100', text: 'text-slate-700', label: 'Draft' },
+  pending_payment: { bg: 'bg-amber-100', text: 'text-amber-800', label: 'Pending Payment' },
+  confirmed: { bg: 'bg-emerald-100', text: 'text-emerald-800', label: 'Confirmed' },
+  cancelled: { bg: 'bg-rose-100', text: 'text-rose-800', label: 'Cancelled' },
+  checked_in: { bg: 'bg-teal-100', text: 'text-teal-800', label: 'Checked In' },
+  checked_out: { bg: 'bg-indigo-100', text: 'text-indigo-800', label: 'Checked Out' },
+  no_show: { bg: 'bg-slate-200', text: 'text-slate-800', label: 'No Show' }
 };
-
-const BOOKING_TYPE_LABELS = { couple: 'Couple', group: 'Group', picnic: 'Picnic' };
 
 function StatusBadge({ status }) {
   const config = STATUS_CONFIG[status] || STATUS_CONFIG.draft;
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold ${config.bg} ${config.text}`}>
       {config.label}
     </span>
   );
@@ -51,25 +60,20 @@ export default function BookingsPage() {
   // Modals
   const [cancelModal, setCancelModal] = useState(null);
   const [cancelReason, setCancelReason] = useState('');
-  const [moveModal, setMoveModal] = useState(null);
-  const [moveRooms, setMoveRooms] = useState([]);
-  const [selectedMoveRoom, setSelectedMoveRoom] = useState(null);
-  const [moveWarning, setMoveWarning] = useState(null);
-  const [moveConfirmWarning, setMoveConfirmWarning] = useState(false);
-  const [moveRoomCheckStatus, setMoveRoomCheckStatus] = useState({}); // roomId -> { checking, available }
-  const [rescheduleModal, setRescheduleModal] = useState(null);
-  const [rescheduleDates, setRescheduleDates] = useState({ newCheckInDate: '', newCheckOutDate: '' });
+  const [invoiceModal, setInvoiceModal] = useState(null); // Printable receipt modal
+  const [idPhotoPreviewModal, setIdPhotoPreviewModal] = useState(null); // ID Photo zoom modal
   const [manualModal, setManualModal] = useState(false);
   const [manualForm, setManualForm] = useState({
-    guestName: '', guestPhone: '', guestAddress: '', guestIdProofType: '',
-    bookingType: 'group', checkInDate: '', checkOutDate: '', adults: 2, kids: [],
-    totalAmount: 0, priceBreakdown: '', specialRequests: '', roomId: ''
+    guestName: '', guestPhone: '+91', guestAddress: '', guestIdProofType: 'aadhaar', guestIdProofPhoto: null,
+    bookingType: 'couple', checkInDate: '', checkOutDate: '', adults: 2, kids: [],
+    totalAmount: 3500, advancePayment: '', remainingPayment: '', priceBreakdown: '', specialRequests: '', roomId: ''
   });
   const [manualRooms, setManualRooms] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
   const fetchBookings = async () => {
     try {
+      setLoading(true);
       const params = new URLSearchParams();
       if (filters.status) params.append('status', filters.status);
       if (filters.search) params.append('search', filters.search);
@@ -90,13 +94,11 @@ export default function BookingsPage() {
     fetchBookings();
   };
 
-  // ── Actions ──
-
   const handleCancel = async (bookingId) => {
     setSubmitting(true);
     try {
       await api.patch(`/pms/bookings/${bookingId}/cancel`, { reason: cancelReason });
-      toast.success('Booking cancelled');
+      toast.success('Booking cancelled & room released');
       setCancelModal(null);
       setCancelReason('');
       fetchBookings();
@@ -104,6 +106,17 @@ export default function BookingsPage() {
       toast.error(error.response?.data?.message || 'Failed to cancel');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDeleteBooking = async (bookingId) => {
+    if (!window.confirm('Are you sure you want to permanently delete this booking? The assigned room will be released.')) return;
+    try {
+      await api.delete(`/pms/bookings/${bookingId}`);
+      toast.success('🗑️ Booking deleted & room released');
+      fetchBookings();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to delete booking');
     }
   };
 
@@ -117,84 +130,140 @@ export default function BookingsPage() {
     }
   };
 
-  const handleStopMessages = async (bookingId) => {
-    try {
-      const res = await api.patch(`/pms/bookings/${bookingId}/stop-messages`);
-      toast.success(res.data.messagesStopped ? 'Messages stopped' : 'Messages resumed');
-      // Optimistic update
-      setBookings(prev => prev.map(b => b._id === bookingId ? { ...b, messagesStopped: res.data.messagesStopped } : b));
-    } catch (error) {
-      toast.error('Failed to toggle messages');
-    }
-  };
-
-  const openMoveRoom = async (booking) => {
-    setMoveModal(booking);
-    setSelectedMoveRoom(null);
-    setMoveWarning(null);
-    setMoveConfirmWarning(false);
-    setMoveRoomCheckStatus({});
-    try {
-      const res = await api.get(`/pms/bookings/${booking._id}/available-rooms`);
-      setMoveRooms(res.data.rooms || []);
-    } catch {
-      toast.error('Failed to load available rooms');
-    }
-  };
-
-  const selectMoveRoom = async (room, guestCount) => {
-    setSelectedMoveRoom(room);
-    if (room.capacity < guestCount) {
-      setMoveWarning(`Guest count (${guestCount}) exceeds room capacity (${room.capacity})`);
-      setMoveConfirmWarning(false);
-    } else {
-      setMoveWarning(null);
-      setMoveConfirmWarning(false);
-    }
-
-    // Live availability check
-    setMoveRoomCheckStatus(prev => ({ ...prev, [room.roomId]: { checking: true, available: null } }));
-    try {
-      const res = await api.get(`/pms/bookings/${moveModal._id}/check-room/${room.roomId}`);
-      setMoveRoomCheckStatus(prev => ({ ...prev, [room.roomId]: { checking: false, available: res.data.available } }));
-    } catch {
-      setMoveRoomCheckStatus(prev => ({ ...prev, [room.roomId]: { checking: false, available: null } }));
-    }
-  };
-
-  const handleMoveRoom = async () => {
-    if (!selectedMoveRoom) { toast.error('Select a room'); return; }
-    if (moveWarning && !moveConfirmWarning) { setMoveConfirmWarning(true); return; }
-    setSubmitting(true);
-    try {
-      const res = await api.patch(`/pms/bookings/${moveModal._id}/move-room`, { newRoomId: selectedMoveRoom.roomId });
-      if (res.data.warning) toast(res.data.warning, { icon: '⚠️', duration: 4000 });
-      else toast.success('Room moved successfully');
-      setMoveModal(null);
-      fetchBookings();
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to move room');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleReschedule = async () => {
-    if (!rescheduleDates.newCheckInDate || !rescheduleDates.newCheckOutDate) {
-      toast.error('Both dates are required');
+  const handlePrintInvoice = (b) => {
+    const printWin = window.open('', '_blank', 'width=800,height=900');
+    if (!printWin) {
+      toast.error('Please allow popups to print invoices');
       return;
     }
-    setSubmitting(true);
+
+    const checkIn = formatDMY(b.checkInDate || b.date);
+    const checkOut = formatDMY(b.checkOutDate || (new Date(b.checkInDate || b.date).getTime() + 86400000));
+    const invoiceNo = `NB-${(b._id || '').slice(-6).toUpperCase()}`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Invoice - ${b.customerName} - ${invoiceNo}</title>
+          <style>
+            body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 40px; color: #0f172a; background: #ffffff; }
+            .box { max-width: 680px; margin: auto; padding: 32px; border: 1px solid #e2e8f0; border-radius: 12px; }
+            .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #047857; padding-bottom: 20px; margin-bottom: 20px; }
+            .brand h1 { margin: 0; color: #047857; font-size: 24px; font-weight: 800; }
+            .brand p { margin: 4px 0 0 0; color: #64748b; font-size: 12px; }
+            .badge { display: inline-block; background: #d1fae5; color: #065f46; font-weight: 700; font-size: 12px; padding: 4px 12px; border-radius: 20px; margin-bottom: 6px; }
+            .meta { font-size: 11px; color: #64748b; margin: 2px 0; }
+            .details { display: flex; justify-content: space-between; background: #f8fafc; padding: 16px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 24px; font-size: 13px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 13px; }
+            th { background: #f1f5f9; color: #334155; text-align: left; padding: 10px 12px; font-weight: 700; border-bottom: 1px solid #cbd5e1; }
+            td { padding: 12px; border-bottom: 1px solid #f1f5f9; }
+            .text-right { text-align: right; }
+            .total-row { background: #f0fdf4; font-weight: 800; color: #065f46; font-size: 14px; }
+            .footer { text-align: center; margin-top: 30px; font-size: 11px; color: #94a3b8; font-style: italic; }
+          </style>
+        </head>
+        <body>
+          <div class="box">
+            <div class="header">
+              <div class="brand">
+                <h1>NANDIBAAG RESORT</h1>
+                <p>Pure Veg & Jain Resort • Karjat, Maharashtra</p>
+                <p>Contact: +91 92576 57665 | GSTIN: 27AABCN1234F1Z5</p>
+              </div>
+              <div style="text-align: right;">
+                <div class="badge">OFFICIAL INVOICE</div>
+                <div class="meta"><strong>Invoice #:</strong> ${invoiceNo}</div>
+                <div class="meta"><strong>Date:</strong> ${formatDMY(new Date())}</div>
+              </div>
+            </div>
+
+            <div class="details">
+              <div>
+                <div style="color: #64748b; font-size: 11px; margin-bottom: 2px;">Guest Information:</div>
+                <strong>${b.customerName}</strong>
+                <div>${b.customerPhone}</div>
+              </div>
+              <div style="text-align: right;">
+                <div style="color: #64748b; font-size: 11px; margin-bottom: 2px;">Stay Duration:</div>
+                <strong>${checkIn} ➔ ${checkOut}</strong>
+                <div style="text-transform: capitalize;">Type: ${b.bookingType || 'Couple'}</div>
+              </div>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Description</th>
+                  <th class="text-right">Amount (₹)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Cottage Stay Package</td>
+                  <td class="text-right">₹${b.totalAmount}</td>
+                </tr>
+                <tr>
+                  <td style="color: #047857;">Advance Paid</td>
+                  <td class="text-right" style="color: #047857;">- ₹${b.advancePayment || 0}</td>
+                </tr>
+                <tr class="total-row">
+                  <td>Net Balance Due</td>
+                  <td class="text-right">₹${b.remainingPayment || 0}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="footer">
+              Thank you for choosing Nandibaag Resort! We wish you a peaceful stay.
+            </div>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWin.document.open();
+    printWin.document.write(html);
+    printWin.document.close();
+  };
+
+  /**
+   * FEATURE #1: 1-CLICK MARK BALANCE PAID
+   */
+  const handleSettlePayment = async (bookingId, remainingAmount) => {
+    if (!window.confirm(`Mark remaining balance of ₹${remainingAmount} as FULLY PAID?`)) return;
     try {
-      await api.patch(`/pms/bookings/${rescheduleModal._id}/reschedule`, rescheduleDates);
-      toast.success('Booking rescheduled');
-      setRescheduleModal(null);
+      await api.patch(`/pms/bookings/${bookingId}/settle-payment`);
+      toast.success(`💳 Balance of ₹${remainingAmount} marked as FULLY PAID! Receipt sent on WhatsApp.`);
       fetchBookings();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to reschedule');
-    } finally {
-      setSubmitting(false);
+      toast.error(error.response?.data?.message || 'Failed to settle payment');
     }
+  };
+
+  /**
+   * FEATURE #3: ID PHOTO FILE UPLOAD TO BASE64
+   */
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('ID photo file size should be less than 5MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setManualForm(prev => ({ ...prev, guestIdProofPhoto: reader.result }));
+      toast.success('📷 ID Proof photo attached successfully!');
+    };
+    reader.readAsDataURL(file);
   };
 
   const fetchManualRooms = async (checkIn, checkOut) => {
@@ -207,6 +276,17 @@ export default function BookingsPage() {
     }
   };
 
+  useEffect(() => {
+    if (manualModal) {
+      const ci = manualForm.checkInDate || new Date().toISOString().split('T')[0];
+      const co = manualForm.checkOutDate || new Date(Date.now() + 86400000).toISOString().split('T')[0];
+      if (!manualForm.checkInDate || !manualForm.checkOutDate) {
+        setManualForm(prev => ({ ...prev, checkInDate: ci, checkOutDate: co }));
+      }
+      fetchManualRooms(ci, co);
+    }
+  }, [manualModal]);
+
   const handleManualBooking = async () => {
     if (!manualForm.guestName.trim() || !manualForm.guestPhone.trim()) {
       toast.error('Guest name and phone are required');
@@ -218,15 +298,20 @@ export default function BookingsPage() {
     }
     setSubmitting(true);
     try {
+      const roomIds = manualForm.roomId ? [manualForm.roomId] : [];
       const res = await api.post('/pms/bookings/manual', {
         ...manualForm,
         adults: parseInt(manualForm.adults) || 1,
         totalAmount: parseFloat(manualForm.totalAmount) || 0,
+        advancePayment: parseFloat(manualForm.advancePayment) || 0,
+        remainingPayment: parseFloat(manualForm.remainingPayment) || 0,
         roomId: manualForm.roomId || null,
-        guestIdProofType: manualForm.guestIdProofType || null
+        roomIds,
+        guestIdProofType: manualForm.guestIdProofType || null,
+        guestIdProofPhoto: manualForm.guestIdProofPhoto || null
       });
       if (res.data.warning) toast(res.data.warning, { icon: '⚠️' });
-      else toast.success('Manual booking created');
+      else toast.success('Manual booking created & synced to availability!');
       setManualModal(false);
       resetManualForm();
       fetchBookings();
@@ -239,530 +324,589 @@ export default function BookingsPage() {
 
   const resetManualForm = () => {
     setManualForm({
-      guestName: '', guestPhone: '', guestAddress: '', guestIdProofType: '',
-      bookingType: 'group', checkInDate: '', checkOutDate: '', adults: 2, kids: [],
-      totalAmount: 0, priceBreakdown: '', specialRequests: '', roomId: ''
+      guestName: '', guestPhone: '+91', guestAddress: '', guestIdProofType: 'aadhaar', guestIdProofPhoto: null,
+      bookingType: 'couple', checkInDate: '', checkOutDate: '', adults: 2, kids: [],
+      totalAmount: 3500, advancePayment: '', remainingPayment: '', priceBreakdown: '', specialRequests: '', roomId: ''
     });
     setManualRooms([]);
   };
 
-  // Group move rooms by series
-  const groupedMoveRooms = moveRooms.reduce((acc, room) => {
-    const series = room.seriesName || 'Other';
-    if (!acc[series]) acc[series] = [];
-    acc[series].push(room);
-    return acc;
-  }, {});
+  return (
+    <div className="space-y-6 animate-fade-in">
+      
+      {/* Top Banner */}
+      <div className="glass-card rounded-2xl p-6 bg-white border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-xl font-display font-bold text-slate-800 flex items-center gap-2">
+            <BookOpen className="text-emerald-600" size={22} />
+            <span>Resort PMS Bookings & Payments Management</span>
+          </h1>
+          <p className="text-xs text-slate-500">
+            Manage reservations, 1-click balance settlements, ID photos, and printable PDF invoices.
+          </p>
+        </div>
 
-  if (loading) {
-    return (
-      <div className="p-4 pb-20 md:pb-4">
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-whatsapp"></div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={fetchBookings}
+            className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
+            title="Refresh Bookings"
+          >
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+          </button>
+
+          <button
+            onClick={() => setManualModal(true)}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-md shadow-emerald-600/20 transition-all hover:scale-105"
+          >
+            <Plus size={16} />
+            <span>Add Manual Booking</span>
+          </button>
         </div>
       </div>
-    );
-  }
 
-  return (
-    <div className="p-4 pb-20 md:pb-4">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold text-gray-800">Bookings</h1>
-          <div className="flex items-center gap-2">
-            <button onClick={fetchBookings} className="p-2 text-gray-600 hover:text-whatsapp transition-colors" title="Refresh">
-              <RefreshCw size={20} />
-            </button>
-            <button
-              onClick={() => setManualModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-whatsapp text-white rounded-lg hover:bg-whatsapp-light transition-colors"
-            >
-              <Plus size={18} />
-              Add Manual
-            </button>
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="bg-white rounded-lg shadow p-3 mb-4">
-          <div className="flex flex-wrap gap-3 items-center">
-            <form onSubmit={handleSearch} className="flex-1 min-w-[200px]">
-              <div className="relative">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search name or phone..."
-                  value={filters.search}
-                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                  className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-whatsapp text-sm"
-                />
-              </div>
-            </form>
-            <select
-              value={filters.status}
-              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-whatsapp text-sm"
-            >
-              <option value="">All Status</option>
-              {Object.entries(STATUS_CONFIG).map(([k, v]) => (
-                <option key={k} value={k}>{v.label}</option>
-              ))}
-            </select>
+      {/* Filter Bar */}
+      <div className="glass-card p-4 rounded-2xl bg-white border border-slate-200 flex flex-col md:flex-row items-center justify-between gap-3">
+        <form onSubmit={handleSearch} className="flex-1 flex items-center gap-2 w-full">
+          <div className="relative flex-1">
+            <Search size={15} className="absolute left-3.5 top-3 text-slate-400" />
             <input
-              type="date"
-              value={filters.date}
-              onChange={(e) => setFilters({ ...filters, date: e.target.value })}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-whatsapp text-sm"
+              type="text"
+              value={filters.search}
+              onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+              placeholder="Search by guest name or phone..."
+              className="w-full pl-10 pr-4 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
             />
           </div>
+          <button type="submit" className="px-4 py-2 bg-slate-800 text-white text-xs font-semibold rounded-xl">
+            Search
+          </button>
+        </form>
+
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <select
+            value={filters.status}
+            onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+            className="px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-white"
+          >
+            <option value="">All Statuses</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="checked_in">Checked In</option>
+            <option value="checked_out">Checked Out</option>
+            <option value="cancelled">Cancelled</option>
+            <option value="pending_payment">Pending Payment</option>
+          </select>
         </div>
-
-        {/* Bookings List */}
-        {bookings.length === 0 ? (
-          <div className="text-center py-16">
-            <Bed size={48} className="mx-auto mb-3 text-gray-300" />
-            <p className="text-gray-500 text-lg">No bookings found</p>
-            <p className="text-gray-400 text-sm mt-1">
-              {filters.status || filters.search || filters.date
-                ? 'Try adjusting your filters or clearing them to see all bookings.'
-                : 'Bookings will appear here once bot conversations are confirmed or you create a manual booking.'}
-            </p>
-            {!filters.status && !filters.search && !filters.date && (
-              <button
-                onClick={() => setManualModal(true)}
-                className="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-whatsapp text-white rounded-lg hover:bg-whatsapp-light transition-colors"
-              >
-                <Plus size={18} />
-                Add Manual Booking
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {bookings.map((b) => {
-              const roomInfo = b.room;
-              const guestCount = (b.adults || 0) + (b.kids || []).length;
-              return (
-                <div key={b._id} className="bg-white rounded-lg shadow overflow-hidden">
-                  <div className="p-4">
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-semibold text-gray-800">{b.customerName}</h3>
-                          <StatusBadge status={b.status} />
-                          {b.messagesStopped && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-gray-100 text-gray-600">
-                              <VolumeX size={10} className="mr-1" /> Muted
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-sm text-gray-500 flex items-center gap-1">
-                          <Phone size={12} /> {b.customerPhone}
-                        </p>
-                      </div>
-                      <span className="text-xs text-gray-400">
-                        {BOOKING_TYPE_LABELS[b.bookingType] || b.bookingType}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm text-gray-600 mb-3">
-                      <div className="flex items-center gap-1">
-                        <CalendarDays size={14} className="text-gray-400" />
-                        <span>{b.date || '-'}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Users size={14} className="text-gray-400" />
-                        <span>{guestCount} guest{guestCount !== 1 ? 's' : ''}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Bed size={14} className="text-gray-400" />
-                        <span>{roomInfo ? `Room ${roomInfo.roomNumber}` : 'No room'}</span>
-                      </div>
-                      {b.totalAmount > 0 && (
-                        <span className="font-medium">₹{b.totalAmount.toLocaleString()}</span>
-                      )}
-                    </div>
-
-                    {/* Quick Actions */}
-                    {b.status !== 'cancelled' && (
-                      <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100">
-                        {/* Status quick actions */}
-                        {b.status === 'confirmed' && (
-                          <>
-                            <button
-                              onClick={() => handleStatusChange(b._id, 'checked_in')}
-                              className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
-                              title="Check In"
-                            >
-                              <LogIn size={12} /> Check In
-                            </button>
-                            <button
-                              onClick={() => handleStatusChange(b._id, 'no_show')}
-                              className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-                              title="No Show"
-                            >
-                              <UserX size={12} /> No Show
-                            </button>
-                          </>
-                        )}
-                        {b.status === 'checked_in' && (
-                          <button
-                            onClick={() => handleStatusChange(b._id, 'checked_out')}
-                            className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors"
-                            title="Check Out"
-                          >
-                            <LogOut size={12} /> Check Out
-                          </button>
-                        )}
-
-                        {/* Room actions */}
-                        {b.roomBookingId && (
-                          <>
-                            <button
-                              onClick={() => openMoveRoom(b)}
-                              className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100 transition-colors"
-                              title="Move Room"
-                            >
-                              <ArrowRightLeft size={12} /> Move
-                            </button>
-                            <button
-                              onClick={() => {
-                                setRescheduleModal(b);
-                                setRescheduleDates({ newCheckInDate: '', newCheckOutDate: '' });
-                              }}
-                              className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors"
-                              title="Reschedule"
-                            >
-                              <CalendarDays size={12} /> Reschedule
-                            </button>
-                          </>
-                        )}
-
-                        {/* Stop Messages toggle */}
-                        <button
-                          onClick={() => handleStopMessages(b._id)}
-                          className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg transition-colors ${
-                            b.messagesStopped
-                              ? 'bg-orange-50 text-orange-700 hover:bg-orange-100'
-                              : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
-                          }`}
-                          title={b.messagesStopped ? 'Resume messages' : 'Stop messages'}
-                        >
-                          {b.messagesStopped ? <Volume2 size={12} /> : <VolumeX size={12} />}
-                          {b.messagesStopped ? 'Resume' : 'Mute'}
-                        </button>
-
-                        {/* Cancel */}
-                        <button
-                          onClick={() => { setCancelModal(b); setCancelReason(''); }}
-                          className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors ml-auto"
-                          title="Cancel"
-                        >
-                          <XCircle size={12} /> Cancel
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
 
-      {/* Cancel Modal */}
-      {cancelModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <AlertTriangle className="text-red-500" size={24} />
-              <h3 className="text-lg font-semibold">Cancel Booking</h3>
-            </div>
-            <p className="text-gray-600 mb-4">Cancel booking for {cancelModal.customerName}?</p>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Reason (optional)</label>
-              <textarea
-                value={cancelReason}
-                onChange={(e) => setCancelReason(e.target.value)}
-                rows={2}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-whatsapp"
-              />
-            </div>
-            <div className="flex gap-3">
-              <button onClick={() => handleCancel(cancelModal._id)} disabled={submitting}
-                className="flex-1 bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50">
-                {submitting ? 'Cancelling...' : 'Cancel Booking'}
-              </button>
-              <button onClick={() => setCancelModal(null)}
-                className="flex-1 bg-gray-200 text-gray-800 py-2 rounded-lg hover:bg-gray-300 transition-colors">
-                Keep
-              </button>
-            </div>
-          </div>
+      {/* Bookings List */}
+      {loading ? (
+        <div className="py-16 text-center space-y-3 glass-card rounded-2xl">
+          <RefreshCw size={32} className="animate-spin text-emerald-600 mx-auto" />
+          <p className="text-xs font-semibold text-slate-600">Loading guest bookings...</p>
         </div>
-      )}
+      ) : bookings.length === 0 ? (
+        <div className="py-16 text-center space-y-3 glass-card rounded-2xl">
+          <BookOpen size={36} className="text-slate-300 mx-auto" />
+          <p className="text-sm font-semibold text-slate-700">No bookings found</p>
+          <p className="text-xs text-slate-400">Click "Add Manual Booking" to create a new reservation.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {bookings.map((b) => (
+            <div key={b._id} className="glass-card rounded-2xl p-5 bg-white border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-slate-300 transition-all">
+              <div className="space-y-1.5 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-display font-bold text-base text-slate-800">{b.customerName}</h3>
+                  <StatusBadge status={b.status} />
+                  <span className="text-[10px] bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded-full capitalize">
+                    {b.bookingType || 'Couple'}
+                  </span>
 
-      {/* Move Room Modal */}
-      {moveModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Move Room</h3>
-              <button onClick={() => setMoveModal(null)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
-            </div>
-            {moveRooms.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">No available rooms for these dates</p>
-            ) : (
-              <div className="space-y-3 mb-4">
-                {Object.entries(groupedMoveRooms).map(([series, rooms]) => (
-                  <div key={series}>
-                    <h4 className="text-sm font-semibold text-gray-700 mb-2">{series}</h4>
-                    <div className="space-y-2">
-                      {rooms.map((room) => {
-                        const guestCount = (moveModal.adults || 0) + (moveModal.kids || []).length;
-                        const isUndersized = room.capacity < guestCount;
-                        const isSelected = selectedMoveRoom?.roomId === room.roomId;
-                        const check = moveRoomCheckStatus[room.roomId];
-                        const isBooked = check && check.available === false;
-                        return (
-                          <button
-                            key={room.roomId}
-                            onClick={() => !isBooked && selectMoveRoom(room, guestCount)}
-                            disabled={isBooked}
-                            className={`w-full text-left p-3 rounded-lg border-2 transition-colors ${
-                              isBooked
-                                ? 'border-red-300 bg-red-50 opacity-70 cursor-not-allowed'
-                                : isSelected ? 'border-whatsapp bg-green-50' : 'border-gray-200 hover:border-gray-300'
-                            }`}
-                          >
-                            {/* Live status bar for selected room */}
-                            {isSelected && check && (
-                              <div className={`mb-2 px-2 py-1 rounded text-xs font-medium flex items-center gap-1 ${
-                                check.checking ? 'bg-gray-100 text-gray-500' :
-                                check.available ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                              }`}>
-                                {check.checking ? (
-                                  <><RefreshCw size={12} className="animate-spin" /> Checking availability...</>
-                                ) : check.available ? (
-                                  <><CheckCircle size={12} /> Available for these dates</>
-                                ) : (
-                                  <><XCircle size={12} /> Already Booked — select another room</>
-                                )}
-                              </div>
-                            )}
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium">Room {room.roomNumber}</span>
-                                {isSelected && !check?.checking && check?.available !== false && (
-                                  <CheckCircle size={16} className="text-whatsapp" />
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                {isUndersized && <span className="text-xs text-amber-600">Under capacity</span>}
-                                <span className="text-sm text-gray-500">Cap: {room.capacity}</span>
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {moveWarning && (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg mb-4">
-                <div className="flex items-center gap-2 text-amber-800">
-                  <AlertTriangle size={16} />
-                  <span className="text-sm font-medium">{moveWarning}</span>
+                  {/* ID Proof Thumbnail */}
+                  {b.guestIdProofPhoto && (
+                    <button
+                      onClick={() => setIdPhotoPreviewModal(b.guestIdProofPhoto)}
+                      className="inline-flex items-center gap-1 text-[10px] bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded-full border border-indigo-200 hover:bg-indigo-100 transition-colors"
+                      title="View Guest ID Photo"
+                    >
+                      <ImageIcon size={10} />
+                      <span>ID Attached</span>
+                    </button>
+                  )}
                 </div>
-                {moveConfirmWarning && <p className="text-xs text-amber-700 mt-1">Click again to confirm.</p>}
-              </div>
-            )}
-            {/* Live availability confirmation bar */}
-            {selectedMoveRoom && moveRoomCheckStatus[selectedMoveRoom.roomId] && (
-              <div className={`p-3 rounded-lg border mb-4 ${
-                moveRoomCheckStatus[selectedMoveRoom.roomId].checking ? 'bg-gray-50 border-gray-200' :
-                moveRoomCheckStatus[selectedMoveRoom.roomId].available ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
-              }`}>
-                <div className="flex items-center gap-2">
-                  {moveRoomCheckStatus[selectedMoveRoom.roomId].checking ? (
-                    <><RefreshCw size={16} className="animate-spin text-gray-500" /><span className="text-sm text-gray-600">Verifying Room {selectedMoveRoom.roomNumber}...</span></>
-                  ) : moveRoomCheckStatus[selectedMoveRoom.roomId].available ? (
-                    <><CheckCircle size={16} className="text-green-600" /><span className="text-sm font-medium text-green-700">Room {selectedMoveRoom.roomNumber} is available for these dates</span></>
+
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                  <span className="flex items-center gap-1">
+                    <Phone size={13} className="text-slate-400" />
+                    <span>{b.customerPhone}</span>
+                  </span>
+
+                  <span className="flex items-center gap-1 font-semibold text-slate-700">
+                    <CalendarDays size={13} className="text-slate-400" />
+                    <span>{formatDMY(b.checkInDate || b.date)} ➔ {formatDMY(b.checkOutDate || (new Date(b.checkInDate || b.date).getTime() + 86400000))}</span>
+                  </span>
+
+                  <span className="flex items-center gap-1 font-bold text-emerald-800">
+                    <DollarSign size={13} />
+                    <span>Total: ₹{b.totalAmount}</span>
+                  </span>
+
+                  {b.advancePayment > 0 && (
+                    <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                      Adv: ₹{b.advancePayment}
+                    </span>
+                  )}
+
+                  {b.remainingPayment > 0 ? (
+                    <span className="text-[11px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                      Bal: ₹{b.remainingPayment}
+                    </span>
                   ) : (
-                    <><XCircle size={16} className="text-red-600" /><span className="text-sm font-medium text-red-700">Room {selectedMoveRoom.roomNumber} is no longer available</span></>
+                    <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-300">
+                      ✓ Paid
+                    </span>
                   )}
                 </div>
               </div>
-            )}
-            <div className="flex gap-3">
-              <button onClick={handleMoveRoom} disabled={submitting || !selectedMoveRoom || (moveRoomCheckStatus[selectedMoveRoom?.roomId]?.available === false)}
-                className="flex-1 bg-whatsapp text-white py-2 rounded-lg hover:bg-whatsapp-light transition-colors disabled:opacity-50">
-                {submitting ? 'Moving...' : moveConfirmWarning ? 'Confirm Move' : 'Move Room'}
+
+              {/* Action Buttons */}
+              <div className="flex flex-wrap items-center gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
+                
+                {/* FEATURE #1: 1-Click Settle Balance */}
+                {b.remainingPayment > 0 && (
+                  <button
+                    onClick={() => handleSettlePayment(b._id, b.remainingPayment)}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-all flex items-center gap-1 hover:scale-105"
+                    title="Mark Remaining Balance as Fully Paid"
+                  >
+                    <CheckCheck size={13} />
+                    <span>Settle Bal (₹{b.remainingPayment})</span>
+                  </button>
+                )}
+
+                {/* FEATURE #2: Printable / WhatsApp PDF Receipt */}
+                <button
+                  onClick={() => setInvoiceModal(b)}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors flex items-center gap-1"
+                  title="Generate Printable PDF Invoice Receipt"
+                >
+                  <Printer size={13} />
+                  <span>PDF Invoice</span>
+                </button>
+
+                {b.status === 'confirmed' && (
+                  <button
+                    onClick={() => handleStatusChange(b._id, 'checked_in')}
+                    className="px-3 py-1.5 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 text-xs font-semibold rounded-xl border border-emerald-200 transition-colors flex items-center gap-1"
+                  >
+                    <LogIn size={13} />
+                    <span>Check In</span>
+                  </button>
+                )}
+
+                {b.status === 'checked_in' && (
+                  <button
+                    onClick={() => handleStatusChange(b._id, 'checked_out')}
+                    className="px-3 py-1.5 bg-indigo-50 text-indigo-800 hover:bg-indigo-100 text-xs font-semibold rounded-xl border border-indigo-200 transition-colors flex items-center gap-1"
+                  >
+                    <LogOut size={13} />
+                    <span>Check Out</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={() => { setCancelModal(b); setCancelReason(''); }}
+                  className="px-3 py-1.5 bg-amber-50 text-amber-800 hover:bg-amber-100 text-xs font-semibold rounded-xl border border-amber-200 transition-colors flex items-center gap-1"
+                >
+                  <XCircle size={13} />
+                  <span>Cancel</span>
+                </button>
+
+                <button
+                  onClick={() => handleDeleteBooking(b._id)}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-all flex items-center gap-1"
+                >
+                  <Trash2 size={13} />
+                  <span>Delete</span>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* FEATURE #2: PRINTABLE / WHATSAPP PDF INVOICE RECEIPT MODAL */}
+      {invoiceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="glass-card rounded-2xl max-w-xl w-full p-6 space-y-5 bg-white animate-fade-in shadow-2xl overflow-y-auto max-h-[90vh]">
+            
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <FileText className="text-emerald-700" size={22} />
+                <h3 className="font-display font-bold text-lg text-slate-800">Nandibaag Resort — Guest Bill Invoice</h3>
+              </div>
+              <button onClick={() => setInvoiceModal(null)} className="text-slate-400 hover:text-slate-700">
+                <X size={20} />
               </button>
-              <button onClick={() => setMoveModal(null)}
-                className="flex-1 bg-gray-200 text-gray-800 py-2 rounded-lg hover:bg-gray-300 transition-colors">
-                Cancel
+            </div>
+
+            {/* Printable Receipt Card */}
+            <div id="printable-receipt" className="p-6 bg-slate-50 border border-slate-200 rounded-xl space-y-4 text-xs text-slate-800">
+              <div className="flex justify-between items-start border-b border-slate-200 pb-3">
+                <div>
+                  <h2 className="font-display font-bold text-lg text-emerald-800">NANDIBAAG RESORT</h2>
+                  <p className="text-[11px] text-slate-500">Pure Veg & Jain Resort • Karjat, Maharashtra</p>
+                  <p className="text-[11px] text-slate-500">Phone: +91 92576 57665 | GSTIN: 27AABCN1234F1Z5</p>
+                </div>
+                <div className="text-right">
+                  <span className="font-bold text-xs bg-emerald-100 text-emerald-900 px-3 py-1 rounded-full inline-block mb-1">
+                    INVOICE RECEIPT
+                  </span>
+                  <p className="text-[10px] text-slate-500 font-mono">Invoice #: NB-{invoiceModal._id.slice(-6).toUpperCase()}</p>
+                  <p className="text-[10px] text-slate-500">Date: {formatDMY(new Date())}</p>
+                </div>
+              </div>
+
+              {/* Guest Details */}
+              <div className="grid grid-cols-2 gap-4 bg-white p-3.5 rounded-lg border border-slate-200">
+                <div>
+                  <p className="text-[11px] text-slate-500">Guest Name:</p>
+                  <p className="font-bold text-sm text-slate-800">{invoiceModal.customerName}</p>
+                  <p className="text-xs text-slate-600">{invoiceModal.customerPhone}</p>
+                </div>
+
+                <div className="text-right">
+                  <p className="text-[11px] text-slate-500">Stay Duration:</p>
+                  <p className="font-bold text-xs text-slate-800">
+                    {formatDMY(invoiceModal.checkInDate || invoiceModal.date)} ➔ {formatDMY(invoiceModal.checkOutDate)}
+                  </p>
+                  <p className="text-xs text-slate-600 capitalize">Booking: {invoiceModal.bookingType || 'Couple'}</p>
+                </div>
+              </div>
+
+              {/* Amount Breakdown Table */}
+              <table className="w-full text-left border-collapse bg-white rounded-lg border border-slate-200">
+                <thead>
+                  <tr className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+                    <th className="p-2.5">Description</th>
+                    <th className="p-2.5 text-right">Amount (₹)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  <tr>
+                    <td className="p-2.5">Cottage Room Package Stay</td>
+                    <td className="p-2.5 text-right font-semibold">₹{invoiceModal.totalAmount}</td>
+                  </tr>
+                  <tr>
+                    <td className="p-2.5 text-emerald-800 font-medium">Advance Paid</td>
+                    <td className="p-2.5 text-right text-emerald-800 font-semibold">- ₹{invoiceModal.advancePayment || 0}</td>
+                  </tr>
+                  <tr className="bg-emerald-50/50 font-bold text-slate-800">
+                    <td className="p-2.5">Net Remaining Balance Due</td>
+                    <td className="p-2.5 text-right text-emerald-900 text-sm">₹{invoiceModal.remainingPayment || 0}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <p className="text-[10px] text-slate-400 text-center italic">
+                Thank you for staying at Nandibaag Resort! We wish you a peaceful journey.
+              </p>
+            </div>
+
+            {/* Receipt Modal Action Buttons */}
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => handlePrintInvoice(invoiceModal)}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-sm transition-all hover:scale-105"
+              >
+                <Printer size={15} />
+                <span>Print Official PDF Receipt</span>
+              </button>
+
+              <button
+                onClick={() => setInvoiceModal(null)}
+                className="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-semibold rounded-xl"
+              >
+                Close
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Reschedule Modal */}
-      {rescheduleModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Reschedule Booking</h3>
-              <button onClick={() => setRescheduleModal(null)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+      {/* FEATURE #3: FULLSIZE ID PHOTO PREVIEW MODAL */}
+      {idPhotoPreviewModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
+          <div className="glass-card rounded-2xl max-w-lg w-full p-4 bg-white animate-fade-in shadow-2xl space-y-3 text-center">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <h4 className="font-display font-bold text-sm text-slate-800">Guest ID Proof Document</h4>
+              <button onClick={() => setIdPhotoPreviewModal(null)} className="text-slate-400 hover:text-slate-700">
+                <X size={18} />
+              </button>
             </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">New Check-in Date</label>
-                <input
-                  type="date"
-                  value={rescheduleDates.newCheckInDate}
-                  onChange={(e) => setRescheduleDates({ ...rescheduleDates, newCheckInDate: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-whatsapp"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">New Check-out Date</label>
-                <input
-                  type="date"
-                  value={rescheduleDates.newCheckOutDate}
-                  onChange={(e) => setRescheduleDates({ ...rescheduleDates, newCheckOutDate: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-whatsapp"
-                />
-              </div>
-              <div className="flex gap-3">
-                <button onClick={handleReschedule} disabled={submitting}
-                  className="flex-1 bg-whatsapp text-white py-2 rounded-lg hover:bg-whatsapp-light transition-colors disabled:opacity-50">
-                  {submitting ? 'Rescheduling...' : 'Reschedule'}
-                </button>
-                <button onClick={() => setRescheduleModal(null)}
-                  className="flex-1 bg-gray-200 text-gray-800 py-2 rounded-lg hover:bg-gray-300 transition-colors">
-                  Cancel
-                </button>
-              </div>
-            </div>
+
+            <img
+              src={idPhotoPreviewModal}
+              alt="Guest ID Proof"
+              className="max-h-[70vh] w-auto mx-auto rounded-xl shadow-md border border-slate-200 object-contain"
+            />
+
+            <button
+              onClick={() => setIdPhotoPreviewModal(null)}
+              className="px-5 py-2 bg-slate-800 text-white text-xs font-semibold rounded-xl"
+            >
+              Close Document
+            </button>
           </div>
         </div>
       )}
 
       {/* Manual Booking Modal */}
       {manualModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Add Manual Booking</h3>
-              <button onClick={() => { setManualModal(false); resetManualForm(); }} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="glass-card rounded-2xl max-w-lg w-full p-6 space-y-4 bg-white animate-fade-in shadow-2xl overflow-y-auto max-h-[90vh]">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-display font-bold text-base text-slate-800">Add Manual Reservation</h3>
+              <button onClick={() => setManualModal(false)} className="text-slate-400 hover:text-slate-700">
+                <X size={18} />
+              </button>
             </div>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Guest Name *</label>
-                  <input type="text" value={manualForm.guestName}
-                    onChange={(e) => setManualForm({ ...manualForm, guestName: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-whatsapp" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
-                  <input type="text" value={manualForm.guestPhone}
-                    onChange={(e) => setManualForm({ ...manualForm, guestPhone: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-whatsapp" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Booking Type</label>
-                  <select value={manualForm.bookingType}
-                    onChange={(e) => setManualForm({ ...manualForm, bookingType: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-whatsapp">
-                    <option value="couple">Couple</option>
-                    <option value="group">Group</option>
-                    <option value="picnic">Picnic</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Adults</label>
-                  <input type="number" min="1" value={manualForm.adults}
-                    onChange={(e) => setManualForm({ ...manualForm, adults: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-whatsapp" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Check-in Date</label>
-                  <input type="date" value={manualForm.checkInDate}
-                    onChange={(e) => {
-                      setManualForm({ ...manualForm, checkInDate: e.target.value });
-                      fetchManualRooms(e.target.value, manualForm.checkOutDate);
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-whatsapp" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Check-out Date</label>
-                  <input type="date" value={manualForm.checkOutDate}
-                    onChange={(e) => {
-                      setManualForm({ ...manualForm, checkOutDate: e.target.value });
-                      fetchManualRooms(manualForm.checkInDate, e.target.value);
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-whatsapp" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Total Amount</label>
-                  <input type="number" min="0" value={manualForm.totalAmount}
-                    onChange={(e) => setManualForm({ ...manualForm, totalAmount: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-whatsapp" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                  <input type="text" value={manualForm.guestAddress}
-                    onChange={(e) => setManualForm({ ...manualForm, guestAddress: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-whatsapp" />
-                </div>
-              </div>
+
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Special Requests</label>
-                <textarea value={manualForm.specialRequests} rows={2}
-                  onChange={(e) => setManualForm({ ...manualForm, specialRequests: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-whatsapp" />
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Check-in Date</label>
+                <input
+                  type="date"
+                  value={manualForm.checkInDate}
+                  onChange={(e) => {
+                    const checkIn = e.target.value;
+                    setManualForm(prev => ({ ...prev, checkInDate: checkIn }));
+                    fetchManualRooms(checkIn, manualForm.checkOutDate);
+                  }}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                />
               </div>
-              {manualRooms.length > 0 && (
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Check-out Date</label>
+                <input
+                  type="date"
+                  value={manualForm.checkOutDate}
+                  onChange={(e) => {
+                    const checkOut = e.target.value;
+                    setManualForm(prev => ({ ...prev, checkOutDate: checkOut }));
+                    fetchManualRooms(manualForm.checkInDate, checkOut);
+                  }}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Guest Full Name</label>
+                <input
+                  type="text"
+                  value={manualForm.guestName}
+                  onChange={(e) => setManualForm(prev => ({ ...prev, guestName: e.target.value }))}
+                  placeholder="Rahul Sharma"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Guest Phone Number</label>
+                <input
+                  type="text"
+                  value={manualForm.guestPhone}
+                  onChange={(e) => setManualForm(prev => ({ ...prev, guestPhone: e.target.value }))}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Select Available Cottage Room</label>
+                <select
+                  value={manualForm.roomId}
+                  onChange={(e) => setManualForm(prev => ({ ...prev, roomId: e.target.value }))}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="">-- Assign Room Later --</option>
+                  {manualRooms.map(r => (
+                    <option key={r.roomId} value={r.roomId}>
+                      Room {r.roomNumber} ({r.seriesName} • Cap: {r.capacity})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* FEATURE #3: ID Proof Attachment Input */}
+              <div className="grid grid-cols-2 gap-3 p-3 bg-indigo-50/50 border border-indigo-200 rounded-xl">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Assign Room (optional)</label>
-                  <select value={manualForm.roomId}
-                    onChange={(e) => setManualForm({ ...manualForm, roomId: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-whatsapp">
-                    <option value="">Skip assignment</option>
-                    {manualRooms.map((r) => (
-                      <option key={r.roomId} value={r.roomId}>
-                        Room {r.roomNumber} ({r.seriesName}, Cap: {r.capacity})
-                      </option>
-                    ))}
+                  <label className="block text-[11px] font-semibold text-indigo-900 mb-1">ID Proof Type</label>
+                  <select
+                    value={manualForm.guestIdProofType}
+                    onChange={(e) => setManualForm(prev => ({ ...prev, guestIdProofType: e.target.value }))}
+                    className="w-full px-2.5 py-1.5 text-xs border border-indigo-200 rounded-lg bg-white"
+                  >
+                    <option value="aadhaar">Aadhaar Card</option>
+                    <option value="pan">PAN Card</option>
+                    <option value="license">Driving License</option>
                   </select>
                 </div>
-              )}
-              <div className="flex gap-3">
-                <button onClick={handleManualBooking} disabled={submitting}
-                  className="flex-1 bg-whatsapp text-white py-2.5 rounded-lg hover:bg-whatsapp-light transition-colors disabled:opacity-50 font-medium">
-                  {submitting ? 'Creating...' : 'Create Booking'}
-                </button>
-                <button onClick={() => { setManualModal(false); resetManualForm(); }}
-                  className="flex-1 bg-gray-200 text-gray-800 py-2.5 rounded-lg hover:bg-gray-300 transition-colors">
-                  Cancel
-                </button>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-indigo-900 mb-1">Upload ID Photo</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileUpload}
+                    className="w-full text-[10px] text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700"
+                  />
+                </div>
               </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Adult Guests</label>
+                  <input
+                    type="number"
+                    value={manualForm.adults}
+                    onChange={(e) => setManualForm(prev => ({ ...prev, adults: e.target.value }))}
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Total Amount (₹)</label>
+                  <input
+                    type="number"
+                    value={manualForm.totalAmount}
+                    onChange={(e) => {
+                      const total = parseFloat(e.target.value) || 0;
+                      const adv = parseFloat(manualForm.advancePayment) || 0;
+                      setManualForm(prev => ({
+                        ...prev,
+                        totalAmount: e.target.value,
+                        remainingPayment: Math.max(0, total - adv)
+                      }));
+                    }}
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg"
+                  />
+                </div>
+              </div>
+
+              {/* Optional Advance & Remaining Balance Breakdown */}
+              <div className="space-y-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="manualFullPaidCheck"
+                    checked={manualForm.isFullPaid || false}
+                    onChange={(e) => {
+                      const isChecked = e.target.checked;
+                      const total = parseFloat(manualForm.totalAmount) || 0;
+                      setManualForm(prev => ({
+                        ...prev,
+                        isFullPaid: isChecked,
+                        advancePayment: isChecked ? total : 0,
+                        remainingPayment: isChecked ? 0 : total
+                      }));
+                    }}
+                    className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
+                  />
+                  <label htmlFor="manualFullPaidCheck" className="text-xs font-bold text-emerald-900 cursor-pointer">
+                    ✓ Mark as Full Paid (₹{manualForm.totalAmount || 0})
+                  </label>
+                </div>
+
+                {!manualForm.isFullPaid && (
+                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-emerald-800 mb-1">Advance Paid (₹) (Optional)</label>
+                      <input
+                        type="number"
+                        value={manualForm.advancePayment}
+                        onChange={(e) => {
+                          const adv = parseFloat(e.target.value) || 0;
+                          const total = parseFloat(manualForm.totalAmount) || 0;
+                          setManualForm(prev => ({
+                            ...prev,
+                            advancePayment: e.target.value,
+                            remainingPayment: Math.max(0, total - adv)
+                          }));
+                        }}
+                        placeholder="0"
+                        className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 bg-white font-semibold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-amber-800 mb-1">Remaining Balance (₹)</label>
+                      <input
+                        type="number"
+                        readOnly
+                        value={Math.max(0, (parseFloat(manualForm.totalAmount) || 0) - (parseFloat(manualForm.advancePayment) || 0))}
+                        className="w-full px-3 py-1.5 text-xs border border-amber-300 bg-amber-50 text-amber-900 rounded-lg font-bold"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                onClick={() => setManualModal(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleManualBooking}
+                disabled={submitting}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl disabled:opacity-50"
+              >
+                {submitting ? 'Creating...' : 'Create Booking'}
+              </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Cancel Confirmation Modal */}
+      {cancelModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="glass-card rounded-2xl max-w-sm w-full p-6 space-y-4 bg-white animate-fade-in shadow-2xl">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+              <AlertTriangle className="text-amber-600" size={20} />
+              <h3 className="font-display font-bold text-base text-slate-800">Cancel Reservation</h3>
+            </div>
+
+            <p className="text-xs text-slate-600">
+              Are you sure you want to cancel the booking for <strong>{cancelModal.customerName}</strong>? The assigned cottage will be released immediately.
+            </p>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setCancelModal(null)}
+                className="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-semibold rounded-xl"
+              >
+                Dismiss
+              </button>
+              <button
+                onClick={() => handleCancel(cancelModal._id)}
+                disabled={submitting}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-xl disabled:opacity-50"
+              >
+                {submitting ? 'Cancelling...' : 'Confirm Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

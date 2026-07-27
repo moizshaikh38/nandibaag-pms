@@ -1,6 +1,6 @@
 const express = require('express');
 const { verifyToken, requireAdmin } = require('../middleware/auth');
-const { initSession, initSessionWithPairingCode, getSessionStatus, getAllSessionsStatus, destroySession, deleteSessionFolder } = require('../services/whatsappService');
+const { initSession, requestPairingCode, getSessionStatus, getAllSessionsStatus, destroySession, deleteSessionFolder } = require('../services/whatsappService');
 const { Settings } = require('../models');
 const logger = require('../config/logger');
 
@@ -75,7 +75,7 @@ router.post('/:id/pairing-code', verifyToken, async (req, res, next) => {
       });
     }
     
-    await initSessionWithPairingCode(sessionId, phoneNumber);
+    await requestPairingCode(sessionId, phoneNumber);
     
     res.json({
       success: true,

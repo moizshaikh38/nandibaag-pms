@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../hooks/useSocket';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
+import { formatDMY } from '../utils/formatters';
 import toast from 'react-hot-toast';
 import {
   Search,
@@ -13,68 +15,61 @@ import {
   Info,
   CheckCircle,
   AlertTriangle,
-  Trash2
+  Grid3x3,
+  Bed,
+  PlusCircle,
+  Home,
+  Check,
+  RefreshCw,
+  Zap,
+  PhoneCall,
+  DollarSign,
+  Loader,
+  RotateCcw
 } from 'lucide-react';
 
 export default function AvailabilityPage() {
   const { user } = useAuth();
+  const socket = useSocket();
   const navigate = useNavigate();
 
-  // Date state
-  const today = new Date();
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  const todayStr = new Date().toISOString().split('T')[0];
 
-  const [checkInDate, setCheckInDate] = useState(today.toISOString().split('T')[0]);
-  const [checkOutDate, setCheckOutDate] = useState(tomorrow.toISOString().split('T')[0]);
-
-  // Grid data
+  const [selectedDate, setSelectedDate] = useState(todayStr);
   const [grid, setGrid] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  // Selection
-  const [selectedRoomIds, setSelectedRoomIds] = useState(new Set());
-
-  // Search
   const [searchQuery, setSearchQuery] = useState('');
-  const [highlightedRoomId, setHighlightedRoomId] = useState(null);
+  const [selectedRoomIds, setSelectedRoomIds] = useState(new Set());
+  const [bookingRoomId, setBookingRoomId] = useState(null); // ID of room being booked in 1 click
+  const [unbookingRoomId, setUnbookingRoomId] = useState(null);
 
-  // Calendar widget
-  const [showCalendar, setShowCalendar] = useState(false);
-  const [calendarDate, setCalendarDate] = useState(new Date());
-  const [calendarSelection, setCalendarSelection] = useState(null); // 'checkIn' or 'checkOut'
-
-  // Booking modal
-  const [showBookingModal, setShowBookingModal] = useState(false);
-  const [bookingForm, setBookingForm] = useState({
+  // Book Entire Series Modal State
+  const [showSeriesModal, setShowSeriesModal] = useState(null); // stores series object
+  const [seriesForm, setSeriesForm] = useState({
+    checkInDate: todayStr,
+    checkOutDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
     guestName: '',
-    guestPhone: '',
-    guestAddress: '',
-    guestIdProofType: '',
-    adults: 1,
-    kids: [],
-    specialRequests: ''
+    guestPhone: '+91',
+    adults: 10,
+    totalAmount: 15000
   });
-  const [bookingLoading, setBookingLoading] = useState(false);
+  const [isSubmittingSeries, setIsSubmittingSeries] = useState(false);
 
-  // Booked room popover
-  const [bookedRoomPopover, setBookedRoomPopover] = useState(null);
+  // Compute checkInDate and checkOutDate automatically from selectedDate for single room actions
+  const checkInDate = selectedDate;
+  const checkOutDate = new Date(new Date(selectedDate).getTime() + 86400000).toISOString().split('T')[0];
 
-  // Refs for scrolling
-  const roomRefs = useRef({});
+  const handleNavigateDate = (days) => {
+    const current = new Date(selectedDate);
+    current.setDate(current.getDate() + days);
+    setSelectedDate(current.toISOString().split('T')[0]);
+  };
 
-  // Fetch grid data when dates change
-  useEffect(() => {
-    fetchGrid();
-  }, [checkInDate, checkOutDate]);
-
-  // Scroll to highlighted room
-  useEffect(() => {
-    if (highlightedRoomId && roomRefs.current[highlightedRoomId]) {
-      roomRefs.current[highlightedRoomId].scrollIntoView({ behavior: 'smooth', block: 'center' });
-      setTimeout(() => setHighlightedRoomId(null), 2000);
-    }
-  }, [highlightedRoomId]);
+  const handlePresetDate = (daysAhead) => {
+    const target = new Date();
+    target.setDate(target.getDate() + daysAhead);
+    setSelectedDate(target.toISOString().split('T')[0]);
+  };
 
   const fetchGrid = async () => {
     try {
@@ -82,656 +77,474 @@ export default function AvailabilityPage() {
       const res = await api.get('/availability/grid', {
         params: { checkInDate, checkOutDate }
       });
-      setGrid(res.data.grid);
+      setGrid(res.data.grid || []);
     } catch (error) {
-      toast.error('Failed to load availability');
+      toast.error('Failed to load room availability');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDateChange = (field, value) => {
-    if (field === 'checkIn') {
-      setCheckInDate(value);
-      if (value >= checkOutDate) {
-        const newCheckout = new Date(value);
-        newCheckout.setDate(newCheckout.getDate() + 1);
-        setCheckOutDate(newCheckout.toISOString().split('T')[0]);
-      }
-    } else {
-      setCheckOutDate(value);
-      if (value <= checkInDate) {
-        const newCheckin = new Date(value);
-        newCheckin.setDate(newCheckin.getDate() - 1);
-        setCheckInDate(newCheckin.toISOString().split('T')[0]);
-      }
-    }
-  };
+  const handleUnbookRoom = async (room, e) => {
+    if (e) e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to unbook Room ${room.roomNumber}?`)) return;
 
-  const handlePrevDay = () => {
-    const newCheckin = new Date(checkInDate);
-    newCheckin.setDate(newCheckin.getDate() - 1);
-    const newCheckout = new Date(checkOutDate);
-    newCheckout.setDate(newCheckout.getDate() - 1);
-    setCheckInDate(newCheckin.toISOString().split('T')[0]);
-    setCheckOutDate(newCheckout.toISOString().split('T')[0]);
-  };
-
-  const handleNextDay = () => {
-    const newCheckin = new Date(checkInDate);
-    newCheckin.setDate(newCheckin.getDate() + 1);
-    const newCheckout = new Date(checkOutDate);
-    newCheckout.setDate(newCheckout.getDate() + 1);
-    setCheckInDate(newCheckin.toISOString().split('T')[0]);
-    setCheckOutDate(newCheckout.toISOString().split('T')[0]);
-  };
-
-  const handleToday = () => {
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    setCheckInDate(today.toISOString().split('T')[0]);
-    setCheckOutDate(tomorrow.toISOString().split('T')[0]);
-  };
-
-  const toggleRoomSelection = (roomId) => {
-    const newSelection = new Set(selectedRoomIds);
-    if (newSelection.has(roomId)) {
-      newSelection.delete(roomId);
-    } else {
-      newSelection.add(roomId);
-    }
-    setSelectedRoomIds(newSelection);
-  };
-
-  const handleSearch = () => {
-    if (!searchQuery.trim()) return;
-    
-    for (const series of grid) {
-      for (const room of series.rooms) {
-        if (room.roomNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            series.name.toLowerCase().includes(searchQuery.toLowerCase())) {
-          setHighlightedRoomId(room._id);
-          return;
-        }
-      }
-    }
-    toast.error('Room not found');
-  };
-
-  const handleCalendarClick = (date) => {
-    const dateStr = date.toISOString().split('T')[0];
-    
-    if (!calendarSelection) {
-      setCalendarSelection('checkIn');
-      setCheckInDate(dateStr);
-      const nextDay = new Date(date);
-      nextDay.setDate(nextDay.getDate() + 1);
-      setCheckOutDate(nextDay.toISOString().split('T')[0]);
-    } else if (calendarSelection === 'checkIn') {
-      setCalendarSelection('checkOut');
-      if (dateStr > checkInDate) {
-        setCheckOutDate(dateStr);
-      } else {
-        setCheckInDate(dateStr);
-        const nextDay = new Date(date);
-        nextDay.setDate(nextDay.getDate() + 1);
-        setCheckOutDate(nextDay.toISOString().split('T')[0]);
-      }
-    } else {
-      setCalendarSelection(null);
-      setShowCalendar(false);
-    }
-  };
-
-  const handleBookSelected = () => {
-    setShowBookingModal(true);
-  };
-
-  const handleBookingSubmit = async (e) => {
-    e.preventDefault();
-    setBookingLoading(true);
-
+    setUnbookingRoomId(room._id);
     try {
-      const selectedRoomsArray = Array.from(selectedRoomIds);
-      const totalCapacity = grid.reduce((sum, series) => {
-        return sum + series.rooms
-          .filter(r => selectedRoomIds.has(r._id))
-          .reduce((roomSum, r) => roomSum + r.capacity, 0);
-      }, 0);
-
-      const res = await api.post('/pms/bookings/manual', {
-        guestName: bookingForm.guestName,
-        guestPhone: bookingForm.guestPhone,
-        guestAddress: bookingForm.guestAddress || null,
-        guestIdProofType: bookingForm.guestIdProofType || null,
-        bookingType: 'group',
-        checkInDate,
-        checkOutDate,
-        adults: bookingForm.adults,
-        kids: bookingForm.kids || [],
-        totalAmount: 0, // Will be calculated by pricing logic
-        specialRequests: bookingForm.specialRequests || '',
-        roomIds: selectedRoomsArray
-      });
-
-      toast.success('Booking created successfully');
-      setShowBookingModal(false);
-      setSelectedRoomIds(new Set());
-      setBookingForm({
-        guestName: '',
-        guestPhone: '',
-        guestAddress: '',
-        guestIdProofType: '',
-        adults: 1,
-        kids: [],
-        specialRequests: ''
-      });
-      
-      // Refresh grid
-      fetchGrid();
-      
-      // Navigate to bookings page
-      navigate('/bookings');
+      await api.post(`/pms/rooms/${room._id}/unbook`, { checkInDate, checkOutDate });
+      toast.success(`🔓 Room ${room.roomNumber} unbooked successfully!`);
+      await fetchGrid();
     } catch (error) {
-      if (error.response?.data?.message) {
-        toast.error(error.response.data.message);
-      } else {
-        toast.error('Failed to create booking');
-      }
+      toast.error(error.response?.data?.message || `Failed to unbook Room ${room.roomNumber}`);
     } finally {
-      setBookingLoading(false);
+      setUnbookingRoomId(null);
     }
   };
 
-  const handleCancelBooking = async (bookingId) => {
-    if (!confirm('Are you sure you want to cancel this booking?')) return;
+  useEffect(() => {
+    fetchGrid();
+  }, [selectedDate]);
 
-    try {
-      await api.patch(`/pms/bookings/${bookingId}/cancel`, { reason: 'Cancelled from AvailabilityPage' });
-      toast.success('Booking cancelled');
-      setBookedRoomPopover(null);
+  useEffect(() => {
+    if (!socket) return;
+    const handleGridUpdate = () => {
       fetchGrid();
-    } catch (error) {
-      toast.error('Failed to cancel booking');
-    }
-  };
-
-  const getSelectedCapacity = () => {
-    return grid.reduce((sum, series) => {
-      return sum + series.rooms
-        .filter(r => selectedRoomIds.has(r._id))
-        .reduce((roomSum, r) => roomSum + r.capacity, 0);
-    }, 0);
-  };
-
-  // Calendar widget component
-  const CalendarWidget = () => {
-    const year = calendarDate.getFullYear();
-    const month = calendarDate.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const startDay = firstDay.getDay();
-    const daysInMonth = lastDay.getDate();
-
-    const days = [];
-    for (let i = 0; i < startDay; i++) {
-      days.push(null);
-    }
-    for (let i = 1; i <= daysInMonth; i++) {
-      days.push(new Date(year, month, i));
-    }
-
-    const isCheckIn = (date) => date.toISOString().split('T')[0] === checkInDate;
-    const isCheckOut = (date) => date.toISOString().split('T')[0] === checkOutDate;
-    const isInRange = (date) => {
-      const d = date.toISOString().split('T')[0];
-      return d > checkInDate && d < checkOutDate;
     };
 
-    return (
-      <div className="bg-white rounded-lg shadow-lg p-4 w-72">
-        <div className="flex items-center justify-between mb-4">
-          <button
-            onClick={() => {
-              const newDate = new Date(calendarDate);
-              newDate.setMonth(newDate.getMonth() - 1);
-              setCalendarDate(newDate);
-            }}
-            className="p-1 hover:bg-gray-100 rounded"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <span className="font-medium">
-            {calendarDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-          </span>
-          <button
-            onClick={() => {
-              const newDate = new Date(calendarDate);
-              newDate.setMonth(newDate.getMonth() + 1);
-              setCalendarDate(newDate);
-            }}
-            className="p-1 hover:bg-gray-100 rounded"
-          >
-            <ChevronRight size={16} />
-          </button>
-        </div>
-        <div className="grid grid-cols-7 gap-1 text-center text-xs">
-          {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
-            <div key={d} className="font-medium text-gray-500 py-1">{d}</div>
-          ))}
-          {days.map((date, i) => (
-            <button
-              key={i}
-              onClick={() => date && handleCalendarClick(date)}
-              disabled={!date}
-              className={`
-                py-2 rounded text-sm
-                ${!date ? 'text-transparent' : ''}
-                ${isCheckIn(date) ? 'bg-whatsapp text-white' : ''}
-                ${isCheckOut(date) ? 'bg-whatsapp text-white' : ''}
-                ${isInRange(date) ? 'bg-green-100 text-green-800' : ''}
-                ${date && !isCheckIn(date) && !isCheckOut(date) && !isInRange(date) ? 'hover:bg-gray-100' : ''}
-              `}
-            >
-              {date ? date.getDate() : ''}
-            </button>
-          ))}
-        </div>
-        <button
-          onClick={() => {
-            setCalendarSelection(null);
-            setShowCalendar(false);
-          }}
-          className="mt-4 w-full py-2 text-sm text-gray-600 hover:bg-gray-100 rounded"
-        >
-          Close
-        </button>
-      </div>
-    );
+    socket.on('availability:updated', handleGridUpdate);
+    socket.on('inventory:updated', handleGridUpdate);
+    socket.on('room:status_updated', handleGridUpdate);
+    socket.on('pms:booking_created', handleGridUpdate);
+    socket.on('booking:created', handleGridUpdate);
+
+    return () => {
+      socket.off('availability:updated', handleGridUpdate);
+      socket.off('inventory:updated', handleGridUpdate);
+      socket.off('room:status_updated', handleGridUpdate);
+      socket.off('pms:booking_created', handleGridUpdate);
+      socket.off('booking:created', handleGridUpdate);
+    };
+  }, [socket, selectedDate]);
+
+  /**
+   * INSTANT 1-CLICK ZERO-MODAL BOOKING FOR SINGLE ROOM:
+   */
+  const handleInstantOneClickBooking = async (room) => {
+    if (room.status !== 'available') {
+      toast.error(`Room ${room.roomNumber} is already booked.`);
+      return;
+    }
+
+    setBookingRoomId(room._id);
+    try {
+      await api.post('/pms/bookings/manual', {
+        guestName: `Walk-in Guest (Room ${room.roomNumber})`,
+        guestPhone: '+919257657665',
+        bookingType: 'couple',
+        checkInDate,
+        checkOutDate,
+        adults: room.capacity || 2,
+        totalAmount: 3500,
+        roomIds: [room._id]
+      });
+
+      toast.success(`⚡ Room ${room.roomNumber} booked instantly & synced everywhere!`);
+      await fetchGrid();
+    } catch (error) {
+      toast.error(error.response?.data?.message || `Failed to book Room ${room.roomNumber}`);
+    } finally {
+      setBookingRoomId(null);
+    }
   };
 
+  /**
+   * BOOK ENTIRE SERIES HANDLERS:
+   */
+  const handleOpenSeriesModal = (series) => {
+    setShowSeriesModal(series);
+    const availableRoomsInSeries = (series.rooms || []).filter(r => r.status === 'available');
+    const totalCap = availableRoomsInSeries.reduce((sum, r) => sum + (r.capacity || 4), 0);
+
+    setSeriesForm({
+      checkInDate: selectedDate,
+      checkOutDate: new Date(new Date(selectedDate).getTime() + 86400000).toISOString().split('T')[0],
+      guestName: `Group Booking (${series.name})`,
+      guestPhone: '+91',
+      adults: totalCap || 10,
+      totalAmount: availableRoomsInSeries.length * 3000 || 12000
+    });
+  };
+
+  const handleConfirmSeriesBooking = async () => {
+    if (!showSeriesModal) return;
+    const availableRoomsInSeries = (showSeriesModal.rooms || []).filter(r => r.status === 'available');
+
+    if (availableRoomsInSeries.length === 0) {
+      toast.error(`No available rooms in ${showSeriesModal.name} for selected dates.`);
+      return;
+    }
+
+    if (!seriesForm.guestName.trim() || !seriesForm.guestPhone.trim()) {
+      toast.error('Guest name and phone number are required');
+      return;
+    }
+
+    setIsSubmittingSeries(true);
+    try {
+      const roomIds = availableRoomsInSeries.map(r => r._id);
+      await api.post('/pms/bookings/manual', {
+        guestName: seriesForm.guestName,
+        guestPhone: seriesForm.guestPhone,
+        bookingType: 'group',
+        checkInDate: seriesForm.checkInDate,
+        checkOutDate: seriesForm.checkOutDate,
+        adults: Number(seriesForm.adults) || roomIds.length * 2,
+        totalAmount: Number(seriesForm.totalAmount) || roomIds.length * 3000,
+        roomIds
+      });
+
+      toast.success(`🎉 Entire ${showSeriesModal.name} booked (${roomIds.length} rooms) & synced everywhere!`);
+      setShowSeriesModal(null);
+      fetchGrid();
+    } catch (error) {
+      toast.error(error.response?.data?.message || `Failed to book ${showSeriesModal.name}`);
+    } finally {
+      setIsSubmittingSeries(false);
+    }
+  };
+
+  let totalAvailable = 0;
+  let totalBooked = 0;
+  grid.forEach(series => {
+    (series.rooms || []).forEach(r => {
+      if (r.status === 'available') totalAvailable++;
+      if (r.status === 'booked') totalBooked++;
+    });
+  });
+
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      {/* Header */}
-      <div className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <h1 className="text-2xl font-bold text-gray-800">Room Availability</h1>
-          <p className="text-sm text-gray-600">Select rooms to create a booking</p>
+    <div className="space-y-6 animate-fade-in">
+      
+      {/* Top Banner */}
+      <div className="glass-card rounded-2xl p-6 bg-white border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-xl font-display font-bold text-slate-800 flex items-center gap-2">
+            <Grid3x3 className="text-emerald-600" size={22} />
+            <span>Instant 1-Click Room & Series Availability Grid</span>
+          </h1>
+          <p className="text-xs text-slate-500">
+            Book individual cottages or book entire room series in 1 click. Syncs in real-time across Dashboard, PMS, and WhatsApp!
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 bg-emerald-50 text-emerald-800 text-xs font-semibold px-3 py-1.5 rounded-xl border border-emerald-200">
+            <CheckCircle size={15} />
+            <span>Available: <strong>{totalAvailable}</strong></span>
+          </div>
+
+          <div className="flex items-center gap-2 bg-amber-50 text-amber-800 text-xs font-semibold px-3 py-1.5 rounded-xl border border-amber-200">
+            <Home size={15} />
+            <span>Booked: <strong>{totalBooked}</strong></span>
+          </div>
         </div>
       </div>
 
-      {/* Top Controls */}
-      <div className="max-w-7xl mx-auto px-4 py-4 space-y-4">
-        {/* Date Controls */}
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <CalendarIcon size={18} className="text-whatsapp" />
-              <div>
-                <label className="block text-xs font-medium text-gray-600">Check-in</label>
-                <input
-                  type="date"
-                  value={checkInDate}
-                  onChange={(e) => handleDateChange('checkIn', e.target.value)}
-                  className="px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-whatsapp"
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <div>
-                <label className="block text-xs font-medium text-gray-600">Check-out</label>
-                <input
-                  type="date"
-                  value={checkOutDate}
-                  onChange={(e) => handleDateChange('checkOut', e.target.value)}
-                  className="px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-whatsapp"
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-1">
-              <button onClick={handlePrevDay} className="p-2 hover:bg-gray-100 rounded">
-                <ChevronLeft size={18} />
-              </button>
-              <button onClick={handleToday} className="px-3 py-2 text-sm font-medium hover:bg-gray-100 rounded">
-                Today
-              </button>
-              <button onClick={handleNextDay} className="p-2 hover:bg-gray-100 rounded">
-                <ChevronRight size={18} />
-              </button>
-            </div>
-            <div className="relative">
-              <button
-                onClick={() => setShowCalendar(!showCalendar)}
-                className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded hover:bg-gray-50 text-sm"
-              >
-                <CalendarIcon size={16} />
-                Calendar
-              </button>
-              {showCalendar && (
-                <div className="absolute top-full left-0 mt-2 z-10">
-                  <CalendarWidget />
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+      {/* Single Calendar Date Picker */}
+      <div className="glass-card p-4 rounded-2xl bg-white border border-slate-200 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <button
+            onClick={() => handleNavigateDate(-1)}
+            className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors"
+            title="Previous Day"
+          >
+            <ChevronLeft size={18} />
+          </button>
 
-        {/* Search and Legend */}
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex-1 min-w-64 bg-white rounded-lg shadow p-3 flex items-center gap-2">
-            <Search size={18} className="text-gray-400" />
+          <div className="flex items-center gap-2.5 bg-emerald-50/80 text-emerald-950 px-4 py-2 rounded-xl border border-emerald-200 shadow-xs">
+            <CalendarIcon size={18} className="text-emerald-700" />
+            <span className="text-xs font-bold">Calendar Date:</span>
+            <span className="text-xs font-bold text-emerald-900 bg-white px-2.5 py-1 rounded-lg border border-emerald-200 shadow-2xs font-mono">
+              {formatDMY(selectedDate)}
+            </span>
             <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              placeholder="Search room number or series..."
-              className="flex-1 px-2 py-1 text-sm focus:outline-none"
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer w-7 opacity-70 hover:opacity-100"
+              title="Change Date"
             />
-            <button onClick={handleSearch} className="px-3 py-1 bg-whatsapp text-white rounded text-sm">
-              Search
-            </button>
           </div>
-          <div className="flex items-center gap-4 bg-white rounded-lg shadow px-4 py-3">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-green-500 rounded"></div>
-              <span className="text-xs text-gray-600">Available</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-blue-500 rounded"></div>
-              <span className="text-xs text-gray-600">Selected</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-red-500 rounded"></div>
-              <span className="text-xs text-gray-600">Booked</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-gray-300 rounded"></div>
-              <span className="text-xs text-gray-600">Maintenance</span>
-            </div>
-          </div>
+
+          <button
+            onClick={() => handleNavigateDate(1)}
+            className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors"
+            title="Next Day"
+          >
+            <ChevronRight size={18} />
+          </button>
+        </div>
+
+        {/* Quick Date Presets */}
+        <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+          <button
+            onClick={() => handlePresetDate(0)}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+              selectedDate === todayStr ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+            }`}
+          >
+            Today
+          </button>
+          <button
+            onClick={() => handlePresetDate(1)}
+            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg"
+          >
+            Tomorrow
+          </button>
+          <button
+            onClick={() => handlePresetDate(5)}
+            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg"
+          >
+            This Weekend
+          </button>
+          <button
+            onClick={fetchGrid}
+            className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg ml-1"
+            title="Refresh Grid"
+          >
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+          </button>
         </div>
       </div>
 
-      {/* Grid */}
-      <div className="max-w-7xl mx-auto px-4">
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-whatsapp"></div>
-          </div>
-        ) : grid.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            No rooms found
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {grid.map((series) => (
-              <div key={series._id} className="bg-white rounded-lg shadow overflow-hidden">
-                <div className="bg-gray-50 px-4 py-3 border-b">
-                  <h3 className="font-semibold text-gray-800">{series.name}</h3>
-                </div>
-                <div className="p-4">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                    {series.rooms.map((room) => {
-                      const isSelected = selectedRoomIds.has(room._id);
-                      const isHighlighted = highlightedRoomId === room._id;
-                      
-                      return (
-                        <div
-                          key={room._id}
-                          ref={(el) => roomRefs.current[room._id] = el}
-                          onClick={() => {
-                            if (room.status === 'available') {
-                              toggleRoomSelection(room._id);
-                            } else if (room.status === 'booked') {
-                              setBookedRoomPopover({ room, seriesName: series.name });
-                            }
-                          }}
-                          className={`
-                            relative rounded-lg p-3 border-2 cursor-pointer transition-all
-                            ${room.status === 'available' && !isSelected ? 'border-green-500 bg-green-50 hover:bg-green-100' : ''}
-                            ${room.status === 'available' && isSelected ? 'border-blue-500 bg-blue-50' : ''}
-                            ${room.status === 'booked' ? 'border-red-500 bg-red-50' : ''}
-                            ${room.status === 'maintenance' ? 'border-gray-300 bg-gray-100' : ''}
-                            ${isHighlighted ? 'ring-2 ring-yellow-400 ring-offset-2' : ''}
-                          `}
-                        >
-                          <div className="font-bold text-gray-800">{room.roomNumber}</div>
-                          <div className="text-xs text-gray-600">Cap: {room.capacity}</div>
-                          {room.status === 'booked' && (
-                            <div className="mt-2 flex items-center gap-1 text-xs text-red-700">
-                              <User size={10} />
-                              <span>Booked</span>
-                            </div>
-                          )}
-                          {room.status === 'maintenance' && (
-                            <div className="mt-2 flex items-center gap-1 text-xs text-gray-500">
-                              <AlertTriangle size={10} />
-                              <span>Maintenance</span>
-                            </div>
-                          )}
-                          {isSelected && (
-                            <div className="absolute top-1 right-1">
-                              <CheckCircle size={16} className="text-blue-500" />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+      {/* Series & Rooms Grid */}
+      {loading ? (
+        <div className="py-16 text-center space-y-3 glass-card rounded-2xl">
+          <RefreshCw size={32} className="animate-spin text-emerald-600 mx-auto" />
+          <p className="text-xs font-semibold text-slate-600">Fetching live cottage availability...</p>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {grid.map((series) => {
+            const seriesRooms = (series.rooms || []).filter(r => 
+              !searchQuery || r.roomNumber.toLowerCase().includes(searchQuery.toLowerCase())
+            );
+            const availableCountInSeries = seriesRooms.filter(r => r.status === 'available').length;
+
+            return (
+              <div key={series._id} className="glass-card rounded-2xl p-5 bg-white border border-slate-200 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-2">
+                  <div className="flex items-center gap-2">
+                    <Home size={18} className="text-emerald-700" />
+                    <h3 className="font-display font-bold text-base text-slate-800">{series.name}</h3>
+                    <span className="text-xs text-slate-500">({availableCountInSeries}/{seriesRooms.length} Available)</span>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => handleOpenSeriesModal(series)}
+                      disabled={availableCountInSeries === 0}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold text-xs rounded-xl shadow-xs transition-all hover:scale-105"
+                      title={`Book all ${availableCountInSeries} available rooms in ${series.name}`}
+                    >
+                      <Zap size={14} />
+                      <span>Book Entire {series.name}</span>
+                    </button>
+
+                    <span className="hidden md:inline text-xs text-slate-500">
+                      Capacities: <strong>2 - 22 guests</strong>
+                    </span>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
-      {/* Sticky Bottom Bar */}
-      {selectedRoomIds.size > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white shadow-lg border-t p-4 z-40">
-          <div className="max-w-7xl mx-auto flex items-center justify-between">
-            <div>
-              <span className="font-medium text-gray-800">
-                {selectedRoomIds.size} room{selectedRoomIds.size !== 1 ? 's' : ''} selected
-              </span>
-              <span className="text-gray-600 ml-4">
-                Total capacity: {getSelectedCapacity()}
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setSelectedRoomIds(new Set())}
-                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
-              >
-                Clear
-              </button>
-              <button
-                onClick={handleBookSelected}
-                className="px-6 py-2 bg-whatsapp text-white rounded-lg hover:bg-whatsapp-light font-medium"
-              >
-                Book Selected Rooms
-              </button>
-            </div>
-          </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                  {seriesRooms.map((room) => {
+                    const isAvailable = room.status === 'available';
+                    const isBookingThisRoom = bookingRoomId === room._id;
+                    const isUnbookingThisRoom = unbookingRoomId === room._id;
+
+                    return (
+                      <div
+                        key={room._id}
+                        onClick={() => {
+                          if (isAvailable && !isBookingThisRoom) {
+                            handleInstantOneClickBooking(room);
+                          }
+                        }}
+                        className={`p-3.5 rounded-xl border transition-all select-none space-y-2 relative overflow-hidden group ${
+                          isAvailable
+                            ? 'bg-emerald-50/80 hover:bg-emerald-600 hover:text-white text-emerald-900 border-emerald-300 hover:scale-[1.04] hover:shadow-md cursor-pointer'
+                            : 'bg-amber-50 text-amber-950 border-amber-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-display font-bold text-base">
+                            Room {room.roomNumber}
+                          </span>
+
+                          {isBookingThisRoom ? (
+                            <Loader size={16} className="animate-spin text-emerald-700 group-hover:text-white" />
+                          ) : isAvailable ? (
+                            <span className="text-[10px] bg-emerald-700 group-hover:bg-white group-hover:text-emerald-900 text-white font-bold px-2 py-0.5 rounded-full transition-colors flex items-center gap-1">
+                              <Zap size={10} />
+                              <span>1-Click</span>
+                            </span>
+                          ) : (
+                            <button
+                              onClick={(e) => handleUnbookRoom(room, e)}
+                              disabled={isUnbookingThisRoom}
+                              className="text-[10px] bg-rose-600 hover:bg-rose-700 text-white font-bold px-2 py-0.5 rounded-full transition-all flex items-center gap-1 shadow-xs hover:scale-105"
+                              title="Unbook / Cancel this room"
+                            >
+                              {isUnbookingThisRoom ? (
+                                <Loader size={10} className="animate-spin" />
+                              ) : (
+                                <>
+                                  <RotateCcw size={10} />
+                                  <span>Unbook</span>
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="opacity-80">Cap: {room.capacity}</span>
+                          <span className={`font-semibold capitalize text-[10px] px-2 py-0.5 rounded-full ${
+                            isAvailable
+                              ? 'bg-emerald-200 group-hover:bg-emerald-800 group-hover:text-white text-emerald-950'
+                              : 'bg-amber-200 text-amber-950'
+                          }`}>
+                            {isAvailable ? 'Available' : 'Booked'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {/* Booking Modal */}
-      {showBookingModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={() => setShowBookingModal(false)}>
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-4 border-b">
-              <h2 className="text-lg font-semibold">Create Booking</h2>
-              <button onClick={() => setShowBookingModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={20} />
+      {/* Book Entire Series Modal */}
+      {showSeriesModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="glass-card rounded-2xl max-w-md w-full p-6 space-y-4 bg-white animate-fade-in shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-display font-bold text-base text-slate-800 flex items-center gap-2">
+                <Zap size={18} className="text-emerald-600" />
+                <span>Book Entire {showSeriesModal.name}</span>
+              </h3>
+              <button onClick={() => setShowSeriesModal(null)} className="text-slate-400 hover:text-slate-700">
+                <X size={18} />
               </button>
             </div>
-            <form onSubmit={handleBookingSubmit} className="p-4 space-y-4">
+
+            <div className="bg-emerald-50 text-emerald-900 p-3.5 rounded-xl text-xs space-y-1 border border-emerald-200">
+              <p className="font-semibold">Series: <strong>{showSeriesModal.name}</strong></p>
+              <p className="text-[11px] opacity-90">
+                Available Rooms to Book: <strong>{(showSeriesModal.rooms || []).filter(r => r.status === 'available').length} of {(showSeriesModal.rooms || []).length} rooms</strong>
+              </p>
+            </div>
+
+            {/* Date Range Selector formatted as DD/MM/YYYY */}
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Guest Name *</label>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">From Date (Check-in)</label>
+                <div className="space-y-1">
+                  <input
+                    type="date"
+                    value={seriesForm.checkInDate}
+                    onChange={(e) => setSeriesForm(prev => ({ ...prev, checkInDate: e.target.value }))}
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                  />
+                  <span className="text-[10px] font-mono text-emerald-900 font-bold block bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                    {formatDMY(seriesForm.checkInDate)}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">To Date (Check-out)</label>
+                <div className="space-y-1">
+                  <input
+                    type="date"
+                    value={seriesForm.checkOutDate}
+                    onChange={(e) => setSeriesForm(prev => ({ ...prev, checkOutDate: e.target.value }))}
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                  />
+                  <span className="text-[10px] font-mono text-emerald-900 font-bold block bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                    {formatDMY(seriesForm.checkOutDate)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Guest / Group Name</label>
                 <input
                   type="text"
-                  required
-                  value={bookingForm.guestName}
-                  onChange={(e) => setBookingForm({ ...bookingForm, guestName: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-whatsapp"
+                  value={seriesForm.guestName}
+                  onChange={(e) => setSeriesForm(prev => ({ ...prev, guestName: e.target.value }))}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
-                <input
-                  type="tel"
-                  required
-                  value={bookingForm.guestPhone}
-                  onChange={(e) => setBookingForm({ ...bookingForm, guestPhone: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-whatsapp"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Guest WhatsApp Phone</label>
                 <input
                   type="text"
-                  value={bookingForm.guestAddress}
-                  onChange={(e) => setBookingForm({ ...bookingForm, guestAddress: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-whatsapp"
+                  value={seriesForm.guestPhone}
+                  onChange={(e) => setSeriesForm(prev => ({ ...prev, guestPhone: e.target.value }))}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">ID Proof Type</label>
-                <select
-                  value={bookingForm.guestIdProofType}
-                  onChange={(e) => setBookingForm({ ...bookingForm, guestIdProofType: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-whatsapp"
-                >
-                  <option value="">Select...</option>
-                  <option value="aadhaar">Aadhaar</option>
-                  <option value="pan">PAN</option>
-                  <option value="license">Driving License</option>
-                </select>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Total Guests</label>
+                  <input
+                    type="number"
+                    value={seriesForm.adults}
+                    onChange={(e) => setSeriesForm(prev => ({ ...prev, adults: e.target.value }))}
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Total Package Amount (₹)</label>
+                  <input
+                    type="number"
+                    value={seriesForm.totalAmount}
+                    onChange={(e) => setSeriesForm(prev => ({ ...prev, totalAmount: e.target.value }))}
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Adults *</label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  value={bookingForm.adults}
-                  onChange={(e) => setBookingForm({ ...bookingForm, adults: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-whatsapp"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Check-in</label>
-                <input
-                  type="date"
-                  value={checkInDate}
-                  onChange={(e) => setCheckInDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-whatsapp"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Check-out</label>
-                <input
-                  type="date"
-                  value={checkOutDate}
-                  onChange={(e) => setCheckOutDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-whatsapp"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Special Requests</label>
-                <textarea
-                  value={bookingForm.specialRequests}
-                  onChange={(e) => setBookingForm({ ...bookingForm, specialRequests: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-whatsapp"
-                  rows={2}
-                />
-              </div>
-              <div className="bg-gray-50 p-3 rounded">
-                <p className="text-sm text-gray-600">
-                  <strong>{selectedRoomIds.size}</strong> room(s) selected · Total capacity: <strong>{getSelectedCapacity()}</strong>
-                </p>
-              </div>
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowBookingModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={bookingLoading}
-                  className="flex-1 px-4 py-2 bg-whatsapp text-white rounded hover:bg-whatsapp-light disabled:opacity-50"
-                >
-                  {bookingLoading ? 'Creating...' : 'Confirm Booking'}
-                </button>
-              </div>
-            </form>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                onClick={() => setShowSeriesModal(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmSeriesBooking}
+                disabled={isSubmittingSeries}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl disabled:opacity-50"
+              >
+                {isSubmittingSeries ? 'Booking Series...' : `Confirm Book Entire ${showSeriesModal.name}`}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Booked Room Popover */}
-      {bookedRoomPopover && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={() => setBookedRoomPopover(null)}>
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Booking Details</h3>
-              <button onClick={() => setBookedRoomPopover(null)} className="text-gray-400 hover:text-gray-600">
-                <X size={20} />
-              </button>
-            </div>
-            {bookedRoomPopover.room.booking && (
-              <div className="space-y-3">
-                <div>
-                  <p className="text-sm text-gray-600">Room</p>
-                  <p className="font-medium text-gray-800">{bookedRoomPopover.seriesName} - {bookedRoomPopover.room.roomNumber}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Guest Name</p>
-                  <p className="font-medium text-gray-800">{bookedRoomPopover.room.booking.customerName}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Phone</p>
-                  <p className="font-medium text-gray-800">{bookedRoomPopover.room.booking.customerPhone}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Check-in</p>
-                  <p className="font-medium text-gray-800">{new Date(bookedRoomPopover.room.booking.checkInDate).toLocaleDateString('en-IN')}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Check-out</p>
-                  <p className="font-medium text-gray-800">{new Date(bookedRoomPopover.room.booking.checkOutDate).toLocaleDateString('en-IN')}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Status</p>
-                  <p className="font-medium text-gray-800 capitalize">{bookedRoomPopover.room.booking.status.replace('_', ' ')}</p>
-                </div>
-              </div>
-            )}
-            <div className="mt-4 flex gap-3">
-              <button
-                onClick={() => {
-                  setBookedRoomPopover(null);
-                  navigate(`/bookings/${bookedRoomPopover.room.booking.bookingId}`);
-                }}
-                className="flex-1 px-4 py-2 bg-whatsapp text-white rounded hover:bg-whatsapp-light"
-              >
-                View Booking
-              </button>
-              <button
-                onClick={() => handleCancelBooking(bookedRoomPopover.room.booking.bookingId)}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-              >
-                Cancel Booking
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

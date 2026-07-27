@@ -10,12 +10,21 @@ let socket = null;
  * @param {string} token - JWT token for authentication
  * @returns {object} Socket.io client instance
  */
+const getSocketUrl = () => {
+  if (import.meta.env.VITE_SOCKET_URL) return import.meta.env.VITE_SOCKET_URL;
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  if (typeof window !== 'undefined' && window.location && window.location.origin) {
+    return window.location.origin;
+  }
+  return 'http://localhost:7002';
+};
+
 export function connectSocket(token) {
   if (socket?.connected) {
     return socket;
   }
 
-  const socketUrl = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || 'http://localhost:7000';
+  const socketUrl = getSocketUrl();
   
   socket = io(socketUrl, {
     auth: {

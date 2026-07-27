@@ -114,7 +114,6 @@ const chatSchema = new mongoose.Schema({
   timestamps: true
 });
 
-chatSchema.index({ customerPhone: 1 });
 chatSchema.index({ lastMessageAt: -1 });
 chatSchema.index({ mode: 1 });
 chatSchema.index({ bookingStage: 1 });

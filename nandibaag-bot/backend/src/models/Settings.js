@@ -10,6 +10,18 @@ const whatsappNumberSchema = new mongoose.Schema({
   isPrimary: {
     type: Boolean,
     default: false
+  },
+  status: {
+    type: String,
+    default: 'disconnected'
+  },
+  connectedAt: {
+    type: Date,
+    default: null
+  },
+  qrCode: {
+    type: String,
+    default: null
   }
 }, { _id: false });
 

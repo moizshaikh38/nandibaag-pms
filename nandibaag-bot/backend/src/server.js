@@ -33,6 +33,7 @@ const inventoryRoutes = require('./routes/inventoryRoutes');
 const availabilityRoutes = require('./routes/availabilityRoutes');
 const pmsBookingRoutes = require('./routes/pmsBookingRoutes');
 const messageLogRoutes = require('./routes/messageLogRoutes');
+const numberRoutes = require('./routes/numberRoutes');
 
 const app = express();
 const server = http.createServer(app);
@@ -41,8 +42,23 @@ const server = http.createServer(app);
 app.use(helmet());
 
 // CORS
+const allowedOrigins = [
+  frontendUrl,
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:7001',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:7001'
+].filter(Boolean);
+
 app.use(cors({
-  origin: frontendUrl,
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 
@@ -91,6 +107,7 @@ app.get('/health', async (req, res) => {
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
+app.use('/api/numbers', numberRoutes);
 app.use('/api/chats', chatRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/bookings', bookingRoutes);

@@ -113,10 +113,21 @@ export function truncateText(text, maxLength = 50) {
   return text.slice(0, maxLength) + '...';
 }
 
+export function formatDMY(date) {
+  if (!date) return '';
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return String(date);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
 export default {
   formatPhoneDisplay,
   formatRelativeTime,
   formatCurrency,
   getLanguageBadgeColor,
-  truncateText
+  truncateText,
+  formatDMY
 };

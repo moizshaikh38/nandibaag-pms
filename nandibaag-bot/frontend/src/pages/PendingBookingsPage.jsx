@@ -39,7 +39,7 @@ export default function PendingBookingsPage() {
   // Confirm booking flow
   const [selectedHandover, setSelectedHandover] = useState(null);
   const [step, setStep] = useState(1); // 1 = guest details, 2 = room assignment
-  const [guestForm, setGuestForm] = useState({ guestName: '', guestPhone: '', guestAddress: '', guestIdProofType: '', specialRequests: '' });
+  const [guestForm, setGuestForm] = useState({ guestName: '', guestPhone: '+91', guestAddress: '', guestIdProofType: '', specialRequests: '' });
   const [availableRooms, setAvailableRooms] = useState([]);
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [roomsLoading, setRoomsLoading] = useState(false);
@@ -68,7 +68,7 @@ export default function PendingBookingsPage() {
     setStep(1);
     setGuestForm({
       guestName: handover.customerName || '',
-      guestPhone: handover.customerPhone || '',
+      guestPhone: handover.customerPhone || '+91',
       guestAddress: '',
       guestIdProofType: '',
       specialRequests: handover.bookingDraft?.specialRequests || ''

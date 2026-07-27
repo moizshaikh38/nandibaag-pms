@@ -855,7 +855,8 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
   const tPromptStart = Date.now();
  
   // Trim message history (last 10 messages max to optimize token speed)
-  const messageHistory = chat.messages
+  const messageList = Array.isArray(chat?.messages) ? chat.messages : [];
+  const messageHistory = messageList
     .slice(-10)
     .map(msg => ({
       role: msg.sender === 'customer' ? 'user' : 'assistant',

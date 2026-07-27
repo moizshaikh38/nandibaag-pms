@@ -50,6 +50,19 @@ const bookingSchema = new mongoose.Schema({
   specialRequests: {
     type: String
   },
+  advancePayment: {
+    type: Number,
+    default: 0
+  },
+  remainingPayment: {
+    type: Number,
+    default: 0
+  },
+  paymentStatus: {
+    type: String,
+    enum: ['unpaid', 'partially_paid', 'paid'],
+    default: 'unpaid'
+  },
   // Phase D: PMS fields
   guestAddress: {
     type: String
@@ -57,6 +70,10 @@ const bookingSchema = new mongoose.Schema({
   guestIdProofType: {
     type: String,
     enum: ['aadhaar', 'pan', 'license', null],
+    default: null
+  },
+  guestIdProofPhoto: {
+    type: String,
     default: null
   },
   roomBookingId: {
@@ -98,8 +115,6 @@ const bookingSchema = new mongoose.Schema({
 
 bookingSchema.index({ customerPhone: 1 });
 bookingSchema.index({ date: 1 });
-bookingSchema.index({ status: 1 });
 bookingSchema.index({ bookingType: 1 });
-bookingSchema.index({ chatId: 1 });
 
 module.exports = mongoose.model('Booking', bookingSchema);

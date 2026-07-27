@@ -4,8 +4,7 @@ const followUpSchema = new mongoose.Schema({
   chatId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Chat',
-    required: true,
-    index: true
+    required: true
   },
   customerPhone: {
     type: String,
@@ -18,14 +17,12 @@ const followUpSchema = new mongoose.Schema({
   },
   scheduledFor: {
     type: Date,
-    required: true,
-    index: true
+    required: true
   },
   status: {
     type: String,
     enum: ['pending', 'sent', 'cancelled'],
-    default: 'pending',
-    index: true
+    default: 'pending'
   },
   cancelReason: {
     type: String,

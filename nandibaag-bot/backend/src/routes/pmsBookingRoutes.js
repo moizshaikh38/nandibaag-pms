@@ -69,12 +69,16 @@ const manualBookingSchema = Joi.object({
   guestPhone: Joi.string().trim().min(5).required(),
   guestAddress: Joi.string().allow('', null).optional(),
   guestIdProofType: Joi.string().valid('aadhaar', 'pan', 'license').allow(null).optional(),
+  guestIdProofPhoto: Joi.string().allow('', null).optional(),
   bookingType: Joi.string().valid('couple', 'group', 'picnic').required(),
   checkInDate: Joi.string().isoDate().required(),
   checkOutDate: Joi.string().isoDate().required(),
   adults: Joi.number().integer().min(1).required(),
   kids: Joi.array().items(Joi.object({ age: Joi.number().integer().min(0), rate: Joi.number().min(0) })).default([]),
   totalAmount: Joi.number().min(0).required(),
+  advancePayment: Joi.number().min(0).allow(null).optional().default(0),
+  remainingPayment: Joi.number().min(0).allow(null).optional().default(0),
+  paymentStatus: Joi.string().valid('unpaid', 'partially_paid', 'paid').allow('', null).optional(),
   priceBreakdown: Joi.string().allow('', null).optional(),
   specialRequests: Joi.string().allow('', null).optional(),
   roomId: Joi.string().hex().length(24).allow(null).optional(),
@@ -316,10 +320,18 @@ router.post('/bookings/:id/assign-room', verifyToken, async (req, res, next) => 
     booking.roomBookingId = roomBooking._id;
     booking.status = 'confirmed';
     await booking.save();
-    // Phase F+G: lifecycleMessageCron will automatically pick up this booking
-    // on its next run (queries bookings with roomBookingId + confirmed status)
 
     await roomBooking.populate('roomId', 'roomNumber capacity seriesId');
+
+    // Emit Socket.io real-time updates so Availability grid auto-refreshes everywhere
+    try {
+      const { getIO } = require('../sockets');
+      const io = getIO();
+      io.emit('availability:updated', { checkInDate: checkIn.toISOString(), checkOutDate: checkOut.toISOString() });
+      io.emit('pms:booking_updated', { booking });
+    } catch (socketErr) {
+      logger.error(`Socket emit failed: ${socketErr.message}`);
+    }
 
     res.json({
       success: true,
@@ -331,6 +343,59 @@ router.post('/bookings/:id/assign-room', verifyToken, async (req, res, next) => 
     if (error.message.includes('no longer available')) {
       return res.status(409).json({ success: false, message: error.message });
     }
+    next(error);
+  }
+});
+
+/**
+ * POST /api/pms/rooms/:roomId/unbook
+ * Unbook / cancel active room booking for a room in a given date range.
+ * Emits availability:updated real-time socket events.
+ */
+router.post('/rooms/:roomId/unbook', verifyToken, async (req, res, next) => {
+  try {
+    const { roomId } = req.params;
+    const { checkInDate, checkOutDate } = req.body;
+
+    if (!isValidObjectId(roomId)) {
+      return res.status(400).json({ success: false, message: 'Invalid room ID' });
+    }
+
+    const checkIn = new Date(checkInDate || Date.now());
+    const checkOut = new Date(checkOutDate || (checkIn.getTime() + 86400000));
+
+    // Find overlapping active RoomBooking for this room
+    const roomBooking = await RoomBooking.findOne({
+      roomId,
+      status: { $in: ['confirmed', 'checked_in'] },
+      checkInDate: { $lt: checkOut },
+      checkOutDate: { $gt: checkIn }
+    });
+
+    if (!roomBooking) {
+      return res.status(404).json({ success: false, message: 'No active booking found for this room' });
+    }
+
+    roomBooking.status = 'cancelled';
+    await roomBooking.save();
+
+    // If linked to main Booking model, update booking status as well
+    if (roomBooking.bookingId) {
+      await Booking.findByIdAndUpdate(roomBooking.bookingId, { status: 'cancelled' });
+    }
+
+    // Broadcast Socket.io real-time update so Availability grid refreshes everywhere
+    try {
+      const { getIO } = require('../sockets');
+      const io = getIO();
+      io.emit('availability:updated', { checkInDate, checkOutDate });
+      io.emit('pms:booking_updated', { roomBookingId: roomBooking._id, status: 'cancelled' });
+    } catch (socketErr) {
+      logger.error(`Socket emit failed for unbook: ${socketErr.message}`);
+    }
+
+    res.json({ success: true, message: 'Room unbooked successfully', roomBooking });
+  } catch (error) {
     next(error);
   }
 });
@@ -362,6 +427,16 @@ router.patch('/bookings/:id/cancel', verifyToken, async (req, res, next) => {
 
     booking.status = 'cancelled';
     await booking.save();
+
+    // Emit Socket.io real-time updates so Availability grid auto-refreshes everywhere
+    try {
+      const { getIO } = require('../sockets');
+      const io = getIO();
+      io.emit('availability:updated', { checkInDate: booking.checkInDate, checkOutDate: booking.checkOutDate });
+      io.emit('pms:booking_updated', { booking });
+    } catch (socketErr) {
+      logger.error(`Socket emit failed: ${socketErr.message}`);
+    }
 
     res.json({ success: true, booking });
   } catch (error) {
@@ -543,11 +618,25 @@ router.post('/bookings/manual', verifyToken, async (req, res, next) => {
     const dateError = validateDateRange(value.checkInDate, value.checkOutDate);
     if (dateError) return res.status(400).json({ success: false, message: dateError });
 
+    const totalAmt = Number(value.totalAmount) || 0;
+    const advAmt = Number(value.advancePayment) || 0;
+    const remAmt = (value.remainingPayment !== undefined && value.remainingPayment !== null && Number(value.remainingPayment) > 0)
+      ? Number(value.remainingPayment)
+      : Math.max(0, totalAmt - advAmt);
+
+    let pStatus = value.paymentStatus;
+    if (!pStatus) {
+      if (advAmt >= totalAmt && totalAmt > 0) pStatus = 'paid';
+      else if (advAmt > 0) pStatus = 'partially_paid';
+      else pStatus = 'unpaid';
+    }
+
     const booking = new Booking({
       customerName: value.guestName,
       customerPhone: value.guestPhone,
       guestAddress: value.guestAddress || null,
       guestIdProofType: value.guestIdProofType || null,
+      guestIdProofPhoto: value.guestIdProofPhoto || null,
       bookingType: value.bookingType,
       date: value.checkInDate.split('T')[0],
       checkInDate: new Date(value.checkInDate),
@@ -555,7 +644,10 @@ router.post('/bookings/manual', verifyToken, async (req, res, next) => {
       isWeekend: [0, 6].includes(new Date(value.checkInDate).getDay()),
       adults: value.adults,
       kids: value.kids || [],
-      totalAmount: value.totalAmount,
+      totalAmount: totalAmt,
+      advancePayment: advAmt,
+      remainingPayment: remAmt,
+      paymentStatus: pStatus,
       priceBreakdown: value.priceBreakdown || '',
       specialRequests: value.specialRequests || '',
       status: 'pending_payment',
@@ -571,26 +663,10 @@ router.post('/bookings/manual', verifyToken, async (req, res, next) => {
 
     // If roomIds array provided, create multiple RoomBookings (all-or-nothing)
     if (value.roomIds && value.roomIds.length > 0) {
-      const session = mongoose.connection.client.startSession ? await mongoose.connection.client.startSession() : null;
       let useTransaction = false;
-
-      if (session && session.client && mongoose.connection.readyState === 1) {
-        try {
-          const adminDb = mongoose.connection.db.admin ? mongoose.connection.db.admin() : null;
-          if (adminDb) {
-            await adminDb.command({ ping: 1 });
-            useTransaction = true;
-          }
-        } catch (err) {
-          useTransaction = false;
-        }
-      }
+      let session = null;
 
       try {
-        if (useTransaction && session) {
-          session.startTransaction();
-        }
-
         // Create RoomBooking for each roomId
         for (const roomId of value.roomIds) {
           const room = await Room.findById(roomId);
@@ -633,12 +709,15 @@ router.post('/bookings/manual', verifyToken, async (req, res, next) => {
         if (useTransaction && session) await session.abortTransaction();
         if (session) await session.endSession();
         
-        // Rollback: delete any room bookings that were created
+        // Rollback: delete created booking & any room bookings if overlap occurred
+        if (booking && booking._id) {
+          await Booking.findByIdAndDelete(booking._id).catch(() => {});
+        }
         if (createdRoomBookingIds.length > 0) {
-          await RoomBooking.deleteMany({ _id: { $in: createdRoomBookingIds } });
+          await RoomBooking.deleteMany({ _id: { $in: createdRoomBookingIds } }).catch(() => {});
         }
         
-        if (error.message.includes('no longer available')) {
+        if (error.message.includes('no longer available') || error.message.includes('overlap') || error.message.includes('booked')) {
           return res.status(409).json({ success: false, message: error.message });
         }
         throw error;
@@ -674,11 +753,151 @@ router.post('/bookings/manual', verifyToken, async (req, res, next) => {
       roomBookings.push(roomBooking);
     }
 
+    // Emit Socket.io real-time updates to all connected dashboard & availability clients
+    try {
+      const { getIO } = require('../sockets');
+      const io = getIO();
+      io.emit('availability:updated', { checkInDate: value.checkInDate, checkOutDate: value.checkOutDate });
+      io.emit('pms:booking_created', { booking });
+    } catch (socketErr) {
+      logger.error(`Socket emit failed for booking creation: ${socketErr.message}`);
+    }
+
+    // Send automated WhatsApp confirmation message if WhatsApp session is connected
+    try {
+      const { sendMessage, activeSockets } = require('../services/whatsappService');
+      const { Settings } = require('../models');
+      const { resortContact1 } = require('../config/env');
+      const settings = await Settings.findOne();
+      const activeNumber = settings?.whatsappNumbers?.find(n => n.status === 'connected');
+      
+      if (activeNumber && (activeNumber.label || activeNumber.number)) {
+        const sessionId = activeNumber.label || activeNumber.number;
+        if (activeSockets.has(sessionId)) {
+          const targetPhone = value.guestPhone && value.guestPhone.length >= 10 ? value.guestPhone : resortContact1;
+          const text = `🏨 *Nandibaag Resort — Booking Confirmed!*\n\n• Guest: ${value.guestName}\n• Room: Room ${roomBookings[0]?.roomId?.roomNumber || 'Assigned'}\n• Dates: ${value.checkInDate.split('T')[0]} to ${value.checkOutDate.split('T')[0]}\n• Amount: ₹${value.totalAmount}\n• Status: Confirmed`;
+          
+          sendMessage(sessionId, targetPhone, text).catch(err => {
+            logger.warn(`WhatsApp notification send error: ${err.message}`);
+          });
+        }
+      }
+    } catch (waErr) {
+      logger.warn(`WhatsApp notification check error: ${waErr.message}`);
+    }
+
     res.status(201).json({ success: true, warning, booking, roomBookings });
   } catch (error) {
-    if (error.message.includes('no longer available')) {
+    if (booking && booking._id) {
+      await Booking.findByIdAndDelete(booking._id).catch(() => {});
+    }
+    if (error.message.includes('no longer available') || error.message.includes('overlap') || error.message.includes('booked')) {
       return res.status(409).json({ success: false, message: error.message });
     }
+    next(error);
+  }
+});
+
+/**
+ * DELETE /api/pms/bookings/:id
+ * Delete a booking and release any linked RoomBookings.
+ * Emits availability:updated and pms:booking_deleted real-time socket events.
+ */
+router.delete('/bookings/:id', verifyToken, async (req, res, next) => {
+  try {
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid booking ID' });
+    }
+
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+
+    const checkInDate = booking.checkInDate;
+    const checkOutDate = booking.checkOutDate;
+
+    // Delete linked RoomBookings
+    if (booking.roomBookingId) {
+      await RoomBooking.deleteMany({
+        $or: [
+          { _id: booking.roomBookingId },
+          { bookingId: booking._id }
+        ]
+      });
+    } else {
+      await RoomBooking.deleteMany({ bookingId: booking._id });
+    }
+
+    await Booking.findByIdAndDelete(req.params.id);
+
+    // Broadcast Socket.io real-time update so Availability grid refreshes everywhere
+    try {
+      const { getIO } = require('../sockets');
+      const io = getIO();
+      io.emit('availability:updated', { checkInDate, checkOutDate });
+      io.emit('pms:booking_deleted', { bookingId: req.params.id });
+    } catch (socketErr) {
+      logger.error(`Socket emit failed for delete booking: ${socketErr.message}`);
+    }
+
+    res.json({ success: true, message: 'Booking deleted & room released successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * PATCH /api/pms/bookings/:id/settle-payment
+ * Mark remaining balance as paid (remainingPayment = 0, advancePayment = totalAmount, paymentStatus = 'paid').
+ * Emits pms:booking_updated real-time socket event and sends WhatsApp receipt attempt.
+ */
+router.patch('/bookings/:id/settle-payment', verifyToken, async (req, res, next) => {
+  try {
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid booking ID' });
+    }
+
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+
+    booking.advancePayment = booking.totalAmount;
+    booking.remainingPayment = 0;
+    booking.paymentStatus = 'paid';
+    await booking.save();
+
+    // Broadcast Socket.io real-time update
+    try {
+      const { getIO } = require('../sockets');
+      const io = getIO();
+      io.emit('pms:booking_updated', { booking });
+    } catch (socketErr) {
+      logger.error(`Socket emit failed for settle payment: ${socketErr.message}`);
+    }
+
+    // Send WhatsApp payment receipt if session active
+    try {
+      const { sendMessage, activeSockets } = require('../services/whatsappService');
+      const { Settings } = require('../models');
+      const { resortContact1 } = require('../config/env');
+      const settings = await Settings.findOne();
+      const activeNumber = settings?.whatsappNumbers?.find(n => n.status === 'connected');
+
+      if (activeNumber && (activeNumber.label || activeNumber.number)) {
+        const sessionId = activeNumber.label || activeNumber.number;
+        if (activeSockets.has(sessionId)) {
+          const targetPhone = booking.customerPhone && booking.customerPhone.length >= 10 ? booking.customerPhone : resortContact1;
+          const text = `💳 *Nandibaag Resort — Payment Settled!*\n\n• Guest: ${booking.customerName}\n• Total Amount: ₹${booking.totalAmount}\n• Advance Paid: ₹${booking.totalAmount}\n• Remaining Balance: ₹0 (FULLY PAID)\n• Status: Paid\n\nThank you for choosing Nandibaag Resort! 🙏`;
+
+          sendMessage(sessionId, targetPhone, text).catch(err => {
+            logger.warn(`WhatsApp payment receipt send error: ${err.message}`);
+          });
+        }
+      }
+    } catch (waErr) {
+      logger.warn(`WhatsApp payment receipt check error: ${waErr.message}`);
+    }
+
+    res.json({ success: true, message: 'Balance settled & marked as Paid', booking });
+  } catch (error) {
     next(error);
   }
 });

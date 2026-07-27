@@ -12,7 +12,8 @@ import BookingsPage from './pages/BookingsPage';
 import MessageLogPage from './pages/MessageLogPage';
 import CalendarPage from './pages/CalendarPage';
 import AvailabilityPage from './pages/AvailabilityPage';
-import BottomNav from './components/BottomNav';
+import PublicWidgetPage from './pages/PublicWidgetPage';
+import Sidebar from './components/Sidebar';
 
 // Protected Route wrapper component
 function ProtectedRoute({ children }) {
@@ -20,8 +21,8 @@ function ProtectedRoute({ children }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-whatsapp"></div>
+      <div className="min-h-screen flex items-center justify-center bg-slate-900">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
       </div>
     );
   }
@@ -33,13 +34,17 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
-// Protected layout that includes BottomNav
+// Protected layout that includes vertical Sidebar
 function ProtectedLayout({ children }) {
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gray-100 pb-16">
-        {children}
-        <BottomNav />
+      <div className="min-h-screen bg-slate-50 flex">
+        <Sidebar />
+        <div className="flex-1 min-w-0 lg:pl-64 flex flex-col transition-all duration-300">
+          <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            {children}
+          </main>
+        </div>
       </div>
     </ProtectedRoute>
   );
@@ -130,6 +135,7 @@ function App() {
             </ProtectedLayout>
           }
         />
+        <Route path="/availability/widget" element={<PublicWidgetPage />} />
         <Route
           path="/pms/message-log"
           element={

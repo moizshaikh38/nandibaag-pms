@@ -52,7 +52,9 @@ export function AuthProvider({ children }) {
   // Login function
   const login = async (email, password, rememberMe = false) => {
     try {
+      console.log('[Auth] Attempting login to:', api.defaults.baseURL + '/auth/login');
       const response = await api.post('/auth/login', { email, password, rememberMe });
+      console.log('[Auth] Login response:', response.status, response.data?.success);
       const { token: newToken, user: newUser, expiresIn } = response.data;
       
       setToken(newToken, rememberMe);
@@ -64,9 +66,18 @@ export function AuthProvider({ children }) {
       
       return { success: true, expiresIn };
     } catch (error) {
+      console.error('[Auth] Login failed:', {
+        message: error.message,
+        code: error.code,
+        status: error.response?.status,
+        data: error.response?.data,
+        url: error.config?.url,
+        baseURL: error.config?.baseURL
+      });
       return {
         success: false,
-        message: error.response?.data?.message || 'Login failed'
+        message: error.response?.data?.message || error.message || 'Login failed',
+        status: error.response?.status
       };
     }
   };

@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Production build
+dist/
+**/dist/
+
+# Environment variables
+.env
+**/.env
+
+# WhatsApp sessions & logs
+sessions/
+**/sessions/
+logs/
+**/*.log
+
+# Operating system files
+.DS_Store
+**/.DS_Store
+*.mjs

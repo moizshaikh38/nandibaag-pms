@@ -229,25 +229,26 @@ async function createRoomBooking(roomId, bookingId, checkInDate, checkOutDate, a
       assignedBy: assignedByUserId
     });
 
-    if (useTransaction && session) {
-      session.startTransaction();
-      try {
+    try {
+      if (session && session.client) {
+        session.startTransaction();
         await roomBooking.save({ session });
         await session.commitTransaction();
-      } catch (err) {
-        await session.abortTransaction();
-        throw err;
-      } finally {
-        await session.endSession();
+        return roomBooking;
       }
-    } else {
-      await roomBooking.save();
+    } catch (txErr) {
+      if (session) {
+        try { await session.abortTransaction(); } catch (_) {}
+      }
     }
 
+    // Fallback for standalone MongoDB
+    await roomBooking.save();
     return roomBooking;
-  } catch (error) {
-    if (session) await session.endSession();
-    throw error;
+  } finally {
+    if (session) {
+      try { await session.endSession(); } catch (_) {}
+    }
   }
 }
 

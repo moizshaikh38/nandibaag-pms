@@ -68,6 +68,43 @@ function validateDateRange(checkIn, checkOut) {
 // ── Routes ────────────────────────────────────────────────────────────
 
 /**
+ * GET /api/availability/public
+ * Public unauthenticated CORS-enabled API for external resort website integration.
+ * Query params: ?checkInDate=YYYY-MM-DD&checkOutDate=YYYY-MM-DD
+ */
+router.get('/public', async (req, res, next) => {
+  try {
+    const checkInDate = req.query.checkInDate || new Date().toISOString().split('T')[0];
+    const checkOutDate = req.query.checkOutDate || new Date(Date.now() + 86400000).toISOString().split('T')[0];
+
+    const result = await getCapacityAvailability(checkInDate, checkOutDate, 1);
+    const detailed = await getDetailedAvailability(checkInDate, checkOutDate);
+
+    const seriesMap = {};
+    detailed.forEach(r => {
+      if (!seriesMap[r.seriesName]) {
+        seriesMap[r.seriesName] = { seriesName: r.seriesName, totalRooms: 0, availableRooms: 0 };
+      }
+      seriesMap[r.seriesName].totalRooms++;
+      if (r.status === 'available') seriesMap[r.seriesName].availableRooms++;
+    });
+
+    res.json({
+      success: true,
+      resortName: 'Nandibaag Resort',
+      checkInDate,
+      checkOutDate,
+      totalAvailable: result.availableCount,
+      isAvailable: result.available,
+      capacityBreakdown: result.breakdown,
+      seriesAvailability: Object.values(seriesMap)
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * POST /api/availability/check-capacity
  * Capacity-level availability check (for bot/internal use).
  * Returns ONLY counts, never room numbers.
