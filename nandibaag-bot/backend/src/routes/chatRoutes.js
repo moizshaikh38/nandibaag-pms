@@ -1,6 +1,6 @@
 const express = require('express');
 const { verifyToken } = require('../middleware/auth');
-const { Chat } = require('../models');
+const { Chat, Lead } = require('../models');
 const { sendMessage } = require('../services/whatsappService');
 const { cancelPendingFollowUps, containsOptOutPhrases, markChatAsOptedOut } = require('../services/followUpService');
 const logger = require('../config/logger');
@@ -34,9 +34,28 @@ router.get('/', verifyToken, async (req, res, next) => {
       Chat.countDocuments(query)
     ]);
     
+    // Attach lead score and status from Lead collection
+    const chatIds = chats.map(c => c._id);
+    const leads = await Lead.find({ chatId: { $in: chatIds } });
+    const leadMap = new Map(leads.map(l => [l.chatId.toString(), l]));
+
+    const chatsWithLeads = chats.map(chat => {
+      const chatObj = chat.toObject();
+      const lead = leadMap.get(chat._id.toString());
+      if (lead) {
+        chatObj.leadScore = lead.score;
+        chatObj.leadStatus = lead.status;
+      } else {
+        const isHotFallback = Boolean(chat.bookingDraft?.date) || ['guests_given', 'price_quoted', 'name_given', 'phone_given', 'special_requests'].includes(chat.bookingStage);
+        chatObj.leadScore = isHotFallback ? 75 : 0;
+        chatObj.leadStatus = isHotFallback ? 'hot' : 'cold';
+      }
+      return chatObj;
+    });
+
     res.json({
       success: true,
-      chats,
+      chats: chatsWithLeads,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -63,10 +82,21 @@ router.get('/:id', verifyToken, async (req, res, next) => {
         message: 'Chat not found'
       });
     }
+
+    const lead = await Lead.findOne({ chatId: chat._id });
+    const chatObj = chat.toObject();
+    if (lead) {
+      chatObj.leadScore = lead.score;
+      chatObj.leadStatus = lead.status;
+    } else {
+      const isHotFallback = Boolean(chat.bookingDraft?.date) || ['guests_given', 'price_quoted', 'name_given', 'phone_given', 'special_requests'].includes(chat.bookingStage);
+      chatObj.leadScore = isHotFallback ? 75 : 0;
+      chatObj.leadStatus = isHotFallback ? 'hot' : 'cold';
+    }
     
     res.json({
       success: true,
-      chat
+      chat: chatObj
     });
   } catch (error) {
     next(error);

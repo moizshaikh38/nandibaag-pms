@@ -58,6 +58,10 @@ export default function ChatsPage() {
   }, [debouncedSearch, fetchChats]);
 
   useEffect(() => {
+    const filterFromUrl = searchParams.get('filter') || searchParams.get('tab');
+    if (filterFromUrl && ['all', 'hot', 'ai', 'human'].includes(filterFromUrl)) {
+      setActiveTab(filterFromUrl);
+    }
     const chatIdFromUrl = paramChatId || searchParams.get('chatId');
     if (chatIdFromUrl) {
       setSelectedChatId(chatIdFromUrl);

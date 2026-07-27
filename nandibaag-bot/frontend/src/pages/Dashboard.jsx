@@ -267,7 +267,7 @@ export default function Dashboard() {
 
         {/* Hot Leads */}
         <div 
-          onClick={() => navigate('/chats')}
+          onClick={() => navigate('/chats?filter=hot')}
           className="glass-card p-5 rounded-2xl cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all border border-amber-200/80 bg-gradient-to-tr from-amber-50/50 to-white space-y-3 group"
         >
           <div className="flex items-center justify-between">
