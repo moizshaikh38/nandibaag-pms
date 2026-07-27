@@ -47,7 +47,17 @@ if (error) {
 }
 
 const rawMongoUri = envVars.MONGO_URI || 'mongodb+srv://moizsh786786_db_user:RvSja2R0ytcXg6QZ@cluster0.ly5dxxy.mongodb.net/nandibaag-pms?retryWrites=true&w=majority';
-const cleanMongoUri = rawMongoUri.replace(/<|>/g, '').trim();
+let cleanMongoUri = rawMongoUri.replace(/<|>/g, '').trim();
+
+if (cleanMongoUri.includes('.mongodb.net') && !cleanMongoUri.includes('/nandibaag-pms')) {
+  if (cleanMongoUri.includes('.mongodb.net/?')) {
+    cleanMongoUri = cleanMongoUri.replace('.mongodb.net/?', '.mongodb.net/nandibaag-pms?');
+  } else if (cleanMongoUri.includes('.mongodb.net/')) {
+    cleanMongoUri = cleanMongoUri.replace('.mongodb.net/', '.mongodb.net/nandibaag-pms/');
+  } else if (cleanMongoUri.endsWith('.mongodb.net')) {
+    cleanMongoUri = cleanMongoUri + '/nandibaag-pms';
+  }
+}
 
 module.exports = {
   mongoUri: cleanMongoUri,
