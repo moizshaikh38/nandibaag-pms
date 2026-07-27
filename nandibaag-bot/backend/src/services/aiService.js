@@ -1001,9 +1001,9 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
     }
   }
 
-  // ── FINAL FALLBACK: Hardcoded safe fallback ───────────────────────
+  // ── FINAL FALLBACK: Smart Resort Intent Assistant ────────────────────
   if (!result) {
-    logger.error(`All AI tiers failed for this message`);
+    logger.warn(`Using Smart Resort Assistant fallback for message: "${incomingMessage}"`);
 
     const { resortContact1 } = require('../config/env');
     const defaultBackup = resortContact1 || '9257657665';
@@ -1011,17 +1011,28 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
     let primaryNumber = resortSettings?.whatsappNumbers
       ?.find(n => n.isPrimary)?.number;
 
-    // Check if the primary number is missing or invalid (non-numeric, e.g. "main")
     if (!primaryNumber || !/^\+?\d+$/.test(primaryNumber)) {
-      // Fallback to first active number that is numeric
       const firstValidActive = resortSettings?.whatsappNumbers
         ?.filter(n => n.isActive && /^\+?\d+$/.test(n.number))
         ?.map(n => n.number)?.[0];
-      
       primaryNumber = firstValidActive || defaultBackup;
     }
 
-    result = `Ji iske baare me main team se confirm karke batata hun. Ya seedha call karein: ${primaryNumber} 📞`;
+    const msgLower = (incomingMessage || '').toLowerCase();
+
+    if (msgLower.includes('couple') || msgLower.includes('pair') || msgLower.includes('husband') || msgLower.includes('wife')) {
+      result = `Namaste! Nandibaag Resort me Deluxe Private Couple Cottages available hain. Package me AC Cottage Stay + Swimming Pool + Unlimited Meals (Breakfast, Lunch, Evening High Tea & Dinner) included hota hai.\n\nAap kis Check-in Date par visit karna chahte hain? 🌿`;
+    } else if (msgLower.includes('rate') || msgLower.includes('price') || msgLower.includes('cost') || msgLower.includes('kitna') || msgLower.includes('charge')) {
+      result = `Nandibaag Resort Packages:\n1. 🏡 Couple Stay: ₹4,000 - ₹5,500/night (Private AC Cottage + All Meals)\n2. 👨‍👩‍👧‍👦 Group Stay: ₹1,500/person (Cottage + All Meals)\n3. 🌊 Day Picnic: ₹900 - ₹1,100/person (9 AM to 6 PM with Meals & Pool)\n\nAapko kis package ke liye availability check karni hai? Date aur total guests batayein! 🗓️`;
+    } else if (msgLower.includes('location') || msgLower.includes('address') || msgLower.includes('kaha') || msgLower.includes('where')) {
+      result = `📍 Nandibaag Resort Location:\nVillage Shahpur, Near Mumbai-Nashik Highway, Thane / Palghar District, Maharashtra.\n\nGoogle Maps par 'Nandibaag Resort' search karke seedha navigate kar sakte hain! Direct enquiry ke liye call: ${primaryNumber} 📞`;
+    } else if (msgLower.includes('availab') || msgLower.includes('date') || msgLower.includes('book') || msgLower.includes('room') || msgLower.includes('cottage')) {
+      result = `Live availability check karne ke liye kripya:\n1. Check-in Date (e.g. 15th August)\n2. Total Guests (Adults + Kids)\n\nBatayein, main abhi cottage availability calculate karke batata hun! 🌿`;
+    } else if (/^(hi|hello|hey|namaste|hlo|hii|namaskar)/i.test(msgLower.trim())) {
+      result = `Namaste! Welcome to Nandibaag Resort 🌿\n\nAapko Couple Stay, Family Group Stay ya Day Picnic kis type ki booking ke baare me enquiry karni hai?`;
+    } else {
+      result = `Ji bilkul! Iske baare me jankari aur cottage availability ke liye date aur total guests batayein, ya humari team se baat karein: ${primaryNumber} 📞`;
+    }
   }
 
   // Cache FAQ responses
