@@ -2,29 +2,48 @@ const mongoose = require('mongoose');
 const logger = require('./logger');
 const { mongoUri } = require('./env');
 
-const MAX_RETRIES = 10;
-const RETRY_DELAY = 5000;
-
-let retryCount = 0;
+let connectionPromise = null;
 
 const connectDB = async () => {
-  try {
-    await mongoose.connect(mongoUri, {
-      serverSelectionTimeoutMS: 10000,
-      connectTimeoutMS: 10000
-    });
-    logger.info('MongoDB connected successfully');
-  } catch (error) {
-    retryCount++;
-    if (retryCount < MAX_RETRIES) {
-      logger.error(`MongoDB connection failed (attempt ${retryCount}/${MAX_RETRIES}): ${error.message}`);
-      logger.info(`Retrying in ${RETRY_DELAY / 1000} seconds...`);
-      setTimeout(connectDB, RETRY_DELAY);
-    } else {
-      logger.error(`MongoDB connection failed after ${MAX_RETRIES} attempts: ${error.message}`);
-    }
+  if (mongoose.connection.readyState === 1) {
+    return mongoose.connection;
   }
+  if (connectionPromise) {
+    return connectionPromise;
+  }
+
+  connectionPromise = mongoose.connect(mongoUri, {
+    serverSelectionTimeoutMS: 5000,
+    connectTimeoutMS: 5000
+  }).then((conn) => {
+    logger.info('MongoDB connected successfully');
+    connectionPromise = null;
+    return conn;
+  }).catch((error) => {
+    logger.error(`MongoDB connection failed: ${error.message}`);
+    connectionPromise = null;
+    throw error;
+  });
+
+  return connectionPromise;
 };
+
+async function ensureDbConnected(req, res, next) {
+  if (mongoose.connection.readyState === 1) {
+    return next();
+  }
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    logger.error(`ensureDbConnected middleware failed: ${error.message}`);
+    return res.status(503).json({
+      success: false,
+      message: 'Database connection to MongoDB Atlas failed or timing out. Ensure 0.0.0.0/0 IP is allowed in MongoDB Atlas Network Access.',
+      error: error.message
+    });
+  }
+}
 
 mongoose.connection.on('disconnected', () => {
   logger.warn('MongoDB disconnected');
@@ -35,3 +54,4 @@ mongoose.connection.on('error', (error) => {
 });
 
 module.exports = connectDB;
+module.exports.ensureDbConnected = ensureDbConnected;

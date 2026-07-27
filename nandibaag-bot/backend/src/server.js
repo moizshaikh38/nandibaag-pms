@@ -105,6 +105,11 @@ app.get('/health', async (req, res) => {
   }
 });
 
+const { ensureDbConnected } = require('./config/db');
+
+// Ensure DB is connected before processing API requests
+app.use('/api', ensureDbConnected);
+
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
