@@ -15,8 +15,9 @@ const logger = require('../config/logger');
 async function handleMessage(sessionId, msg) {
   const tStart = Date.now();
   try {
-    // Extract customer phone
-    const customerPhone = msg.key.remoteJid.replace('@s.whatsapp.net', '');
+    // Extract customer phone / JID (preserve @lid if present for WhatsApp multi-device routing)
+    const rawJid = msg.key.remoteJid;
+    const customerPhone = rawJid.includes('@lid') ? rawJid : rawJid.replace('@s.whatsapp.net', '');
     
     // Extract text from the incoming message object
     const messageText = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
@@ -49,12 +50,16 @@ async function handleMessage(sessionId, msg) {
       return;
     }
     
+    // Extract customer push name from WhatsApp profile if available
+    const pushName = msg.pushName;
+    
     // Find or create chat
     let chat = await Chat.findOne({ customerPhone });
     
     if (!chat) {
       chat = new Chat({
         customerPhone,
+        customerName: pushName || null,
         whatsappNumberUsed: sessionId,
         mode: settings.globalMode,
         language: 'unknown',
@@ -65,7 +70,9 @@ async function handleMessage(sessionId, msg) {
         isArchived: false
       });
       await chat.save();
-      logger.info(`Created new chat for ${customerPhone}`);
+      logger.info(`Created new chat for ${customerPhone} (Name: ${pushName || 'N/A'})`);
+    } else if (pushName && (!chat.customerName || chat.customerName !== pushName)) {
+      chat.customerName = pushName;
     }
     
     // Check for opt-out phrases
@@ -86,31 +93,52 @@ async function handleMessage(sessionId, msg) {
       sender: 'customer',
       text: messageText || '[Media]',
       timestamp: new Date(),
-      messageType
+      messageType,
+      deliveryStatus: 'sent'
     });
     
     chat.lastMessageAt = new Date();
     
     // Cancel pending follow-ups since customer is engaged
     await cancelPendingFollowUps(chat._id, 'customer_replied');
+
+    // Helper to emit real-time updates
+    const emitRealtimeUpdate = (customMsgText, sender = 'customer') => {
+      try {
+        const { getIO } = require('../sockets');
+        const io = getIO();
+        if (io) {
+          console.log(`[messageHandler] EMITTING Socket.io event 'chat:updated' & 'chat:new_message' for ${customerPhone}`);
+          io.emit('chat:updated', chat);
+          io.emit('chat:new_message', {
+            chatId: chat._id,
+            customerPhone,
+            customerName: chat.customerName,
+            message: customMsgText,
+            sender,
+            chat
+          });
+          io.emit('new_message', {
+            chatId: chat._id,
+            customerPhone,
+            customerName: chat.customerName,
+            message: customMsgText,
+            sender,
+            chat
+          });
+        }
+      } catch (error) {
+        logger.error(`Failed to emit socket event: ${error.message}`);
+      }
+    };
     
     const mode = chat.mode;
     
     if (mode === 'human') {
       await chat.save();
-      logger.info(`Chat ${customerPhone} in human mode, message saved, no auto-reply`);
+      logger.info(`Chat ${customerPhone} in human mode, message saved, emitting socket event`);
       
-      const { getIO } = require('../sockets');
-      try {
-        const io = getIO();
-        io.emit('chat:new_message', {
-          chatId: chat._id,
-          customerPhone,
-          message: messageText || '[Media]'
-        });
-      } catch (error) {
-        logger.error(`Failed to emit socket event: ${error.message}`);
-      }
+      emitRealtimeUpdate(messageText || '[Media]', 'customer');
       
       // Stop typing presence
       if (sock) {
@@ -120,6 +148,9 @@ async function handleMessage(sessionId, msg) {
       }
       return;
     }
+
+    // In AI mode, emit immediately when customer message arrives so dashboard updates instantly!
+    emitRealtimeUpdate(messageText || '[Media]', 'customer');
     
     // AI mode - generate response
     try {
@@ -268,6 +299,7 @@ async function handleMessage(sessionId, msg) {
         await scheduleFollowUps(chat._id, customerPhone);
       }
       
+      emitRealtimeUpdate(aiReply, 'bot');
       logger.info(`AI response sent to ${customerPhone}`);
       
     } catch (aiError) {

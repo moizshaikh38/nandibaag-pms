@@ -73,17 +73,43 @@ export default function ChatsPage() {
   useEffect(() => {
     if (!socket) return;
 
+    const handleChatUpdated = (updatedChatData) => {
+      console.log('RECEIVED chat:updated event:', updatedChatData?._id || updatedChatData);
+      setChats(prev => {
+        const targetId = updatedChatData._id || updatedChatData.chatId;
+        const index = prev.findIndex(c => c._id === targetId);
+        if (index >= 0) {
+          const newArray = [...prev];
+          newArray[index] = { ...newArray[index], ...updatedChatData, lastMessageAt: new Date() };
+          const [moved] = newArray.splice(index, 1);
+          newArray.unshift(moved);
+          return newArray;
+        } else if (updatedChatData._id) {
+          return [updatedChatData, ...prev];
+        }
+        return prev;
+      });
+    };
+
     const handleNewMessage = (data) => {
+      console.log('RECEIVED chat:new_message event:', data);
+      if (data.chat) {
+        handleChatUpdated(data.chat);
+        return;
+      }
       setChats(prev => {
         const updated = prev.map(chat => {
           if (chat._id === data.chatId) {
             return {
               ...chat,
+              customerName: data.customerName || chat.customerName,
+              customerPhone: data.customerPhone || chat.customerPhone,
               lastMessageAt: new Date(),
               messages: [...chat.messages, {
-                sender: 'customer',
+                sender: data.sender || 'customer',
                 text: data.message,
-                timestamp: new Date()
+                timestamp: new Date(),
+                deliveryStatus: data.deliveryStatus || 'sent'
               }]
             };
           }
@@ -119,16 +145,26 @@ export default function ChatsPage() {
       }
     };
 
+    socket.on('chat:updated', handleChatUpdated);
     socket.on('chat:new_message', handleNewMessage);
+    socket.on('new_message', handleNewMessage);
     socket.on('chats:bulk_mode_updated', handleBulkModeUpdated);
     socket.on('chat:mode_updated', handleChatModeUpdated);
     
+    // Backup polling safety net (every 8s)
+    const pollTimer = setInterval(() => {
+      fetchChats(debouncedSearch);
+    }, 8000);
+
     return () => {
+      socket.off('chat:updated', handleChatUpdated);
       socket.off('chat:new_message', handleNewMessage);
+      socket.off('new_message', handleNewMessage);
       socket.off('chats:bulk_mode_updated', handleBulkModeUpdated);
       socket.off('chat:mode_updated', handleChatModeUpdated);
+      clearInterval(pollTimer);
     };
-  }, [socket]);
+  }, [socket, debouncedSearch, fetchChats]);
 
   const handleListRowToggle = useCallback((chatId, newModeOverride, e) => {
     if (e?.stopPropagation) e.stopPropagation();

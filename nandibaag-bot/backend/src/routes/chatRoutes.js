@@ -127,13 +127,15 @@ router.patch('/:id/mode', verifyToken, async (req, res, next) => {
 
 /**
  * POST /api/chats/:id/message
- * Staff sends manual message from dashboard
+ * POST /api/chats/:id/reply
+ * POST /api/chats/:id/send
+ * Staff sends manual message from dashboard to customer
  */
-router.post('/:id/message', verifyToken, async (req, res, next) => {
+const handleStaffSendMessage = async (req, res, next) => {
   try {
     const { text } = req.body;
     
-    if (!text) {
+    if (!text || !text.trim()) {
       return res.status(400).json({
         success: false,
         message: 'text is required'
@@ -148,33 +150,89 @@ router.post('/:id/message', verifyToken, async (req, res, next) => {
         message: 'Chat not found'
       });
     }
+
+    console.log(`[StaffSendMessage] Attempting send to ${chat.customerPhone} (chatId: ${chat._id})`);
     
-    // Send message via WhatsApp
-    const sessionId = chat.whatsappNumberUsed || 'default';
-    await sendMessage(sessionId, chat.customerPhone, text);
+    const sessionId = chat.whatsappNumberUsed || 'resort_primary';
+    let deliveryStatus = 'sent';
+    let sendError = null;
+
+    try {
+      await sendMessage(sessionId, chat.customerPhone, text.trim());
+      console.log(`[StaffSendMessage] Baileys socket send succeeded for ${chat.customerPhone}`);
+    } catch (err) {
+      deliveryStatus = 'failed';
+      sendError = err.message;
+      logger.error(`[StaffSendMessage] Baileys socket send failed for ${chat.customerPhone}: ${err.message}`);
+    }
+
+    const newMessageObj = {
+      sender: 'staff',
+      text: text.trim(),
+      timestamp: new Date(),
+      messageType: 'text',
+      deliveryStatus
+    };
     
     // Append to chat messages
-    chat.messages.push({
-      sender: 'staff',
-      text,
-      timestamp: new Date(),
-      messageType: 'text'
-    });
-    
+    chat.messages.push(newMessageObj);
     chat.lastMessageAt = new Date();
     await chat.save();
     
-    // Cancel pending follow-ups since customer is engaged
-    await cancelPendingFollowUps(chat._id, 'customer_replied');
+    // Cancel pending follow-ups since staff handled
+    try {
+      await cancelPendingFollowUps(chat._id, 'staff_handled');
+    } catch (_) {}
+    
+    // Emit real-time Socket.io events
+    try {
+      const { getIO } = require('../sockets');
+      const io = getIO();
+      if (io) {
+        console.log(`[StaffSendMessage] EMITTING Socket.io event 'chat:updated' for chatId ${chat._id}`);
+        io.emit('chat:updated', chat);
+        io.emit('chat:new_message', {
+          chatId: chat._id,
+          customerPhone: chat.customerPhone,
+          message: text.trim(),
+          sender: 'staff',
+          deliveryStatus,
+          chat
+        });
+        io.emit('new_message', {
+          chatId: chat._id,
+          customerPhone: chat.customerPhone,
+          message: text.trim(),
+          sender: 'staff',
+          deliveryStatus,
+          chat
+        });
+      }
+    } catch (socketErr) {
+      logger.warn(`Failed to emit socket event on staff message: ${socketErr.message}`);
+    }
+
+    if (deliveryStatus === 'failed') {
+      return res.status(500).json({
+        success: false,
+        message: `Message failed to send — check WhatsApp connection: ${sendError}`,
+        chat
+      });
+    }
     
     res.json({
       success: true,
-      message: 'Message sent'
+      message: 'Message sent to WhatsApp',
+      chat
     });
   } catch (error) {
     next(error);
   }
-});
+};
+
+router.post('/:id/message', verifyToken, handleStaffSendMessage);
+router.post('/:id/reply', verifyToken, handleStaffSendMessage);
+router.post('/:id/send', verifyToken, handleStaffSendMessage);
 
 /**
  * POST /api/chats/:id/reset

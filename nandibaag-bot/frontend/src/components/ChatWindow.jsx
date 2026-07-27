@@ -29,7 +29,8 @@ import {
   MapPin,
   DollarSign,
   ShieldAlert,
-  Loader
+  Loader,
+  AlertCircle
 } from 'lucide-react';
 
 const QUICK_REPLIES = [
@@ -193,11 +194,20 @@ export default function ChatWindow({ chat, onClose, onModeChange }) {
 
     setIsSending(true);
     try {
-      await api.post(`/chats/${chat._id}/reply`, { text });
+      let res;
+      try {
+        res = await api.post(`/chats/${chat._id}/message`, { text: text.trim() });
+      } catch (err1) {
+        try {
+          res = await api.post(`/chats/${chat._id}/reply`, { text: text.trim() });
+        } catch (err2) {
+          res = await api.post(`/chats/${chat._id}/send`, { text: text.trim() });
+        }
+      }
       if (!textToSend) setMessageText('');
       toast.success('Message sent to WhatsApp');
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to send message');
+      toast.error(error.response?.data?.message || 'Message failed to send — check WhatsApp connection');
     } finally {
       setIsSending(false);
     }
@@ -236,7 +246,7 @@ export default function ChatWindow({ chat, onClose, onModeChange }) {
               )}
             </div>
             <p className="text-[11px] text-slate-500 flex items-center gap-2">
-              <span>{formatPhoneDisplay(chat?.customerPhone)}</span>
+              <span className="font-mono font-medium">{formatPhoneDisplay(chat?.customerPhone)}</span>
               <span>•</span>
               <span className="capitalize font-medium text-emerald-800">Stage: {chat?.bookingStage || 'Inquiry'}</span>
             </p>
@@ -247,26 +257,27 @@ export default function ChatWindow({ chat, onClose, onModeChange }) {
         <div className="flex items-center gap-2">
           <a
             href={`tel:${chat?.customerPhone}`}
-            className="p-2 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl border border-slate-200 transition-colors"
-            title="Call Guest Directly"
+            className="p-2 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl border border-slate-200 transition-colors flex items-center gap-1 text-xs font-semibold"
+            title="Call Customer"
           >
-            <PhoneCall size={16} />
+            <PhoneCall size={15} />
+            <span className="hidden sm:inline">Call</span>
           </a>
 
           <button
-            onClick={handleOpenAssignModal}
-            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-all hover:scale-105"
+            onClick={() => setShowAssignModal(true)}
+            className="px-3 py-2 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 font-semibold text-xs rounded-xl transition-all flex items-center gap-1.5"
           >
-            <PlusCircle size={14} />
-            <span>Assign Room</span>
+            <Bed size={15} />
+            <span>Assign Cottage</span>
           </button>
 
           <button
             onClick={handleModeToggle}
-            className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-all flex items-center gap-1.5 ${
+            className={`px-3 py-2 font-bold text-xs rounded-xl border transition-all flex items-center gap-1.5 ${
               optimisticMode === 'ai'
-                ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
-                : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 shadow-xs'
+                ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                : 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
             }`}
           >
             {optimisticMode === 'ai' ? <Zap size={14} /> : <User size={14} />}
@@ -298,8 +309,16 @@ export default function ChatWindow({ chat, onClose, onModeChange }) {
                   : 'bg-indigo-600 text-white rounded-tr-xs'
               }`}>
                 <div className="flex items-center justify-between gap-3 text-[10px] opacity-75 border-b border-white/10 pb-1 mb-1">
-                  <span className="font-bold capitalize">{isCustomer ? chat.customerName || 'Guest' : isBot ? '🤖 AI Bot' : '👤 Staff'}</span>
-                  <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  <span className="font-bold capitalize">{isCustomer ? (chat.customerName || formatPhoneDisplay(chat.customerPhone)) : isBot ? '🤖 AI Bot' : '👤 Staff'}</span>
+                  <div className="flex items-center gap-1">
+                    <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    {msg.deliveryStatus === 'failed' && (
+                      <span className="text-rose-200 font-bold flex items-center gap-0.5 ml-1" title="Message failed to deliver to WhatsApp">
+                        <AlertCircle size={12} className="text-rose-300" />
+                        <span>Failed</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <p className="text-xs leading-relaxed whitespace-pre-wrap">{msg.text}</p>
               </div>

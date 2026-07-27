@@ -304,32 +304,49 @@ function getAllSessionsStatus(whatsappNumbers) {
 }
 
 async function sendMessage(sessionId, toPhone, text) {
-  const sock = activeSockets.get(sessionId);
+  const activeKeys = Array.from(activeSockets.keys());
+  logger.info(`[sendMessage] Registered active sessions: [${activeKeys.join(', ')}], Requested sessionId: '${sessionId}'`);
+
+  let sock = activeSockets.get(sessionId);
   if (!sock) {
-    throw new Error(`Session ${sessionId} not initialized or inactive`);
+    const fallbackSession = activeKeys[0];
+    if (fallbackSession) {
+      logger.warn(`[sendMessage] Session '${sessionId}' not found in activeSockets. Falling back to active session '${fallbackSession}'.`);
+      sock = activeSockets.get(fallbackSession);
+    } else {
+      throw new Error(`WhatsApp Session '${sessionId}' is not connected or inactive. Please connect a WhatsApp number in the Connect tab.`);
+    }
   }
 
-  const digits = toPhone.replace(/\D/g, '');
-  const jid = `${digits}@s.whatsapp.net`;
+  let jid;
+  if (toPhone.includes('@')) {
+    jid = toPhone;
+  } else {
+    let digits = toPhone.replace(/\D/g, '');
+    if (digits.length === 10) {
+      digits = '91' + digits;
+    }
+    jid = `${digits}@s.whatsapp.net`;
+  }
 
-  logger.info(`Sending message via Baileys session ${sessionId} to ${jid}`);
+  logger.info(`Sending message via Baileys session to ${jid}`);
 
   let lastError = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       await sock.sendMessage(jid, { text });
-      logger.info(`Message sent successfully via Baileys session ${sessionId}`);
+      logger.info(`Message sent successfully via Baileys to ${jid}`);
       return;
     } catch (error) {
       lastError = error;
-      logger.warn(`Send attempt ${attempt + 1} failed for session ${sessionId}: ${error.message}`);
+      logger.warn(`Send attempt ${attempt + 1} failed to ${jid}: ${error.message}`);
       if (attempt === 0) {
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
   }
 
-  throw new Error(`Failed to send message via session ${sessionId} after 2 attempts: ${lastError.message}`);
+  throw new Error(`Failed to deliver message to ${toPhone} after 2 attempts: ${lastError.message}`);
 }
 
 async function stopSession(sessionId) {
