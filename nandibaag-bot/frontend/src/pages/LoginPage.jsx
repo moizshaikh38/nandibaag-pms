@@ -69,7 +69,7 @@ export default function LoginPage() {
 
   const handleQuickDemoFill = () => {
     setEmail('admin@nandibaag.com');
-    setPassword('admin123');
+    setPassword('admin12345');
     toast.success('Demo admin credentials filled!');
   };
 
