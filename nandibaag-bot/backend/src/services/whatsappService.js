@@ -1,4 +1,4 @@
-const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason, makeCacheableSignalKeyStore } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const qrcode = require('qrcode');
@@ -13,6 +13,23 @@ function setSocketIo(socketIo) {
   io = socketIo;
 }
 
+function emitSocketEvent(event, payload) {
+  try {
+    if (io && typeof io.emit === 'function') {
+      io.emit(event, payload);
+      return;
+    }
+    const { getIO } = require('../sockets');
+    const socketServer = getIO();
+    if (socketServer && typeof socketServer.emit === 'function') {
+      io = socketServer;
+      io.emit(event, payload);
+    }
+  } catch (err) {
+    logger.warn(`Could not emit Socket.io event '${event}': ${err.message}`);
+  }
+}
+
 // Active sessions Map: sessionId -> makeWASocket instance
 const activeSockets = new Map();
 
@@ -21,6 +38,9 @@ const reconnectAttempts = new Map();
 
 // Per-chat message queue locks: chatPhone -> Promise
 const messageQueueLocks = new Map();
+
+// Watchdog interval reference
+let watchdogIntervalHandle = null;
 
 function getSessionDataPath(sessionId) {
   return path.join(__dirname, '../../sessions', sessionId);
@@ -59,10 +79,20 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
 
   const sock = makeWASocket({
     version,
-    auth: state,
+    auth: {
+      creds: state.creds,
+      keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
+    },
     logger: pino({ level: 'silent' }),
     printQRInTerminal: false,
-    browser: ["Nandibaag Resort", "Chrome", "1.0.0"]
+    browser: ["Nandibaag Resort", "Chrome", "120.0.0"],
+    keepAliveIntervalMs: 25000,
+    connectTimeoutMs: 60000,
+    defaultQueryTimeoutMs: 60000,
+    emitOwnEvents: false,
+    markOnlineOnConnect: true,
+    syncFullHistory: false,
+    retryRequestDelayMs: 500
   });
 
   activeSockets.set(sessionId, sock);
@@ -74,9 +104,7 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
         logger.info(`Requesting pairing code for ${pairingPhoneNumber} in session ${sessionId}`);
         const code = await sock.requestPairingCode(pairingPhoneNumber.replace(/\D/g, ''));
         logger.info(`Pairing code generated for ${sessionId}: ${code}`);
-        if (io) {
-          io.emit('whatsapp:pairing_code', { sessionId, code });
-        }
+        emitSocketEvent('whatsapp:pairing_code', { sessionId, code });
       } catch (err) {
         logger.error(`Failed to request pairing code for ${sessionId}: ${err.message}`);
       }
@@ -109,9 +137,7 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
           logger.error(`Failed to save QR status to DB: ${dbErr.message}`);
         }
 
-        if (io) {
-          io.emit('whatsapp:qr', { sessionId, qr: qrDataUrl });
-        }
+        emitSocketEvent('whatsapp:qr', { sessionId, qr: qrDataUrl });
       } catch (error) {
         logger.error(`Failed to generate QR for session ${sessionId}: ${error.message}`);
       }
@@ -149,25 +175,22 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
         logger.error(`Failed to save connected session to DB: ${dbErr.message}`);
       }
 
-      if (io) {
-        io.emit('whatsapp:ready', { sessionId, phoneNumber });
-      }
+      emitSocketEvent('whatsapp:ready', { sessionId, phoneNumber });
       reconnectAttempts.set(sessionId, 0);
     }
 
     if (connection === 'close') {
       const statusCode = (lastDisconnect?.error)?.output?.statusCode;
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+      const isImmediate = statusCode === DisconnectReason.restartRequired;
 
-      logger.warn(`Session ${sessionId} connection closed. StatusCode: ${statusCode}, ShouldReconnect: ${shouldReconnect}`);
+      logger.warn(`Session ${sessionId} connection closed. StatusCode: ${statusCode}, ShouldReconnect: ${shouldReconnect}, IsImmediate: ${isImmediate}`);
       activeSockets.delete(sessionId);
 
-      if (io) {
-        io.emit('whatsapp:disconnected', { sessionId, reason: lastDisconnect?.error?.message });
-      }
+      emitSocketEvent('whatsapp:disconnected', { sessionId, reason: lastDisconnect?.error?.message });
 
       if (shouldReconnect) {
-        await autoReconnect(sessionId);
+        await autoReconnect(sessionId, isImmediate);
       } else {
         logger.warn(`Auth failed / Logged out for session ${sessionId}. Cleaning up session folder.`);
         
@@ -175,7 +198,7 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
           const { Settings } = require('../models');
           const settings = await Settings.findOne();
           if (settings) {
-            const numberObj = settings.whatsappNumbers.find(n => n.label === sessionId);
+            const numberObj = settings.whatsappNumbers.find(n => n.label === sessionId || n.number === sessionId);
             if (numberObj) {
               numberObj.status = 'auth_failed';
               await settings.save();
@@ -185,9 +208,7 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
           logger.error(`Failed to save auth_failed status to DB: ${dbErr.message}`);
         }
 
-        if (io) {
-          io.emit('whatsapp:auth_failure', { sessionId, message: 'Unlinked from phone' });
-        }
+        emitSocketEvent('whatsapp:auth_failure', { sessionId, message: 'Unlinked from phone' });
 
         deleteSessionFolder(sessionId);
       }
@@ -240,9 +261,7 @@ async function requestPairingCode(sessionId, phoneNumber) {
   const sock = activeSockets.get(sessionId);
   if (sock) {
     const code = await sock.requestPairingCode(phoneNumber.replace(/\D/g, ''));
-    if (io) {
-      io.emit('whatsapp:pairing_code', { sessionId, code });
-    }
+    emitSocketEvent('whatsapp:pairing_code', { sessionId, code });
     return code;
   } else {
     // If not exists, initialize it with pairing code option
@@ -250,32 +269,74 @@ async function requestPairingCode(sessionId, phoneNumber) {
   }
 }
 
-async function autoReconnect(sessionId) {
-  const maxAttempts = 5;
-  const backoffDelays = [5000, 15000, 30000, 60000, 60000]; // 5s, 15s, 30s, 60s cap
+/**
+ * Infinite self-healing auto-reconnect strategy.
+ * For transient disconnections (e.g. WiFi flicker, network drop, code 515),
+ * retries with backoff and NEVER gives up permanently.
+ */
+async function autoReconnect(sessionId, isImmediate = false) {
+  const backoffDelays = [2000, 5000, 10000, 20000, 30000]; // 2s, 5s, 10s, 20s, 30s backoff
 
   let attempts = reconnectAttempts.get(sessionId) || 0;
-  if (attempts >= maxAttempts) {
-    logger.error(`Session ${sessionId} reconnection failed after ${maxAttempts} attempts`);
-    if (io) {
-      io.emit('whatsapp:reconnect_failed', { sessionId });
-    }
-    reconnectAttempts.set(sessionId, 0);
-    return;
-  }
+  const delay = isImmediate ? 1000 : (backoffDelays[attempts] || 60000); // Caps at 60s for subsequent attempts
 
-  const delay = backoffDelays[attempts];
   reconnectAttempts.set(sessionId, attempts + 1);
 
-  logger.info(`Reconnecting session ${sessionId} in ${delay / 1000}s (attempt ${attempts + 1}/${maxAttempts})`);
+  logger.info(`Reconnecting session ${sessionId} in ${delay / 1000}s (attempt ${attempts + 1})`);
   await new Promise(resolve => setTimeout(resolve, delay));
+
+  if (activeSockets.has(sessionId)) {
+    logger.info(`Session ${sessionId} was re-established in memory while waiting.`);
+    return;
+  }
 
   try {
     await initSession(sessionId);
   } catch (error) {
     logger.error(`Reconnection attempt ${attempts + 1} failed for session ${sessionId}: ${error.message}`);
+    // Keep retrying in background indefinitely
     await autoReconnect(sessionId);
   }
+}
+
+/**
+ * Background Supervisor Watchdog.
+ * Runs every 2 minutes to inspect active WhatsApp sessions and auto-heal missing sockets.
+ */
+function startSessionWatchdog() {
+  if (watchdogIntervalHandle) return;
+
+  logger.info('Starting WhatsApp Session Watchdog Supervisor (2 min health check)...');
+
+  watchdogIntervalHandle = setInterval(async () => {
+    try {
+      const { Settings } = require('../models');
+      const settings = await Settings.findOne();
+      if (!settings || !Array.isArray(settings.whatsappNumbers)) return;
+
+      for (const numberConfig of settings.whatsappNumbers) {
+        const sessionId = numberConfig.label || numberConfig.number;
+
+        // Ignore explicitly unlinked or deactivated numbers
+        if (numberConfig.status === 'auth_failed' || numberConfig.isActive === false) {
+          continue;
+        }
+
+        const isSocketActive = activeSockets.has(sessionId);
+
+        if (!isSocketActive) {
+          logger.warn(`[Watchdog] Session '${sessionId}' is registered in DB but missing from memory. Healing connection...`);
+          try {
+            await initSession(sessionId);
+          } catch (err) {
+            logger.error(`[Watchdog] Failed to heal session '${sessionId}': ${err.message}`);
+          }
+        }
+      }
+    } catch (err) {
+      logger.error(`[Watchdog] Error in session supervisor loop: ${err.message}`);
+    }
+  }, 120000); // Every 2 minutes
 }
 
 function getSessionStatus(sessionId, dbStatus) {
@@ -386,14 +447,15 @@ async function stopSession(sessionId) {
   reconnectAttempts.delete(sessionId);
   deleteSessionFolder(sessionId);
 
-  if (io) {
-    io.emit('whatsapp:session_destroyed', { sessionId });
-  }
+  emitSocketEvent('whatsapp:session_destroyed', { sessionId });
 }
 
 async function restoreAllSessions(ioInstance) {
   if (ioInstance) setSocketIo(ioInstance);
   logger.info('Restoring all active Baileys WhatsApp sessions...');
+
+  // Always start session watchdog supervisor interval
+  startSessionWatchdog();
 
   const sessionsDir = path.join(__dirname, '../../sessions');
   if (!fs.existsSync(sessionsDir)) {
@@ -416,6 +478,10 @@ async function restoreAllSessions(ioInstance) {
 
 async function destroyAllSessions() {
   logger.info(`Destroying all ${activeSockets.size} active WhatsApp session(s)...`);
+  if (watchdogIntervalHandle) {
+    clearInterval(watchdogIntervalHandle);
+    watchdogIntervalHandle = null;
+  }
   for (const [sessionId, sock] of activeSockets.entries()) {
     try {
       sock.end(undefined);
@@ -439,6 +505,7 @@ module.exports = {
   destroySession: stopSession, // map destroySession to stopSession
   restartAllActiveSessions: restoreAllSessions, // map to restoreAllSessions / restartAllActiveSessions
   restoreAllSessions,
+  startSessionWatchdog,
   deleteSessionFolder,
   destroyAllSessions,
   activeSockets

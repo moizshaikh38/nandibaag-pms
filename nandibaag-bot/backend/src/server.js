@@ -9,6 +9,7 @@ const { initializeSocket, getIO } = require('./sockets');
 const {
   setSocketIo: setWhatsappSocketIo,
   restartAllActiveSessions,
+  startSessionWatchdog,
   destroyAllSessions
 } = require('./services/whatsappService');
 const { setSocketIo: setLeadScoringSocketIo } = require('./services/leadScoring');
@@ -164,10 +165,12 @@ const startServer = async () => {
       await settings.save();
     }
     
-    // Restart all active WhatsApp sessions
+    // Restart all active WhatsApp sessions and start watchdog supervisor
     const settings = await Settings.findOne();
     if (settings && settings.whatsappNumbers.length > 0) {
       await restartAllActiveSessions(settings.whatsappNumbers);
+    } else {
+      startSessionWatchdog();
     }
     
     // Start follow-up cron job
