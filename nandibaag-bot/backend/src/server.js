@@ -131,18 +131,29 @@ setWhatsappSocketIo(io);
 setLeadScoringSocketIo(io);
 
 const startServer = async () => {
+  // 1. Start HTTP Server immediately so cloud port scanner detects port binding instantly
+  server.listen(port, () => {
+    logger.info(`Server running on port ${port}`);
+    logger.info(`Environment: ${process.env.NODE_ENV}`);
+    logger.info(`Frontend URL: ${frontendUrl}`);
+  }).on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+      logger.error(`Port ${port} is already in use.`);
+      process.exit(1);
+    } else {
+      logger.error(`Failed to start server: ${error.message}`);
+      process.exit(1);
+    }
+  });
+
+  // 2. Perform background database connection & service bootstrap asynchronously
   try {
-    // Connect to MongoDB
     await connectDB();
     
     // Ensure default admin user exists
     const adminCount = await User.countDocuments({ role: 'admin' });
     if (adminCount === 0) {
       logger.warn('No admin user found, creating default admin');
-      logger.warn('DEFAULT ADMIN CREDENTIALS - CHANGE IMMEDIATELY:');
-      logger.warn(`Email: ${adminDefaultEmail}`);
-      logger.warn(`Password: ${adminDefaultPassword}`);
-      
       const admin = new User({
         name: 'Admin',
         email: adminDefaultEmail,
@@ -168,36 +179,19 @@ const startServer = async () => {
     // Restart all active WhatsApp sessions and start watchdog supervisor
     const settings = await Settings.findOne();
     if (settings && settings.whatsappNumbers.length > 0) {
-      await restartAllActiveSessions(settings.whatsappNumbers);
+      restartAllActiveSessions(settings.whatsappNumbers).catch(err => {
+        logger.error(`Error restoring sessions: ${err.message}`);
+      });
     } else {
       startSessionWatchdog();
     }
     
-    // Start follow-up cron job
+    // Start follow-up & lifecycle cron jobs
     startFollowUpCron();
-
-    // Start lifecycle message cron job (Phase F+G)
     startLifecycleCron();
     
-    // Start server
-    server.listen(port, () => {
-      logger.info(`Server running on port ${port}`);
-      logger.info(`Environment: ${process.env.NODE_ENV}`);
-      logger.info(`Frontend URL: ${frontendUrl}`);
-    }).on('error', (error) => {
-      if (error.code === 'EADDRINUSE') {
-        logger.error(`Port ${port} is already in use.`);
-        logger.error(`Run 'node src/scripts/checkPorts.js' to find and free it, or change PORT in your .env file.`);
-        process.exit(1);
-      } else {
-        logger.error(`Failed to start server: ${error.message}`);
-        process.exit(1);
-      }
-    });
-    
   } catch (error) {
-    logger.error(`Failed to start server: ${error.message}`);
-    process.exit(1);
+    logger.error(`Background service initialization error: ${error.message}`);
   }
 };
 
