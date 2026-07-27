@@ -695,8 +695,8 @@ export default function BookingsPage() {
 
       {/* Manual Booking Modal */}
       {manualModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="glass-card rounded-2xl max-w-lg w-full p-6 space-y-4 bg-white animate-fade-in shadow-2xl overflow-y-auto max-h-[90vh]">
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-4 sm:pt-8 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
+          <div className="glass-card rounded-2xl max-w-lg w-full p-6 space-y-4 bg-white animate-fade-in shadow-2xl overflow-y-auto max-h-[85vh]">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="font-display font-bold text-base text-slate-800">Add Manual Reservation</h3>
               <button onClick={() => setManualModal(false)} className="text-slate-400 hover:text-slate-700">
