@@ -582,4 +582,22 @@ router.get('/availability-by-date', verifyToken, async (req, res, next) => {
   }
 });
 
+/**
+ * POST /api/inventory/seed
+ * Seed / re-seed default 57 cottage rooms inventory across 4 series
+ */
+router.post('/seed', verifyToken, requireAdmin, async (req, res, next) => {
+  try {
+    const { seed } = require('../scripts/seedRoomInventory');
+    await seed();
+    notifyInventoryChange(req);
+    res.json({
+      success: true,
+      message: 'Successfully seeded 57 cottage rooms into MongoDB Atlas inventory!'
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;
