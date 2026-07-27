@@ -130,11 +130,13 @@ async function seed() {
   console.log('');
   console.log('  Expected: 100 Series=10, 200 Series=0, 500 Series=15, 600 Series=22');
   console.log('  Done.\n');
-
-  await mongoose.disconnect();
 }
 
-seed().catch((err) => {
-  console.error('Seed failed:', err);
-  process.exit(1);
-});
+module.exports = { seed };
+
+if (require.main === module) {
+  seed().then(() => mongoose.disconnect()).catch((err) => {
+    console.error('Seed failed:', err);
+    process.exit(1);
+  });
+}

@@ -180,6 +180,18 @@ const startServer = async () => {
       });
       await settings.save();
     }
+
+    // Ensure room inventory exists
+    const roomCount = await Room.countDocuments();
+    if (roomCount === 0) {
+      logger.info('No cottage rooms found in database, auto-seeding room inventory...');
+      try {
+        const { seed } = require('./scripts/seedRoomInventory');
+        if (typeof seed === 'function') await seed();
+      } catch (seedErr) {
+        logger.error(`Failed to auto-seed room inventory: ${seedErr.message}`);
+      }
+    }
     
     // Restart all active WhatsApp sessions and start watchdog supervisor
     const settings = await Settings.findOne();
