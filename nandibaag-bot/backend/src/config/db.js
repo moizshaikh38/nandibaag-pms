@@ -13,8 +13,9 @@ const connectDB = async () => {
   }
 
   connectionPromise = mongoose.connect(mongoUri, {
-    serverSelectionTimeoutMS: 5000,
-    connectTimeoutMS: 5000
+    serverSelectionTimeoutMS: 10000,
+    connectTimeoutMS: 10000,
+    family: 4
   }).then((conn) => {
     logger.info('MongoDB connected successfully');
     connectionPromise = null;
