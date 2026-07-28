@@ -58,4 +58,11 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   }
 };
 
+if (mongoose.models && mongoose.models.User) {
+  delete mongoose.models.User;
+}
+if (mongoose.modelSchemas && mongoose.modelSchemas.User) {
+  delete mongoose.modelSchemas.User;
+}
+
 module.exports = mongoose.model('User', userSchema);
