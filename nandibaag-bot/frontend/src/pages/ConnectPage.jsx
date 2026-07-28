@@ -343,7 +343,7 @@ export default function ConnectPage() {
 
                     {isAdmin && (
                       <div className="flex items-center gap-1">
-                        {status === 'disconnected' && (
+                        {status !== 'connected' && (
                           <button
                             onClick={() => {
                               setNewSessionLabel(sessionId);

@@ -359,13 +359,22 @@ function startSessionWatchdog() {
 function getSessionStatus(sessionId, dbStatus) {
   const sock = activeSockets.get(sessionId);
   if (sock) {
-    // If socket exists in activeSockets map, it is connected
-    return 'connected';
+    // A session is strictly connected ONLY when sock.user is set (authenticated JID)
+    if (sock.user && sock.user.id) {
+      return 'connected';
+    }
+    if (dbStatus === 'qr_pending' || dbStatus === 'connecting') {
+      return dbStatus;
+    }
+    return 'connecting';
   }
+  
   if (dbStatus === 'connected') {
-    return 'connected';
+    // If no active socket in memory, the DB status is stale
+    return 'disconnected';
   }
-  return 'disconnected';
+  
+  return dbStatus || 'disconnected';
 }
 
 function getAllSessionsStatus(whatsappNumbers = []) {
@@ -376,8 +385,10 @@ function getAllSessionsStatus(whatsappNumbers = []) {
       statusMap[sessionId] = getSessionStatus(sessionId, numberConfig.status);
     }
   }
-  for (const sessionId of activeSockets.keys()) {
-    statusMap[sessionId] = 'connected';
+  for (const [sessionId, sock] of activeSockets.entries()) {
+    if (!statusMap[sessionId]) {
+      statusMap[sessionId] = (sock.user && sock.user.id) ? 'connected' : 'connecting';
+    }
   }
   return statusMap;
 }
