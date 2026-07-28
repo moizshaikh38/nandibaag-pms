@@ -134,6 +134,7 @@ export default function ChatWindow({ chat, onClose, onModeChange }) {
   }, [chat?._id, optimisticMode, onModeChange]);
 
   const fetchAvailableRooms = async (checkIn, checkOut) => {
+    if (!checkIn || !checkOut) return;
     try {
       setIsLoadingRooms(true);
       const res = await api.get('/availability/rooms', {
@@ -147,9 +148,29 @@ export default function ChatWindow({ chat, onClose, onModeChange }) {
     }
   };
 
+  useEffect(() => {
+    if (showAssignModal && assignForm.checkInDate && assignForm.checkOutDate) {
+      fetchAvailableRooms(assignForm.checkInDate, assignForm.checkOutDate);
+    }
+  }, [showAssignModal, assignForm.checkInDate, assignForm.checkOutDate]);
+
   const handleOpenAssignModal = () => {
     setShowAssignModal(true);
-    fetchAvailableRooms(assignForm.checkInDate, assignForm.checkOutDate);
+    const defaultCheckIn = new Date().toISOString().split('T')[0];
+    const defaultCheckOut = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+    const inDate = chat?.bookingDraft?.checkInDate || chat?.bookingDraft?.date || defaultCheckIn;
+    const outDate = chat?.bookingDraft?.checkOutDate || defaultCheckOut;
+
+    setAssignForm(prev => ({
+      ...prev,
+      checkInDate: inDate,
+      checkOutDate: outDate,
+      adults: chat?.bookingDraft?.adults || 2,
+      guestName: chat?.customerName || '',
+      guestPhone: chat?.customerPhone || '+91',
+      roomId: ''
+    }));
+    fetchAvailableRooms(inDate, outDate);
   };
 
   const handleAssignRoomSubmit = async () => {
@@ -214,6 +235,13 @@ export default function ChatWindow({ chat, onClose, onModeChange }) {
   };
 
   const isHot = chat?.leadStatus === 'hot' || (chat?.leadScore && chat.leadScore >= 70);
+
+  const roomsBySeries = (availableRooms || []).reduce((acc, r) => {
+    const series = r.seriesName || 'Other Cottages';
+    if (!acc[series]) acc[series] = [];
+    acc[series].push(r);
+    return acc;
+  }, {});
 
   return (
     <div className="h-full flex flex-col bg-slate-100 relative overflow-hidden">
@@ -378,18 +406,54 @@ export default function ChatWindow({ chat, onClose, onModeChange }) {
             </div>
 
             <div className="space-y-3">
+              {/* Check-In & Check-Out Date Selection */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Check-In Date</label>
+                  <input
+                    type="date"
+                    value={assignForm.checkInDate}
+                    onChange={(e) => setAssignForm(prev => ({ ...prev, checkInDate: e.target.value, roomId: '' }))}
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Check-Out Date</label>
+                  <input
+                    type="date"
+                    value={assignForm.checkOutDate}
+                    onChange={(e) => setAssignForm(prev => ({ ...prev, checkOutDate: e.target.value, roomId: '' }))}
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-medium"
+                  />
+                </div>
+              </div>
+
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Select Available Cottage Room</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Select Available Cottage Room</span>
+                  {isLoadingRooms && <span className="text-[11px] text-emerald-600 font-medium animate-pulse">Checking availability...</span>}
+                </label>
                 <select
                   value={assignForm.roomId}
                   onChange={(e) => setAssignForm(prev => ({ ...prev, roomId: e.target.value }))}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-semibold text-slate-800"
+                  disabled={isLoadingRooms}
                 >
-                  <option value="">-- Choose Available Cottage --</option>
-                  {availableRooms.map(r => (
-                    <option key={r.roomId} value={r.roomId}>
-                      Room {r.roomNumber} ({r.seriesName} • Cap: {r.capacity})
-                    </option>
+                  <option value="">
+                    {isLoadingRooms
+                      ? '⏳ Searching available cottages...'
+                      : availableRooms.length === 0
+                      ? '❌ No cottages available for selected dates'
+                      : `-- Choose Available Cottage (${availableRooms.length} available) --`}
+                  </option>
+                  {Object.entries(roomsBySeries).map(([series, rooms]) => (
+                    <optgroup key={series} label={`🏡 ${series}`}>
+                      {rooms.map(r => (
+                        <option key={r.roomId} value={r.roomId}>
+                          Room {r.roomNumber} ({r.seriesName} • Capacity: {r.capacity} Guests)
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
               </div>
