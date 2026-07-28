@@ -36,23 +36,64 @@ async function checkOverlap(roomId, checkInDate, checkOutDate, excludeBookingId 
   return !!overlapping;
 }
 
+let roomStructureCache = null;
+let lastRoomStructureFetch = 0;
+
+async function getActiveRoomStructure() {
+  const now = Date.now();
+  if (roomStructureCache && (now - lastRoomStructureFetch < 30000)) {
+    return roomStructureCache;
+  }
+  try {
+    const { Series } = require('../models');
+    const seriesList = await Series.find({ status: { $ne: 'deleted' } }).lean();
+    const seriesMap = new Map(seriesList.map(s => [s._id.toString(), s.name]));
+    const seriesIds = seriesList.map(s => s._id);
+
+    const rooms = await Room.find({ status: 'active', seriesId: { $in: seriesIds } }).lean();
+
+    const roomData = rooms.map(r => ({
+      _id: r._id,
+      roomId: r._id,
+      roomNumber: r.roomNumber,
+      seriesName: seriesMap.get(r.seriesId?.toString()) || 'Other Cottages',
+      capacity: r.capacity || 2
+    }));
+
+    roomData.sort((a, b) => a.seriesName.localeCompare(b.seriesName, undefined, { numeric: true }) || a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true }));
+
+    roomStructureCache = roomData;
+    lastRoomStructureFetch = now;
+    return roomData;
+  } catch (err) {
+    logger.error(`Error fetching room structure: ${err.message}`);
+    return [];
+  }
+}
+
 /**
  * b) getCapacityAvailability — THE FUNCTION THE WHATSAPP BOT USES
  * Returns ONLY a count. NEVER room numbers, IDs, or identifying info.
  * Also returns breakdown by capacity tier for suggestion logic.
  */
 async function getCapacityAvailability(checkInDate, checkOutDate, minCapacity = 1) {
-  // Find all active rooms with capacity >= minCapacity
-  const eligibleRooms = await Room.find({
-    status: 'active',
-    capacity: { $gte: minCapacity }
-  }).select('_id capacity');
+  const rooms = await getActiveRoomStructure();
+  const eligibleRooms = rooms.filter(r => r.capacity >= minCapacity);
+
+  // Fetch all overlapping bookings for this date range in ONE single DB query
+  const overlappingBookings = await RoomBooking.find({
+    status: { $in: BLOCKING_STATUSES },
+    checkInDate: { $lt: new Date(checkOutDate) },
+    checkOutDate: { $gt: new Date(checkInDate) }
+  }).select('roomId').lean();
+
+  const blockedRoomIds = new Set(overlappingBookings.map(b => b.roomId.toString()));
 
   let availableCount = 0;
   const capacityBreakdown = {};
 
   for (const room of eligibleRooms) {
-    const isBlocked = await checkOverlap(room._id, checkInDate, checkOutDate);
+    const isBlocked = blockedRoomIds.has(room._id.toString());
     if (!isBlocked) {
       availableCount++;
       const tier = `capacity${room.capacity}`;
@@ -75,34 +116,21 @@ async function getCapacityAvailability(checkInDate, checkOutDate, minCapacity = 
  * Returns full list of specific available rooms with room numbers, series names, etc.
  */
 async function getDetailedAvailability(checkInDate, checkOutDate, minCapacity = 0) {
-  // Find all active rooms (optionally filtered by minCapacity)
-  const filter = { status: 'active' };
-  if (minCapacity > 0) {
-    filter.capacity = { $gte: minCapacity };
-  }
+  const rooms = await getActiveRoomStructure();
 
-  const rooms = await Room.find(filter)
-    .populate('seriesId', 'name status')
-    .sort({ 'seriesId.name': 1, roomNumber: 1 });
+  // Fetch all overlapping bookings for this date range in ONE single DB query
+  const overlappingBookings = await RoomBooking.find({
+    status: { $in: BLOCKING_STATUSES },
+    checkInDate: { $lt: new Date(checkOutDate) },
+    checkOutDate: { $gt: new Date(checkInDate) }
+  }).select('roomId').lean();
 
-  const availableRooms = [];
+  const blockedRoomIds = new Set(overlappingBookings.map(b => b.roomId.toString()));
 
-  for (const room of rooms) {
-    // Skip rooms in deleted/maintenance series
-    if (room.seriesId && room.seriesId.status === 'deleted') continue;
-
-    const isBlocked = await checkOverlap(room._id, checkInDate, checkOutDate);
-    if (!isBlocked) {
-      availableRooms.push({
-        roomId: room._id,
-        roomNumber: room.roomNumber,
-        seriesName: room.seriesId?.name || 'Unknown',
-        capacity: room.capacity
-      });
-    }
-  }
-
-  return availableRooms;
+  return rooms.filter(r => (
+    (minCapacity === 0 || r.capacity >= minCapacity) &&
+    !blockedRoomIds.has(r._id.toString())
+  ));
 }
 
 /**

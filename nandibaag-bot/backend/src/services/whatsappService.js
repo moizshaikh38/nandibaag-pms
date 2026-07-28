@@ -196,37 +196,16 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
     if (connection === 'close') {
       connectingSessions.delete(sessionId);
       const statusCode = (lastDisconnect?.error)?.output?.statusCode;
-      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-      const isImmediate = statusCode === DisconnectReason.restartRequired;
+      const isImmediate = statusCode === DisconnectReason.restartRequired || statusCode === 515;
 
-      logger.warn(`Session ${sessionId} connection closed. StatusCode: ${statusCode}, ShouldReconnect: ${shouldReconnect}, IsImmediate: ${isImmediate}`);
+      logger.warn(`Session ${sessionId} connection closed. StatusCode: ${statusCode}, Reason: ${lastDisconnect?.error?.message}`);
       activeSockets.delete(sessionId);
 
       emitSocketEvent('whatsapp:disconnected', { sessionId, reason: lastDisconnect?.error?.message });
 
-      if (shouldReconnect) {
-        await autoReconnect(sessionId, isImmediate);
-      } else {
-        logger.warn(`Auth failed / Logged out for session ${sessionId}. Cleaning up session folder.`);
-        
-        try {
-          const { Settings } = require('../models');
-          const settings = await Settings.findOne();
-          if (settings) {
-            const numberObj = settings.whatsappNumbers.find(n => n.label === sessionId || n.number === sessionId);
-            if (numberObj) {
-              numberObj.status = 'auth_failed';
-              await settings.save();
-            }
-          }
-        } catch (dbErr) {
-          logger.error(`Failed to save auth_failed status to DB: ${dbErr.message}`);
-        }
-
-        emitSocketEvent('whatsapp:auth_failure', { sessionId, message: 'Unlinked from phone' });
-
-        deleteSessionFolder(sessionId);
-      }
+      // Always auto-reconnect using saved auth keys on disk.
+      // NEVER delete session folder automatically so session stays linked across restarts/glitches.
+      autoReconnect(sessionId, isImmediate);
     }
   });
 
