@@ -2,8 +2,7 @@
   "name": "nandibaag-pms-monorepo",
   "version": "1.0.0",
   "scripts": {
-    "start": "node nandibaag-bot/backend/src/server.js",
-    "build": "npm install --prefix nandibaag-bot/backend && npm install"
+    "start": "node nandibaag-bot/backend/src/server.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.1.1",
