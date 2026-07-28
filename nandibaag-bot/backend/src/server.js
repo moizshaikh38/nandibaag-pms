@@ -196,14 +196,9 @@ const startServer = async () => {
     }
     
     // Restart all active WhatsApp sessions and start watchdog supervisor
-    const settings = await Settings.findOne();
-    if (settings && settings.whatsappNumbers.length > 0) {
-      restartAllActiveSessions(settings.whatsappNumbers).catch(err => {
-        logger.error(`Error restoring sessions: ${err.message}`);
-      });
-    } else {
-      startSessionWatchdog();
-    }
+    restartAllActiveSessions().catch(err => {
+      logger.error(`Error restoring sessions: ${err.message}`);
+    });
     
     // Start follow-up & lifecycle cron jobs
     startFollowUpCron();

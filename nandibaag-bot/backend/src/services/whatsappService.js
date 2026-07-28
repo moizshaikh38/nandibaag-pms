@@ -333,6 +333,22 @@ function startSessionWatchdog() {
             logger.error(`[Watchdog] Failed to heal session '${sessionId}': ${err.message}`);
           }
         }
+        // Also check session folders on disk that might be unindexed in DB settings
+        const sessionsDir = path.join(__dirname, '../../sessions');
+        if (fs.existsSync(sessionsDir)) {
+          const folders = fs.readdirSync(sessionsDir);
+          for (const sId of folders) {
+            const sPath = path.join(sessionsDir, sId);
+            if (fs.statSync(sPath).isDirectory() && !activeSockets.has(sId)) {
+              logger.warn(`[Watchdog] Session folder '${sId}' exists on disk but missing from memory. Auto-restoring...`);
+              try {
+                await initSession(sId);
+              } catch (err) {
+                logger.error(`[Watchdog] Failed to restore session folder '${sId}': ${err.message}`);
+              }
+            }
+          }
+        }
       }
     } catch (err) {
       logger.error(`[Watchdog] Error in session supervisor loop: ${err.message}`);
