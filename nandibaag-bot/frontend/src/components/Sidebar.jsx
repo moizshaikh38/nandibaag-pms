@@ -26,7 +26,8 @@ import {
   AlertTriangle,
   Flame,
   Zap,
-  Users
+  Users,
+  ShieldCheck
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -114,7 +115,8 @@ export default function Sidebar() {
       title: 'SYSTEM & BOT',
       items: [
         { path: '/connect', label: 'WhatsApp Hub', icon: QrCode },
-        { path: '/settings', label: 'System Settings', icon: Settings }
+        { path: '/settings', label: 'System Settings', icon: Settings },
+        ...(user?.role === 'super_admin' ? [{ path: '/team-security', label: 'Team & Security', icon: ShieldCheck }] : [])
       ]
     }
   ];

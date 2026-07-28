@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 const connectDB = require('./config/db');
 const logger = require('./config/logger');
 const { port, frontendUrl, adminDefaultEmail, adminDefaultPassword } = require('./config/env');
-const { User, Settings } = require('./models');
+const { User, Settings, Room } = require('./models');
 const { initializeSocket, getIO } = require('./sockets');
 const {
   setSocketIo: setWhatsappSocketIo,
@@ -35,6 +35,7 @@ const availabilityRoutes = require('./routes/availabilityRoutes');
 const pmsBookingRoutes = require('./routes/pmsBookingRoutes');
 const messageLogRoutes = require('./routes/messageLogRoutes');
 const numberRoutes = require('./routes/numberRoutes');
+const teamSecurityRoutes = require('./routes/teamSecurityRoutes');
 
 const app = express();
 const server = http.createServer(app);
@@ -123,6 +124,7 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/availability', availabilityRoutes);
 app.use('/api/pms', pmsBookingRoutes);
 app.use('/api/message-log', messageLogRoutes);
+app.use('/api/team', teamSecurityRoutes);
 
 // Global error handler (must be last)
 app.use(errorHandler);

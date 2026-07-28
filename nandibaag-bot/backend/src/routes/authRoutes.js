@@ -1,10 +1,12 @@
 const express = require('express');
 const Joi = require('joi');
 const jwt = require('jsonwebtoken');
-const { User } = require('../models');
+const crypto = require('crypto');
+const { User, Session } = require('../models');
 const { jwtSecret, jwtExpiresIn, adminDefaultEmail, adminDefaultPassword } = require('../config/env');
 const { verifyToken } = require('../middleware/auth');
 const logger = require('../config/logger');
+const { logActivity, parseUserAgent, getClientIp } = require('../utils/activityLogger');
 
 const router = express.Router();
 
@@ -17,7 +19,7 @@ const loginSchema = Joi.object({
 
 /**
  * POST /api/auth/login
- * Validate email/password, issue JWT
+ * Validate email/password, issue JWT with jti, create Session record
  */
 router.post('/login', async (req, res, next) => {
   try {
@@ -74,19 +76,36 @@ router.post('/login', async (req, res, next) => {
     user.lastLogin = new Date();
     await user.save();
 
-    // Generate JWT
+    // Session tracking setup
+    const jti = crypto.randomUUID();
+    const deviceInfo = parseUserAgent(req.headers['user-agent']);
+    const ipAddress = getClientIp(req);
+
+    await Session.create({
+      userId: user._id,
+      jti,
+      deviceInfo,
+      ipAddress,
+      loginAt: new Date(),
+      lastActiveAt: new Date(),
+      isActive: true
+    });
+
+    // Generate JWT with jti
     const expiresIn = rememberMe ? '30d' : jwtExpiresIn;
     const token = jwt.sign(
       {
         id: user._id,
         email: user.email,
-        role: user.role
+        role: user.role,
+        jti
       },
       jwtSecret,
       { expiresIn }
     );
 
-    logger.info(`User logged in: ${user.email}`);
+    logger.info(`User logged in: ${user.email} (${deviceInfo})`);
+    logActivity(user._id, 'login', `Logged in from ${deviceInfo}`, req);
 
     res.json({
       success: true,
@@ -106,13 +125,25 @@ router.post('/login', async (req, res, next) => {
 
 /**
  * POST /api/auth/logout
- * Stateless, just returns success (client deletes token)
+ * Deactivates session in DB
  */
-router.post('/logout', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Logged out successfully'
-  });
+router.post('/logout', verifyToken, async (req, res, next) => {
+  try {
+    if (req.user && req.user.jti) {
+      await Session.updateOne(
+        { jti: req.user.jti },
+        { $set: { isActive: false, loggedOutAt: new Date(), loggedOutBy: null } }
+      );
+      logActivity(req.user.id, 'logout', `Self logged out session ${req.user.jti.slice(0, 8)}...`, req);
+    }
+
+    res.json({
+      success: true,
+      message: 'Logged out successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 /**

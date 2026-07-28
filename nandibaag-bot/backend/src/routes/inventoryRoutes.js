@@ -3,6 +3,7 @@ const Joi = require('joi');
 const mongoose = require('mongoose');
 const { verifyToken, requireAdmin } = require('../middleware/auth');
 const { Series, Room, RoomBooking, Booking } = require('../models');
+const { logActivity } = require('../utils/activityLogger');
 
 const router = express.Router();
 
@@ -351,6 +352,7 @@ router.patch('/rooms/:id', verifyToken, requireAdmin, async (req, res, next) => 
     }
 
     notifyInventoryChange(req);
+    logActivity(req.user.id, 'room_status_changed', `Updated Room ${room.roomNumber} status to ${value.status || room.status}`, req);
 
     res.json({
       success: true,

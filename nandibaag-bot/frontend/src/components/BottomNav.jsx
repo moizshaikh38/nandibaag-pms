@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { LayoutDashboard, QrCode, MessageSquare, Settings, MoreVertical, Home, Clock, BookOpen, Mail, CalendarDays, Grid3x3 } from 'lucide-react';
+import { LayoutDashboard, QrCode, MessageSquare, Settings, MoreVertical, Home, Clock, BookOpen, Mail, CalendarDays, Grid3x3, ShieldCheck } from 'lucide-react';
 import api from '../utils/api';
 import { useSocket } from '../hooks/useSocket';
+import { useAuth } from '../context/AuthContext';
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -11,7 +12,7 @@ const navItems = [
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
-const moreMenuItems = [
+const baseMoreMenuItems = [
   { path: '/availability', label: 'Availability', icon: Grid3x3 },
   { path: '/inventory', label: 'Inventory', icon: Home },
   { path: '/pms/pending', label: 'Pending Bookings', icon: Clock },
@@ -23,6 +24,12 @@ const moreMenuItems = [
 export default function BottomNav() {
   const location = useLocation();
   const socket = useSocket();
+  const { user } = useAuth();
+
+  const moreMenuItems = [
+    ...baseMoreMenuItems,
+    ...(user?.role === 'super_admin' ? [{ path: '/team-security', label: 'Team & Security', icon: ShieldCheck }] : [])
+  ];
   const [hotLeadCount, setHotLeadCount] = useState(0);
   const [pendingHandoverCount, setPendingHandoverCount] = useState(0);
   const [showMoreMenu, setShowMoreMenu] = useState(false);

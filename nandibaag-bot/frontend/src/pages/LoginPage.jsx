@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -14,7 +14,8 @@ import {
   ArrowRight,
   Bot,
   Zap,
-  Leaf
+  Leaf,
+  AlertTriangle
 } from 'lucide-react';
 
 export default function LoginPage() {
@@ -24,9 +25,18 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [sessionAlert, setSessionAlert] = useState(null);
   
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const reason = sessionStorage.getItem('nandibaag_logout_reason');
+    if (reason === 'session_terminated') {
+      setSessionAlert('Your session was ended by an administrator. Please log in again.');
+      sessionStorage.removeItem('nandibaag_logout_reason');
+    }
+  }, []);
 
   const validateForm = () => {
     const newErrors = {};
@@ -158,6 +168,14 @@ export default function LoginPage() {
                 Enter your administrative credentials to access the resort dashboard.
               </p>
             </div>
+
+            {/* Session Termination Notice */}
+            {sessionAlert && (
+              <div className="p-3.5 bg-rose-500/15 border border-rose-500/30 text-rose-300 rounded-2xl text-xs font-semibold flex items-start gap-2.5 shadow-lg animate-fade-in">
+                <AlertTriangle size={18} className="text-rose-400 shrink-0 mt-0.5" />
+                <span className="leading-snug">{sessionAlert}</span>
+              </div>
+            )}
 
             {/* Quick Demo Fill Pill */}
             <button

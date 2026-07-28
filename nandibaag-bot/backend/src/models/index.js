@@ -8,6 +8,8 @@ const Series = require('./Series');
 const Room = require('./Room');
 const RoomBooking = require('./RoomBooking');
 const MessageLog = require('./MessageLog');
+const Session = require('./Session');
+const ActivityLog = require('./ActivityLog');
 
 module.exports = {
   User,
@@ -19,5 +21,7 @@ module.exports = {
   Series,
   Room,
   RoomBooking,
-  MessageLog
+  MessageLog,
+  Session,
+  ActivityLog
 };

@@ -3,6 +3,7 @@ const { verifyToken, requireAdmin } = require('../middleware/auth');
 const { Settings, Chat } = require('../models');
 const { getIO } = require('../sockets');
 const logger = require('../config/logger');
+const { logActivity } = require('../utils/activityLogger');
 
 const router = express.Router();
 
@@ -60,6 +61,7 @@ router.patch('/global-mode', verifyToken, requireAdmin, async (req, res, next) =
     // 2. Bulk update all Chat documents
     await Chat.updateMany({}, { mode: globalMode });
     logger.info(`Bulk updated all chats mode to: ${globalMode}`);
+    logActivity(req.user.id, 'global_mode_changed', `Toggled global bot mode to ${globalMode.toUpperCase()}`, req);
 
     // 3. Emit real-time Socket.io event to clients
     try {
@@ -99,6 +101,7 @@ router.patch('/follow-ups', verifyToken, requireAdmin, async (req, res, next) =>
       { followUpEnabled },
       { new: true, upsert: true }
     );
+    logActivity(req.user.id, 'follow_ups_toggled', `${followUpEnabled ? 'Enabled' : 'Disabled'} automated follow-up sequences`, req);
     
     res.json({
       success: true,

@@ -38,13 +38,20 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      const isTerminated = error.response?.data?.code === 'SESSION_TERMINATED' ||
+        error.response?.data?.message?.toLowerCase().includes('terminated');
+
+      if (isTerminated && typeof window !== 'undefined') {
+        sessionStorage.setItem('nandibaag_logout_reason', 'session_terminated');
+      }
+
       // Clear token from both storage locations
       localStorage.removeItem(STORAGE_KEY_TOKEN);
       sessionStorage.removeItem(STORAGE_KEY_TOKEN);
       localStorage.removeItem(STORAGE_KEY_REMEMBER);
       
-      // Redirect to login
-      if (typeof window !== 'undefined') {
+      // Redirect to login if not already on /login
+      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
         window.location.href = '/login';
       }
     }

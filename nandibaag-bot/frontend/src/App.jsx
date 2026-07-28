@@ -13,6 +13,7 @@ import MessageLogPage from './pages/MessageLogPage';
 import CalendarPage from './pages/CalendarPage';
 import AvailabilityPage from './pages/AvailabilityPage';
 import PublicWidgetPage from './pages/PublicWidgetPage';
+import TeamSecurityPage from './pages/TeamSecurityPage';
 import Sidebar from './components/Sidebar';
 import BottomNav from './components/BottomNav';
 
@@ -143,6 +144,14 @@ function App() {
           element={
             <ProtectedLayout>
               <MessageLogPage />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/team-security"
+          element={
+            <ProtectedLayout>
+              <TeamSecurityPage />
             </ProtectedLayout>
           }
         />

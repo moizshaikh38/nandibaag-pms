@@ -10,6 +10,7 @@ const {
   checkOverlap
 } = require('../services/availabilityService');
 const { Chat, Booking, Room, RoomBooking } = require('../models');
+const { logActivity } = require('../utils/activityLogger');
 
 const router = express.Router();
 
@@ -322,6 +323,7 @@ router.post('/bookings/:id/assign-room', verifyToken, async (req, res, next) => 
     await booking.save();
 
     await roomBooking.populate('roomId', 'roomNumber capacity seriesId');
+    logActivity(req.user.id, 'room_assigned', `Assigned room ${roomBooking.roomId?.roomNumber || 'room'} to booking for ${booking.customerName}`, req);
 
     // Emit Socket.io real-time updates so Availability grid auto-refreshes everywhere
     try {
@@ -427,6 +429,7 @@ router.patch('/bookings/:id/cancel', verifyToken, async (req, res, next) => {
 
     booking.status = 'cancelled';
     await booking.save();
+    logActivity(req.user.id, 'booking_cancelled', `Cancelled booking for ${booking.customerName}`, req);
 
     // Emit Socket.io real-time updates so Availability grid auto-refreshes everywhere
     try {
