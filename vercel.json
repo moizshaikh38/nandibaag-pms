@@ -1,0 +1,11 @@
+{
+  "buildCommand": "cd nandibaag-bot/frontend && npm install && npm run build",
+  "outputDirectory": "nandibaag-bot/frontend/dist",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

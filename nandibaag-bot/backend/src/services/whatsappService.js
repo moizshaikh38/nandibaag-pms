@@ -58,14 +58,27 @@ function deleteSessionFolder(sessionId) {
   }
 }
 
+// Track sessions currently initializing or reconnecting to prevent duplicate socket creation
+const connectingSessions = new Set();
+
 /**
  * Initializes a Baileys session for a given sessionId.
  */
 async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber = null } = {}) {
-  if (activeSockets.has(sessionId)) {
-    logger.warn(`Session ${sessionId} already connected or active in memory`);
+  if (connectingSessions.has(sessionId)) {
+    logger.warn(`Session ${sessionId} is already initializing or reconnecting. Skipping duplicate creation.`);
     return { sock: activeSockets.get(sessionId) };
   }
+
+  if (activeSockets.has(sessionId)) {
+    const existingSock = activeSockets.get(sessionId);
+    if (existingSock && existingSock.user && existingSock.user.id) {
+      logger.warn(`Session ${sessionId} is already connected in memory.`);
+      return { sock: existingSock };
+    }
+  }
+
+  connectingSessions.add(sessionId);
 
   if (cleanStart) {
     deleteSessionFolder(sessionId);
@@ -144,6 +157,7 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
     }
 
     if (connection === 'open') {
+      connectingSessions.delete(sessionId);
       const phoneNumber = sock.user.id.split(':')[0];
       logger.info(`Baileys session ${sessionId} is connected (Phone: ${phoneNumber})`);
 
@@ -180,6 +194,7 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
     }
 
     if (connection === 'close') {
+      connectingSessions.delete(sessionId);
       const statusCode = (lastDisconnect?.error)?.output?.statusCode;
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
       const isImmediate = statusCode === DisconnectReason.restartRequired;
@@ -323,15 +338,15 @@ function startSessionWatchdog() {
           continue;
         }
 
-        const isSocketActive = activeSockets.has(sessionId);
+        if (activeSockets.has(sessionId) || connectingSessions.has(sessionId)) {
+          continue;
+        }
 
-        if (!isSocketActive) {
-          logger.warn(`[Watchdog] Session '${sessionId}' is registered in DB but missing from memory. Healing connection...`);
-          try {
-            await initSession(sessionId);
-          } catch (err) {
-            logger.error(`[Watchdog] Failed to heal session '${sessionId}': ${err.message}`);
-          }
+        logger.warn(`[Watchdog] Session '${sessionId}' is registered in DB but missing from memory. Healing connection...`);
+        try {
+          await initSession(sessionId);
+        } catch (err) {
+          logger.error(`[Watchdog] Failed to heal session '${sessionId}': ${err.message}`);
         }
         // Also check session folders on disk that might be unindexed in DB settings
         const sessionsDir = path.join(__dirname, '../../sessions');
@@ -339,7 +354,7 @@ function startSessionWatchdog() {
           const folders = fs.readdirSync(sessionsDir);
           for (const sId of folders) {
             const sPath = path.join(sessionsDir, sId);
-            if (fs.statSync(sPath).isDirectory() && !activeSockets.has(sId)) {
+            if (fs.statSync(sPath).isDirectory() && !activeSockets.has(sId) && !connectingSessions.has(sId)) {
               logger.warn(`[Watchdog] Session folder '${sId}' exists on disk but missing from memory. Auto-restoring...`);
               try {
                 await initSession(sId);
