@@ -1,4 +1,4 @@
-const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason, makeCacheableSignalKeyStore } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason, makeCacheableSignalKeyStore, Browsers } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const qrcode = require('qrcode');
@@ -98,7 +98,7 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
     },
     logger: pino({ level: 'silent' }),
     printQRInTerminal: false,
-    browser: ["Nandibaag Resort", "Chrome", "120.0.0"],
+    browser: Browsers.macOS('Desktop'),
     keepAliveIntervalMs: 25000,
     connectTimeoutMs: 60000,
     defaultQueryTimeoutMs: 60000,

@@ -293,7 +293,7 @@ export default function ChatWindow({ chat, onClose, onModeChange }) {
           </a>
 
           <button
-            onClick={() => setShowAssignModal(true)}
+            onClick={handleOpenAssignModal}
             className="px-3 py-2 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 font-semibold text-xs rounded-xl transition-all flex items-center gap-1.5"
           >
             <Bed size={15} />
