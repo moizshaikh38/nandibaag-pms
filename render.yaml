@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: nandibaag-bot-backend
+    env: node
+    rootDir: nandibaag-bot/backend
+    buildCommand: npm install
+    startCommand: node src/server.js
