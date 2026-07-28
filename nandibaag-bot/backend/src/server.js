@@ -203,6 +203,10 @@ const startServer = async () => {
     // Start follow-up & lifecycle cron jobs
     startFollowUpCron();
     startLifecycleCron();
+
+    // Start 30-second continuous HTTP KeepAlive self-ping for 24/7 Render Uptime
+    const { startKeepAlive } = require('./services/keepAliveService');
+    startKeepAlive();
     
   } catch (error) {
     logger.error(`Background service initialization error: ${error.message}`);
