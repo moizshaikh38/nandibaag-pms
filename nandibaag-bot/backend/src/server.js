@@ -158,7 +158,7 @@ const startServer = async () => {
     await connectDB();
     
     // Ensure default admin user exists
-    const adminCount = await User.countDocuments({ role: 'admin' });
+    const adminCount = await User.countDocuments({ role: { $in: ['admin', 'super_admin'] } });
     if (adminCount === 0) {
       logger.warn('No admin user found, creating default admin');
       const admin = new User({
