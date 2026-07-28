@@ -81,13 +81,18 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
   connectingSessions.add(sessionId);
 
   if (cleanStart) {
+    const useMongoAuthState = require('./mongoAuthState');
+    try {
+      const { deleteSession } = await useMongoAuthState(sessionId);
+      if (deleteSession) await deleteSession();
+    } catch (cleanErr) {}
     deleteSessionFolder(sessionId);
   }
 
-  logger.info(`Initializing Baileys WhatsApp session: ${sessionId}`);
+  logger.info(`Initializing Baileys WhatsApp session via Mongo Atlas Auth: ${sessionId}`);
 
-  const sessionPath = getSessionDataPath(sessionId);
-  const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+  const useMongoAuthState = require('./mongoAuthState');
+  const { state, saveCreds } = await useMongoAuthState(sessionId);
   const { version } = await fetchLatestBaileysVersion();
 
   const sock = makeWASocket({

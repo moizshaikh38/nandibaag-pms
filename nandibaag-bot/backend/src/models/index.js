@@ -23,5 +23,6 @@ module.exports = {
   RoomBooking,
   MessageLog,
   Session,
-  ActivityLog
+  ActivityLog,
+  BaileysAuth: require('./BaileysAuth')
 };
