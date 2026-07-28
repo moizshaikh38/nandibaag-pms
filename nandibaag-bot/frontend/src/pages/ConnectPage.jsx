@@ -49,7 +49,7 @@ export default function ConnectPage() {
   const [errorMessage, setErrorMessage] = useState('');
   const pollIntervalRef = useRef(null);
 
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
 
   const fetchSessions = useCallback(async () => {
     try {

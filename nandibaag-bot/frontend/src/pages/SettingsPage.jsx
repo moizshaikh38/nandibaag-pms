@@ -29,7 +29,7 @@ import {
 export default function SettingsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
 
   const [activeTab, setActiveTab] = useState('general');
   const [settings, setSettings] = useState(null);

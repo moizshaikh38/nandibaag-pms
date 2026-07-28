@@ -25,7 +25,7 @@ import { useSocket } from '../hooks/useSocket';
 export default function InventoryPage() {
   const { user } = useAuth();
   const socket = useSocket();
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
 
   const [series, setSeries] = useState([]);
   const [summary, setSummary] = useState(null);
