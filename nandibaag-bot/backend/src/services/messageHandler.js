@@ -114,6 +114,45 @@ async function handleMessage(sessionId, msg) {
       logger.debug(`Ignoring non-text/non-media message from ${customerPhone}`);
       return;
     }
+
+    // Handle outgoing messages sent directly from phone or bot
+    if (msg.key.fromMe) {
+      let chat = await Chat.findOne({ customerPhone });
+      if (chat) {
+        const text = messageText || (hasMedia ? '[Media]' : '');
+        if (text) {
+          const lastMsg = chat.messages[chat.messages.length - 1];
+          if (!lastMsg || lastMsg.text !== text || (Date.now() - new Date(lastMsg.timestamp).getTime() > 10000)) {
+            chat.messages.push({
+              sender: 'agent',
+              text,
+              timestamp: new Date(msg.messageTimestamp ? msg.messageTimestamp * 1000 : Date.now()),
+              messageType,
+              deliveryStatus: 'sent'
+            });
+            chat.lastMessageAt = new Date();
+            await chat.save();
+
+            try {
+              const { getIO } = require('../sockets');
+              const io = getIO();
+              if (io) {
+                io.emit('chat:updated', chat);
+                io.emit('chat:new_message', {
+                  chatId: chat._id,
+                  customerPhone,
+                  customerName: chat.customerName,
+                  message: text,
+                  sender: 'agent',
+                  chat
+                });
+              }
+            } catch (socketErr) {}
+          }
+        }
+      }
+      return;
+    }
     
     console.log(`[TIMING] [1/6] Received message from WhatsApp at ${new Date().toISOString()}`);
     logger.info(`Processing message from ${customerPhone}: ${messageText.substring(0, 50)}...`);

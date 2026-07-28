@@ -216,12 +216,13 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
   });
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type !== 'notify') return;
+    if (type !== 'notify' && type !== 'append') return;
 
     for (const msg of messages) {
-      if (msg.key.fromMe) continue;
+      const rawJid = msg.key.remoteJid;
+      if (!rawJid || rawJid === 'status@broadcast' || rawJid.endsWith('@g.us')) continue;
 
-      const chatPhone = msg.key.remoteJid.replace('@s.whatsapp.net', '');
+      const chatPhone = rawJid.replace('@s.whatsapp.net', '').replace('@lid', '');
 
       // Get or create lock for this chat to process sequentially
       let lock = messageQueueLocks.get(chatPhone);
