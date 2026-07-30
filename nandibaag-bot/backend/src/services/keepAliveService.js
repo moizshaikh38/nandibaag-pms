@@ -9,13 +9,11 @@ let keepAliveIntervalHandle = null;
  * Pings external Render URL every 30 seconds to keep container awake 24/7.
  */
 function startKeepAlive(overrideUrl = null) {
-  const targetUrl = overrideUrl || process.env.RENDER_EXTERNAL_URL || process.env.SELF_PING_URL;
-  if (!targetUrl) {
-    logger.info('[KeepAlive] RENDER_EXTERNAL_URL not set yet. Will start pinging as soon as URL is configured.');
-    return;
-  }
+  const port = process.env.PORT || 7000;
+  const defaultLocal = `http://localhost:${port}/health`;
+  const targetUrl = overrideUrl || process.env.RENDER_EXTERNAL_URL || process.env.SELF_PING_URL || defaultLocal;
 
-  const pingUrl = targetUrl.endsWith('/') ? `${targetUrl}api/availability/public` : `${targetUrl}/api/availability/public`;
+  const pingUrl = targetUrl.includes('/health') ? targetUrl : (targetUrl.endsWith('/') ? `${targetUrl}health` : `${targetUrl}/health`);
   logger.info(`[KeepAlive] Starting 30-second continuous HTTP ping to: ${pingUrl}`);
 
   if (keepAliveIntervalHandle) clearInterval(keepAliveIntervalHandle);
