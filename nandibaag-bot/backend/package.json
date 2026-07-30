@@ -7,7 +7,10 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "test-bot": "node src/scripts/testBot.js",
-    "monitor-whatsapp": "node src/scripts/monitorWhatsApp.js"
+    "monitor-whatsapp": "node src/scripts/monitorWhatsApp.js",
+    "test-ai-validation": "node src/scripts/testAIValidation.js",
+    "test-ai-flow": "node src/scripts/testAIMessageFlow.js",
+    "fix-ai-mode": "node src/scripts/fixAIMode.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.1.1",

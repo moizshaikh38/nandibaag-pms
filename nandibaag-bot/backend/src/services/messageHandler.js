@@ -269,7 +269,11 @@ async function handleMessage(sessionId, msg) {
     
     const mode = chat.mode;
     
-    if (mode === 'human') {
+    // FIXED: Override human mode for initial messages to ensure users always get some response
+    // If chat has less than 2 messages and mode is human, still try AI for better UX
+    const shouldForceAI = mode === 'human' && chat.messages.length < 2;
+    
+    if (mode === 'human' && !shouldForceAI) {
       await chat.save();
       logger.info(`Chat ${customerPhone} in human mode, message saved, emitting socket event`);
       
@@ -282,6 +286,10 @@ async function handleMessage(sessionId, msg) {
         } catch (e) {}
       }
       return;
+    }
+    
+    if (shouldForceAI) {
+      logger.info(`Chat ${customerPhone} in human mode but forcing AI response for initial message`);
     }
 
     // In AI mode, emit immediately when customer message arrives so dashboard updates instantly!
