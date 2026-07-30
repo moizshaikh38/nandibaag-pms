@@ -475,16 +475,41 @@ function startSessionWatchdog() {
           continue;
         }
 
-        // Skip if socket is already live or currently connecting
-        if (connectingSessions.has(sessionId)) continue;
+        // Check if ANY active socket in activeSockets is already live and connected
+        let isAlreadyConnected = false;
+        if (activeSockets.has(sessionId)) {
+          const entry = activeSockets.get(sessionId);
+          if (entry?.sock?.user?.id) isAlreadyConnected = true;
+        } else {
+          for (const [key, val] of activeSockets.entries()) {
+            if ((key === sessionId || key.includes(sessionId) || sessionId.includes(key)) && val?.sock?.user?.id) {
+              isAlreadyConnected = true;
+              break;
+            }
+          }
+        }
 
-        const entry = activeSockets.get(sessionId);
-        if (entry?.sock?.user?.id) continue; // fully connected, all good
+        if (isAlreadyConnected) {
+          continue; // fully connected, DO NOT launch duplicate initSession!
+        }
 
-        // Session is supposed to be active but has no live socket
-        logger.warn(`[Watchdog] Session '${sessionId}' is in DB as active but not connected in memory. Healing...`);
+        // If activeSockets is non-empty and has at least 1 connected socket, do not launch unnecessary secondary sockets
+        let anyConnected = false;
+        for (const [key, val] of activeSockets.entries()) {
+          if (val?.sock?.user?.id) {
+            anyConnected = true;
+            break;
+          }
+        }
+        if (anyConnected) {
+          logger.info(`[Watchdog] Active WhatsApp socket already connected in memory. Skipping redundant init for '${sessionId}'.`);
+          continue;
+        }
+
+        // Session is supposed to be active but has no live socket at all
+        logger.warn(`[Watchdog] Session '${sessionId}' is in DB as active but missing from memory. Healing connection...`);
         try {
-          // Clean up any zombie socket first
+          const entry = activeSockets.get(sessionId);
           if (entry?.sock) {
             safeEndOldSocket(entry.sock);
             activeSockets.delete(sessionId);

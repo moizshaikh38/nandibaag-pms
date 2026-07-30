@@ -33,7 +33,9 @@ export default function ChatsPage() {
 
   const fetchChats = useCallback(async (search = '') => {
     try {
-      setIsLoading(true);
+      if (chats.length === 0) {
+        setIsLoading(true);
+      }
       const params = new URLSearchParams();
       if (search) params.append('search', search);
       
@@ -44,7 +46,7 @@ export default function ChatsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [chats.length]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
