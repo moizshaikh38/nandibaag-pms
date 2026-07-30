@@ -92,9 +92,14 @@ export default function Navbar() {
       const res = await api.get('/whatsapp/sessions');
       const sessions = res.data.sessions || {};
       const activeEntry = Object.entries(sessions).find(([_, status]) => status === 'connected');
+      const connectingEntry = Object.entries(sessions).find(([_, status]) => status === 'connecting');
+
       if (activeEntry) {
         setWhatsappStatus('connected');
         setActiveSessionId(activeEntry[0]);
+      } else if (connectingEntry) {
+        setWhatsappStatus('connecting');
+        setActiveSessionId(connectingEntry[0]);
       } else {
         if (whatsappStatus === 'connected') playWarningAudio();
         setWhatsappStatus('disconnected');

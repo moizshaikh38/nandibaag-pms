@@ -286,8 +286,6 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
         // Only now remove from activeSockets
         activeSockets.delete(sessionId);
 
-        emitSocketEvent('whatsapp:disconnected', { sessionId, reason: reasonMsg, isLoggedOut });
-
         if (isLoggedOut) {
           // User explicitly unlinked the device from their phone.
           // Clean up credentials completely — do NOT auto-reconnect.
@@ -312,9 +310,24 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
               }
             }
           } catch (dbErr) {}
+
+          emitSocketEvent('whatsapp:disconnected', { sessionId, reason: reasonMsg, isLoggedOut: true });
         } else {
           // Transient disconnect (network glitch, restart required, etc.)
-          // Auto-reconnect with backoff
+          // Do NOT emit whatsapp:disconnected to frontend immediately during 1s auto-reconnect!
+          // Mark DB status as connecting so UI stays in a smooth transition without flashing error alerts.
+          try {
+            const { Settings } = require('../models');
+            const settings = await Settings.findOne();
+            if (settings) {
+              const numberObj = settings.whatsappNumbers.find(n => n.label === sessionId || n.number === sessionId);
+              if (numberObj && numberObj.status === 'connected') {
+                numberObj.status = 'connecting';
+                await settings.save();
+              }
+            }
+          } catch (e) {}
+
           autoReconnect(sessionId, isImmediate);
         }
       }
@@ -481,19 +494,39 @@ function startSessionWatchdog() {
 // ─── Status Queries ──────────────────────────────────────────────────
 
 function getSessionStatus(sessionId, dbStatus) {
-  const entry = activeSockets.get(sessionId);
+  let entry = activeSockets.get(sessionId);
+
+  if (!entry) {
+    for (const [key, val] of activeSockets.entries()) {
+      if (key === sessionId || key.includes(sessionId) || sessionId.includes(key)) {
+        entry = val;
+        break;
+      }
+    }
+  }
+
+  if (!entry && activeSockets.size > 0) {
+    for (const [key, val] of activeSockets.entries()) {
+      if (val?.sock?.user?.id) {
+        entry = val;
+        break;
+      }
+    }
+  }
+
   if (entry?.sock) {
     if (entry.sock.user && entry.sock.user.id) {
       return 'connected';
     }
-    if (dbStatus === 'qr_pending' || dbStatus === 'connecting') {
-      return dbStatus;
-    }
     return 'connecting';
   }
 
-  if (dbStatus === 'connected') {
-    return 'disconnected'; // DB is stale
+  if (connectingSessions.has(sessionId) || connectingSessions.size > 0) {
+    return 'connecting';
+  }
+
+  if (dbStatus === 'connected' || dbStatus === 'connecting') {
+    return 'connecting';
   }
 
   return dbStatus || 'disconnected';
