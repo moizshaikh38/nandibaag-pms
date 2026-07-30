@@ -105,9 +105,14 @@ function extractBookingDetails(text, today = new Date()) {
 async function handleMessage(sessionId, msg) {
   const tStart = Date.now();
   try {
-    // Extract customer phone / JID (preserve @lid if present for WhatsApp multi-device routing)
+    // Extract customer phone (always clean numeric phone string)
     const rawJid = msg.key.remoteJid;
-    const customerPhone = rawJid.includes('@lid') ? rawJid : rawJid.replace('@s.whatsapp.net', '');
+    let customerPhone = '';
+    if (msg.key.participant && msg.key.participant.includes('@s.whatsapp.net')) {
+      customerPhone = msg.key.participant.replace('@s.whatsapp.net', '').replace(/\D/g, '');
+    } else {
+      customerPhone = rawJid.split('@')[0].replace(/\D/g, '');
+    }
     
     // Extract text from the incoming message object
     const messageText = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
