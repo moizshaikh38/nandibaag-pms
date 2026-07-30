@@ -295,7 +295,7 @@ async function handleMessage(sessionId, msg) {
       let systemNotes = '';
       
       console.log(`[MessageHandler] Starting AI response generation for ${customerPhone}`);
-      console.log(`[MessageHandler] Chat mode: ${mode}, shouldForceAI: ${shouldForceAI}`);
+      console.log(`[MessageHandler] Chat mode: ${mode}`);
       
       // Natural language date and guest count extraction from customer text
       const extracted = extractBookingDetails(messageText);
