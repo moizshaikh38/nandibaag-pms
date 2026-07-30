@@ -1,5 +1,6 @@
 const { Chat, Settings } = require('../models');
 const { getAIResponse, detectLanguage } = require('./aiService');
+const { calculatePricing } = require('./pricingService');
 const { scoreMessage } = require('./leadScoring');
 const { scheduleFollowUps, cancelPendingFollowUps, containsOptOutPhrases, markChatAsOptedOut } = require('./followUpService');
 const whatsappService = require('./whatsappService');
@@ -353,7 +354,9 @@ async function handleMessage(sessionId, msg) {
               const maxCapacityAvailable = breakdownEntries.reduce((max, b) => Math.max(max, b.capacity), 0);
 
               if (hasSingleRoom) {
-                systemNotes = `[SYSTEM NOTE: Availability confirmed for ${guestCount} guests on ${checkInDate.toISOString()} to ${checkOutDate.toISOString()}. ${capacityResult.availableCount} room(s) available at this capacity. Proceed with booking flow normally.]`;
+                const pricingResult = calculatePricing(checkInDate, checkOutDate, guestCount);
+
+                systemNotes = `[SYSTEM NOTE: Availability confirmed for ${guestCount} guests on ${checkInDate.toISOString()} to ${checkOutDate.toISOString()}.\n\nAUTHORITATIVE BACKEND PRICING BREAKDOWN:\n${pricingResult.formatted}\n\nINSTRUCTION: Present this exact pricing breakdown to the customer. Do NOT recalculate or alter any numbers.]`;
 
                 chat.bookingDraft.availabilityChecked = true;
                 chat.bookingDraft.availabilityConfirmed = true;

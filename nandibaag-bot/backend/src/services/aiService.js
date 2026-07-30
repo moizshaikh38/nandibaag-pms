@@ -2,7 +2,7 @@ const OpenAI = require('openai');
 const logger = require('../config/logger');
 const { buildSystemPrompt } = require('./systemPrompt');
 const {
-  openrouterApiKey, openrouterModelPrimary,
+  openrouterApiKey, openrouterModelPrimary, openrouterSiteUrl, openrouterAppName,
   geminiApiKey, geminiModel,
   aiTestMode, ollamaBaseUrl, ollamaModel,
   groqApiKey, groqModel, groqBaseUrl,
@@ -14,7 +14,11 @@ const crypto = require('crypto');
 // ── OpenRouter client (OpenAI-compatible) ─────────────────────────────
 const openai = new OpenAI({
   baseURL: 'https://openrouter.ai/api/v1',
-  apiKey: openrouterApiKey,
+  apiKey: openrouterApiKey || process.env.OPENROUTER_API_KEY || 'missing_key',
+  defaultHeaders: {
+    'HTTP-Referer': openrouterSiteUrl || process.env.OPENROUTER_SITE_URL || 'https://nandibaag.com',
+    'X-Title': openrouterAppName || process.env.OPENROUTER_APP_NAME || 'Nandibaag WhatsApp AI'
+  },
   maxRetries: 0
 });
 
@@ -509,7 +513,7 @@ function isReplyValid(text) {
   }
   
   // 3. Leftover markdown or code syntax checks
-  if (/`{3}|[<>#\*]/.test(trimmed)) {
+  if (/`{3}|[\*#<>]/.test(trimmed)) {
     return false;
   }
 
@@ -528,7 +532,25 @@ function isReplyValid(text) {
     }
   }
 
-  // 6. Phone number validation check (reject any phone number sequence not matching official resort contacts)
+  // 6. FORBIDDEN BOOKING CONFIRMATION CLAIMS CHECK
+  const FORBIDDEN_CONFIRMATIONS = [
+    /booking\s+(?:is\s+)?confirm(?:ed)?/i,
+    /room\s+(?:is\s+)?booked/i,
+    /reservation\s+confirm(?:ed)?/i,
+    /booking\s+confirm\s+ho\s+gayi/i,
+    /room\s+book\s+ho\s+gaya/i,
+    /booking\s+zali(?:\s+aahe)?/i,
+    /room\s+book\s+zala/i,
+    /booking\s+ho\s+gayi/i,
+    /room\s+confirm\s+zala/i
+  ];
+  for (const pattern of FORBIDDEN_CONFIRMATIONS) {
+    if (pattern.test(trimmed)) {
+      return false; // Rejects any AI reply claiming unauthorized booking confirmation!
+    }
+  }
+
+  // 7. Phone number validation check
   const { resortContact1, resortContact2, resortContact3 } = require('../config/env');
   const OFFICIAL_NUMBERS = [resortContact1, resortContact2, resortContact3, '9257657665', '9257657664', '9257657663']
     .filter(Boolean)
@@ -542,14 +564,13 @@ function isReplyValid(text) {
     }
   }
 
-  // 7. Repeated word duplication checks
+  // 8. Repeated word duplication checks
   const repeatedWordRegex = /\b(\w+)\s+\1\b/ig;
   let match;
   const allowedReduplications = new Set([
     'kabhi', 'dhire', 'garam', 'gol', 'sath', 'saath', 'thoda', 'thodi', 
     'bade', 'chote', 'door', 'pass', 'paas', 'chal', 'chalo', 'ruko', 
-    'suno', 'haan', 'acha', 'accha', 'ek', 'naye', 'nayee', 'garma',
-    'sirf' // Allow repeating sirf if needed
+    'suno', 'haan', 'acha', 'accha', 'ek', 'naye', 'nayee', 'garma', 'sirf'
   ]);
   
   while ((match = repeatedWordRegex.exec(trimmed)) !== null) {
@@ -559,38 +580,22 @@ function isReplyValid(text) {
     }
   }
   
-  // 8. English word whitelist and Hinglish truncation checks
+  // 9. English word whitelist and Hinglish truncation checks
   const words = trimmed.toLowerCase().match(/[a-z]+/g) || [];
   
   for (const word of words) {
     if (word.length < 3) continue;
-    
-    // If it is in the whitelisted/allowed words set, it's safe
     if (allowedResortWords.has(word)) continue;
-    
-    // Out-of-place random English word check (technical/programming terms only)
-    if (commonEnglishWords.has(word)) {
-      return false;
-    }
-    
-    // Suspicious if it has no vowels (cannot be a real Hinglish/English word)
-    if (!/[aeiouy]/.test(word)) {
-      return false;
-    }
-    
-    // Targeted check for typical Hinglish truncation errors
-    if (/sakt$|chah$|karn$/.test(word)) {
-      return false;
-    }
+    if (commonEnglishWords.has(word)) return false;
+    if (!/[aeiouy]/.test(word)) return false;
+    if (/sakt$|chah$|karn$/.test(word)) return false;
   }
   
   return true;
 }
 
 /**
- * Diagnostic helper: returns a human-readable string explaining WHY isReplyValid()
- * rejected the given text. Mirrors the same checks as isReplyValid() above.
- * Used for enhanced logging so we can see exactly what triggered rejections.
+ * Diagnostic helper: returns reason for reply rejection
  */
 function getReplyRejectionReason(text) {
   if (!text || typeof text !== 'string') return 'EMPTY_OR_NOT_STRING';
@@ -602,8 +607,6 @@ function getReplyRejectionReason(text) {
   if (scriptMatch) return `UNEXPECTED_SCRIPT: char="${scriptMatch[0]}" U+${scriptMatch[0].codePointAt(0).toString(16).toUpperCase()}`;
 
   if (/`{3}/.test(trimmed)) return 'MARKDOWN_CODE_BLOCK';
-  const mdMatch = trimmed.match(/[<>#\*]/);
-  if (mdMatch) return `MARKDOWN_SYNTAX: char="${mdMatch[0]}"`;
 
   const roomLeakRegex = /(?:room|cottage)\s*(?:no\.?|number)?\s*\d{1,4}\b/i;
   if (roomLeakRegex.test(trimmed)) {
@@ -615,6 +618,21 @@ function getReplyRejectionReason(text) {
   for (const banned of BANNED_WORDS) {
     const bannedRegex = new RegExp(`\\b${banned}\\b`, 'i');
     if (bannedRegex.test(trimmed)) return `BANNED_WORD: "${banned}"`;
+  }
+
+  const FORBIDDEN_CONFIRMATIONS = [
+    /booking\s+(?:is\s+)?confirm(?:ed)?/i,
+    /room\s+(?:is\s+)?booked/i,
+    /reservation\s+confirm(?:ed)?/i,
+    /booking\s+confirm\s+ho\s+gayi/i,
+    /room\s+book\s+ho\s+gaya/i,
+    /booking\s+zali(?:\s+aahe)?/i,
+    /room\s+book\s+zala/i,
+    /booking\s+ho\s+gayi/i,
+    /room\s+confirm\s+zala/i
+  ];
+  for (const pattern of FORBIDDEN_CONFIRMATIONS) {
+    if (pattern.test(trimmed)) return `UNAUTHORIZED_BOOKING_CONFIRMATION_CLAIM`;
   }
 
   const { resortContact1, resortContact2, resortContact3 } = require('../config/env');
@@ -655,52 +673,78 @@ function getReplyRejectionReason(text) {
 }
 
 /**
- * Heuristic language detection based on Unicode ranges and common words
- * This is for dashboard/analytics purposes only, not for AI response generation
+ * Language detection scoring system.
+ * Supported values: 'hinglish', 'roman_marathi', 'marathi', 'english'.
  */
 function detectLanguage(text) {
-  if (!text || text.length === 0) return 'unknown';
-  
-  const lowerText = text.toLowerCase();
-  
-  // Marathi Unicode range: U+0900 to U+097F
-  const hasMarathi = /[\u0900-\u097F]/.test(text);
-  
-  // Gujarati Unicode range: U+0A80 to U+0AFF
-  const hasGujarati = /[\u0A80-\u0AFF]/.test(text);
-  
-  // Hindi/Devanagari Unicode range: U+0900 to U+097F (overlaps with Marathi)
-  const hasDevanagari = /[\u0900-\u097F]/.test(text);
-  
-  // Common Marathi-only words (not in Hindi)
-  const marathiWords = ['aahe', 'kadhi', 'tumhi', 'mala', 'tyala', 'kay', 'mi', 'tu', 'apan', 'kasa', 'kashi'];
-  const hasMarathiWords = marathiWords.some(word => lowerText.includes(word));
-  
-  // Common Hindi loanwords in Hinglish
-  const hindiLoanwords = ['kya', 'hai', 'kaise', 'kahan', 'kab', 'kaun', 'kyun', 'bhai', 'didi', 'ji', 'accha', 'theek', 'sahi', 'galat', 'please', 'thank'];
-  const hasHindiLoanwords = hindiLoanwords.some(word => lowerText.includes(word));
-  
-  // Detect language
-  if (hasGujarati) {
-    return 'gujarati';
+  if (!text || typeof text !== 'string') return 'hinglish';
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return 'hinglish';
+
+  const lower = trimmed.toLowerCase();
+
+  // 1. Check Devanagari script
+  if (/[\u0900-\u097F]/.test(trimmed)) {
+    const devanagariMarathiKeywords = [
+      'आहे', 'आहेत', 'नाही', 'पाहिजे', 'सांगा', 'किती', 'कुठे', 'कधी',
+      'येणार', 'करायचं', 'करायची', 'करू', 'शकतो', 'शकता', 'साठी', 'ला',
+      'मध्ये', 'तारखेला', 'लोकांसाठी', 'झाली'
+    ];
+    let marathiDevScore = 0;
+    for (const kw of devanagariMarathiKeywords) {
+      if (trimmed.includes(kw)) marathiDevScore += 2;
+    }
+    return marathiDevScore > 0 ? 'marathi' : 'hinglish';
   }
-  
-  if (hasMarathiWords) {
-    return 'marathi';
+
+  // 2. Check Roman script Marathi
+  const romanMarathiPatterns = [
+    /\baahe\b/i, /\bahet\b/i, /\bnahiye\b/i, /\bpahije\b/i, /\bsanga\b/i,
+    /\bkiti\b/i, /\bkontya\b/i, /\bkuthun\b/i, /\bkadhi\b/i, /\byenar\b/i,
+    /\bkaraycha\b/i, /\bkaraychi\b/i, /\bkarayche\b/i, /\bkarta\s+yeil\b/i,
+    /\bshakto\b/i, /\bshakta\b/i, /\bsathi\b/i, /\bmadhye\b/i, /\bbagha\b/i,
+    /\byeil\b/i, /\bjavaycha\b/i, /\baamhi\b/i, /\btumhi\b/i, /\btumhala\b/i,
+    /\baamchya\b/i, /\btumchya\b/i, /\blokanji\b/i, /\bjanansathi\b/i, /\btarakh\b/i,
+    /\bweekend\s+la\b/i, /\bdates\s+sanga\b/i, /\broom\s+available\s+aahe\b/i
+  ];
+
+  let romanMarathiScore = 0;
+  for (const pat of romanMarathiPatterns) {
+    if (pat.test(lower)) romanMarathiScore += 2;
   }
-  
-  if (hasDevanagari) {
-    // If Devanagari but no specific Marathi words, assume Hindi
-    return 'hindi';
+
+  if (romanMarathiScore >= 2) {
+    return 'roman_marathi';
   }
-  
-  // Latin script - check for Hindi loanwords (Hinglish)
-  if (hasHindiLoanwords) {
-    return 'hinglish';
+
+  // 3. Check English vs Hinglish
+  const englishPatterns = [
+    /\bwhat\b/i, /\bwhen\b/i, /\bwhere\b/i, /\bwhich\b/i, /\bhow\b/i, /\bwhy\b/i,
+    /\bcan\s+you\b/i, /\bwould\s+like\b/i, /\bis\s+there\b/i, /\bprice\s+for\b/i,
+    /\bavailable\s+on\b/i, /\bplease\b/i, /\bthank\s+you\b/i
+  ];
+  let englishScore = 0;
+  for (const pat of englishPatterns) {
+    if (pat.test(lower)) englishScore += 2;
   }
-  
-  // Pure Latin script with no Hindi loanwords
-  return 'english';
+
+  const hinglishPatterns = [
+    /\bkya\b/i, /\bhai\b/i, /\bhain\b/i, /\bkaise\b/i, /\bkahan\b/i, /\bkab\b/i,
+    /\bkaun\b/i, /\bkyun\b/i, /\bbhai\b/i, /\bji\b/i, /\baccha\b/i, /\bachha\b/i,
+    /\btheek\b/i, /\bthik\b/i, /\bsahi\b/i, /\bchahiye\b/i, /\bbatao\b/i,
+    /\bbatayein\b/i, /\bkaro\b/i, /\bkarne\b/i, /\bhun\b/i, /\bhoon\b/i,
+    /\bhoga\b/i, /\bhogi\b/i, /\blog\b/i, /\blogo\b/i, /\bke\s+liye\b/i
+  ];
+  let hinglishScore = 0;
+  for (const pat of hinglishPatterns) {
+    if (pat.test(lower)) hinglishScore += 2;
+  }
+
+  if (englishScore > hinglishScore && englishScore >= 2) {
+    return 'english';
+  }
+
+  return 'hinglish';
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -936,7 +980,14 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
     content: incomingMessage
   });
   
-  // Build system prompt with today's date
+  // Detect language and ensure system prompt uses customer language
+  const detectedLang = detectLanguage(incomingMessage);
+  if (chat && (chat.language === 'unknown' || !chat.language)) {
+    chat.language = detectedLang;
+  }
+  const languageToUse = (chat && chat.language && chat.language !== 'unknown') ? chat.language : detectedLang;
+
+  // Build system prompt with today's date and detected language
   const today = new Date();
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const dayOfWeek = days[today.getDay()];
@@ -947,15 +998,15 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
     year: 'numeric'
   });
   
-  const systemPrompt = buildSystemPrompt(todayDateString, dayOfWeek, resortSettings);
+  const systemPrompt = buildSystemPrompt(languageToUse, todayDateString, dayOfWeek, resortSettings);
   
-  // Append any system-level notes (e.g. availability check results) to the system prompt
+  // Append any system-level notes (e.g. availability/pricing results) to system prompt
   const finalSystemPrompt = systemNotes
     ? systemPrompt + '\n\n' + systemNotes
     : systemPrompt;
   
-  console.log(`[TIMING] [3/6] System prompt and message history built in ${Date.now() - tPromptStart}ms`);
- 
+  console.log(`[TIMING] [3/6] System prompt (${languageToUse}) and message history built in ${Date.now() - tPromptStart}ms`);
+
   let result = null;
  
   // ── AI_TEST_MODE: Local Ollama-only mode (for dev/testing ONLY) ──
@@ -968,102 +1019,70 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
       ollamaClient, ollamaModel, providerKey, 'TIER 1 - OLLAMA',
       messageHistory, finalSystemPrompt, 8000
     );
- 
+
     if (!result) {
-      const rejectionReason = result ? 'N/A' : 'call failed or validation failed';
-      logger.warn(`[TIER 1 - OLLAMA] failed (${rejectionReason}), using fallback (no retry in test mode)`);
-    } else {
-      logger.info(`[TIER 1 - OLLAMA] success`);
+      logger.warn(`[TIER 1 - OLLAMA] failed, using fallback`);
     }
   } else {
-    // ── PRODUCTION MODE: Full tier chain ─────────────────────────────
-    
-    // ── TIER 1: Groq (production tier, OpenAI-compatible) ──
-    if (groqApiKey) {
-      logger.info(`[TIER 1 - GROQ] attempting...`);
-      const groqClient = getGroqClient();
-      const providerKey = `groq/${groqModel}`;
-      
-      result = await tryOpenAICompatibleCall(
-        groqClient, groqModel, providerKey, 'TIER 1 - GROQ',
-        messageHistory, finalSystemPrompt, 8000
-      );
- 
-      if (!result) {
-        logger.info(`[TIER 1 - GROQ] invalid/failed, falling to TIER 2`);
-      } else {
-        logger.info(`[TIER 1 - GROQ] success`);
+    // ── PRODUCTION FALLBACK TIER CHAIN ───────────────────────────────
+    const TIER_CHAIN = [
+      {
+        name: 'openrouter_gpt4o_mini',
+        provider: 'openrouter',
+        model: 'openai/gpt-4o-mini',
+        timeout: 8000,
+        priority: 1
+      },
+      {
+        name: 'openrouter_claude_sonnet',
+        provider: 'openrouter',
+        model: 'anthropic/claude-3.5-sonnet',
+        timeout: 12000,
+        priority: 2
+      },
+      {
+        name: 'groq',
+        provider: 'groq',
+        model: groqModel || 'mixtral-8x7b-32768',
+        timeout: 8000,
+        priority: 3
+      },
+      {
+        name: 'openrouter_llama',
+        provider: 'openrouter',
+        model: 'meta-llama/llama-3.1-70b-instruct',
+        timeout: 10000,
+        priority: 4
       }
-    }
- 
-    // ── TIER 2: Cerebras (OpenAI-compatible, different infra) ──
-    if (!result && cerebrasApiKey) {
-      logger.info(`[TIER 2 - CEREBRAS] attempting...`);
-      const cerebrasClient = getCerebrasClient();
-      const providerKey = `cerebras/${cerebrasModel}`;
-      
-      result = await tryOpenAICompatibleCall(
-        cerebrasClient, cerebrasModel, providerKey, 'TIER 2 - CEREBRAS',
-        messageHistory, finalSystemPrompt, 8000
-      );
- 
-      if (!result) {
-        logger.info(`[TIER 2 - CEREBRAS] invalid/failed, falling to TIER 3`);
-      } else {
-        logger.info(`[TIER 2 - CEREBRAS] success`);
-      }
-    }
- 
-    // ── TIER 3: Cloudflare Workers AI (REST API, different infra) ──
-    if (!result && cloudflareAccountId && cloudflareApiToken) {
-      logger.info(`[TIER 3 - CLOUDFLARE] attempting...`);
-      result = await tryCloudflareCall(
-        'TIER 3 - CLOUDFLARE', messageHistory, finalSystemPrompt, 8000
-      );
-      if (!result) {
-        logger.info(`[TIER 3 - CLOUDFLARE] invalid/failed, falling to TIER 4`);
-      }
-    }
- 
-    // ── TIER 4: Google Gemini (official SDK) ──
-    if (!result && geminiApiKey) {
-      logger.info(`[TIER 4 - GEMINI] attempting...`);
-      result = await tryGeminiCall(
-        'TIER 4 - GEMINI', messageHistory, finalSystemPrompt, 8000
-      );
-      if (!result) {
-        logger.info(`[TIER 4 - GEMINI] invalid/failed, falling to TIER 5`);
-      }
-    }
- 
-    // ── TIER 5: OpenRouter multi-model chain (3 free models across diverse infra) ──
-    if (!result) {
-      const models = [
-        { name: openrouterModelPrimary,                    label: 'PRIMARY' },     // Meta Llama 70B
-        { name: 'qwen/qwen3-next-80b-a3b-instruct:free',  label: 'QWEN_80B' },    // Qwen 80B
-        { name: 'google/gemma-4-31b-it:free',              label: 'GEMMA_31B' }    // Google Gemma 31B
-      ];
- 
-      for (let i = 0; i < models.length; i++) {
-        const model = models[i];
-        const providerKey = `openrouter/${model.name}`;
-        const tierLabel = `TIER 5 - OPENROUTER/${model.label}`;
- 
-        logger.info(`[${tierLabel}] attempting (model ${i + 1}/${models.length})...`);
- 
+    ];
+
+    for (const tier of TIER_CHAIN) {
+      if (result) break;
+
+      const tierLabel = `TIER ${tier.priority} - ${tier.name.toUpperCase()}`;
+
+      if (tier.provider === 'openrouter') {
+        const apiKey = openrouterApiKey || process.env.OPENROUTER_API_KEY;
+        if (!apiKey) {
+          logger.warn(`[${tierLabel}] Skipped (missing OPENROUTER_API_KEY)`);
+          continue;
+        }
+        logger.info(`[${tierLabel}] attempting model: ${tier.model}...`);
         result = await tryOpenAICompatibleCall(
-          openai, model.name, providerKey, tierLabel,
-          messageHistory, finalSystemPrompt, 8000
+          openai, tier.model, `openrouter/${tier.model}`, tierLabel,
+          messageHistory, finalSystemPrompt, tier.timeout
         );
- 
-        if (result) {
-          logger.info(`[${tierLabel}] succeeded — using this reply`);
-          break;
+      } else if (tier.provider === 'groq') {
+        if (!groqApiKey) {
+          logger.warn(`[${tierLabel}] Skipped (missing GROQ_API_KEY)`);
+          continue;
         }
- 
-        if (i < models.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
+        logger.info(`[${tierLabel}] attempting model: ${tier.model}...`);
+        const groqClient = getGroqClient();
+        result = await tryOpenAICompatibleCall(
+          groqClient, tier.model, `groq/${tier.model}`, tierLabel,
+          messageHistory, finalSystemPrompt, tier.timeout
+        );
       }
     }
   }
