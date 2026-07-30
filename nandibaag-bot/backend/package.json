@@ -5,7 +5,9 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+    "test-bot": "node src/scripts/testBot.js",
+    "monitor-whatsapp": "node src/scripts/monitorWhatsApp.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.1.1",

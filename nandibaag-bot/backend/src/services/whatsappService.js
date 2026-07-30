@@ -50,6 +50,9 @@ let socketIdCounter = 0;
 // Watchdog interval handle
 let watchdogIntervalHandle = null;
 
+// Track last successful connection time per session to help watchdog avoid race conditions
+const lastSuccessfulConnection = new Map();
+
 // ─── Helpers ──────────────────────────────────────────────────────────
 
 function getSessionDataPath(sessionId) {
@@ -156,14 +159,17 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
       logger: pino({ level: 'silent' }),
       printQRInTerminal: false,
       browser: ['Nandibaag Resort', 'Chrome', '120.0.0'],
-      keepAliveIntervalMs: 25000,
-      connectTimeoutMs: 60000,
-      defaultQueryTimeoutMs: 60000,
+      keepAliveIntervalMs: 60000, // Increased from 25s to 60s for stability
+      connectTimeoutMs: 90000, // Increased from 60s to 90s
+      defaultQueryTimeoutMs: 90000, // Increased from 60s to 90s
       emitOwnEvents: false,
       markOnlineOnConnect: true,
       syncFullHistory: false,
-      retryRequestDelayMs: 2000,
+      retryRequestDelayMs: 3000, // Increased from 2s to 3s
       generateHighQualityLinkPreview: false,
+      // Additional stability settings
+      waWebSocketUrl: 'wss://web.whatsapp.com/ws',
+      qrMaxRetries: 5,
     });
 
     // Store socket with its unique ID
@@ -231,6 +237,9 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
         connectingSessions.delete(sessionId);
         const phoneNumber = sock.user.id.split(':')[0];
         logger.info(`✅ Session ${sessionId} CONNECTED (Phone: ${phoneNumber}, socketId: #${mySocketId})`);
+        
+        // Set a flag to prevent immediate watchdog intervention
+        lastSuccessfulConnection.set(sessionId, Date.now());
 
         try {
           const { Settings } = require('../models');
@@ -427,9 +436,9 @@ async function autoReconnect(sessionId, isImmediate = false) {
     return;
   }
 
-  const backoffDelays = [3000, 6000, 15000, 30000, 60000];
+  const backoffDelays = [10000, 30000, 60000, 120000, 300000]; // Increased: 10s → 30s → 60s → 120s → 300s
   let attempts = reconnectAttempts.get(sessionId) || 0;
-  const delay = isImmediate ? 1500 : (backoffDelays[Math.min(attempts, backoffDelays.length - 1)]);
+  const delay = isImmediate ? 5000 : (backoffDelays[Math.min(attempts, backoffDelays.length - 1)]); // Increased immediate delay to 5s
 
   reconnectAttempts.set(sessionId, attempts + 1);
 
@@ -462,7 +471,7 @@ async function autoReconnect(sessionId, isImmediate = false) {
 function startSessionWatchdog() {
   if (watchdogIntervalHandle) return;
 
-  logger.info('[Watchdog] Starting session supervisor (3-minute health check)...');
+  logger.info('[Watchdog] Starting session supervisor (10-minute health check)...');
 
   watchdogIntervalHandle = setInterval(async () => {
     try {
@@ -491,21 +500,29 @@ function startSessionWatchdog() {
             }
           }
         }
+        
+        // Additional check: if session connected recently (within 5 minutes), skip watchdog
+        const lastConnectedTime = lastSuccessfulConnection.get(sessionId);
+        if (lastConnectedTime && (Date.now() - lastConnectedTime < 300000)) {
+          logger.info(`[Watchdog] Session '${sessionId}' connected recently (${Math.round((Date.now() - lastConnectedTime)/1000)}s ago). Skipping.`);
+          continue;
+        }
 
         if (isAlreadyConnected) {
           continue; // fully connected, DO NOT launch duplicate initSession!
         }
 
-        // If activeSockets is non-empty and has at least 1 connected socket, do not launch unnecessary secondary sockets
+        // Only skip if the SPECIFIC session is already connected, not just any socket
+        // This allows healing of disconnected sessions while others are connected
         let anyConnected = false;
         for (const [key, val] of activeSockets.entries()) {
-          if (val?.sock?.user?.id) {
+          if (key === sessionId && val?.sock?.user?.id) {
             anyConnected = true;
             break;
           }
         }
         if (anyConnected) {
-          logger.info(`[Watchdog] Active WhatsApp socket already connected in memory. Skipping redundant init for '${sessionId}'.`);
+          logger.info(`[Watchdog] Session '${sessionId}' is already connected. Skipping.`);
           continue;
         }
 
@@ -517,6 +534,8 @@ function startSessionWatchdog() {
             safeEndOldSocket(entry.sock);
             activeSockets.delete(sessionId);
           }
+          // Add a small delay before reconnecting to avoid rapid cycling
+          await new Promise(resolve => setTimeout(resolve, 2000));
           await initSession(sessionId);
         } catch (err) {
           logger.error(`[Watchdog] Failed to heal session '${sessionId}': ${err.message}`);
@@ -525,7 +544,7 @@ function startSessionWatchdog() {
     } catch (err) {
       logger.error(`[Watchdog] Error in supervisor loop: ${err.message}`);
     }
-  }, 180000); // Every 3 minutes
+  }, 600000); // Every 10 minutes (increased from 3 minutes to reduce race conditions)
 }
 
 // ─── Status Queries ──────────────────────────────────────────────────
