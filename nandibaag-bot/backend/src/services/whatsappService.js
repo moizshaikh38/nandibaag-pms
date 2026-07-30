@@ -103,14 +103,14 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
     },
     logger: pino({ level: 'silent' }),
     printQRInTerminal: false,
-    browser: Browsers.macOS('Desktop'),
-    keepAliveIntervalMs: 25000,
+    browser: ['Nandibaag Resort', 'Chrome', '120.0.0'],
+    keepAliveIntervalMs: 30000,
     connectTimeoutMs: 60000,
     defaultQueryTimeoutMs: 60000,
     emitOwnEvents: false,
     markOnlineOnConnect: true,
     syncFullHistory: false,
-    retryRequestDelayMs: 500
+    retryRequestDelayMs: 2000
   });
 
   activeSockets.set(sessionId, sock);
@@ -201,16 +201,39 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
     if (connection === 'close') {
       connectingSessions.delete(sessionId);
       const statusCode = (lastDisconnect?.error)?.output?.statusCode;
+      const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401 || statusCode === 403;
       const isImmediate = statusCode === DisconnectReason.restartRequired || statusCode === 515;
 
       logger.warn(`Session ${sessionId} connection closed. StatusCode: ${statusCode}, Reason: ${lastDisconnect?.error?.message}`);
       activeSockets.delete(sessionId);
 
-      emitSocketEvent('whatsapp:disconnected', { sessionId, reason: lastDisconnect?.error?.message });
+      emitSocketEvent('whatsapp:disconnected', { sessionId, reason: lastDisconnect?.error?.message, isLoggedOut });
 
-      // Always auto-reconnect using saved auth keys on disk.
-      // NEVER delete session folder automatically so session stays linked across restarts/glitches.
-      autoReconnect(sessionId, isImmediate);
+      if (isLoggedOut) {
+        logger.error(`Session ${sessionId} was logged out by WhatsApp. Cleaning up stale credentials to prevent 2s reconnect loop.`);
+        const useMongoAuthState = require('./mongoAuthState');
+        try {
+          const { deleteSession } = await useMongoAuthState(sessionId);
+          if (deleteSession) await deleteSession();
+        } catch (e) {}
+        deleteSessionFolder(sessionId);
+
+        try {
+          const { Settings } = require('../models');
+          const settings = await Settings.findOne();
+          if (settings) {
+            const numberObj = settings.whatsappNumbers.find(n => n.label === sessionId || n.number === sessionId);
+            if (numberObj) {
+              numberObj.status = 'auth_failed';
+              numberObj.isActive = false;
+              numberObj.qrCode = null;
+              await settings.save();
+            }
+          }
+        } catch (dbErr) {}
+      } else {
+        autoReconnect(sessionId, isImmediate);
+      }
     }
   });
 
@@ -275,27 +298,33 @@ async function requestPairingCode(sessionId, phoneNumber) {
  * retries with backoff and NEVER gives up permanently.
  */
 async function autoReconnect(sessionId, isImmediate = false) {
-  const backoffDelays = [2000, 5000, 10000, 20000, 30000]; // 2s, 5s, 10s, 20s, 30s backoff
+  if (connectingSessions.has(sessionId)) {
+    logger.warn(`AutoReconnect skipped for ${sessionId}: session is already initializing.`);
+    return;
+  }
 
+  const backoffDelays = [3000, 6000, 12000, 25000, 45000];
   let attempts = reconnectAttempts.get(sessionId) || 0;
-  const delay = isImmediate ? 1000 : (backoffDelays[attempts] || 60000); // Caps at 60s for subsequent attempts
 
+  const delay = isImmediate ? 1000 : (backoffDelays[attempts] || 45000);
   reconnectAttempts.set(sessionId, attempts + 1);
 
   logger.info(`Reconnecting session ${sessionId} in ${delay / 1000}s (attempt ${attempts + 1})`);
   await new Promise(resolve => setTimeout(resolve, delay));
 
   if (activeSockets.has(sessionId)) {
-    logger.info(`Session ${sessionId} was re-established in memory while waiting.`);
-    return;
+    const existing = activeSockets.get(sessionId);
+    if (existing && existing.user && existing.user.id) {
+      logger.info(`Session ${sessionId} was re-established in memory while waiting.`);
+      return;
+    }
   }
 
   try {
     await initSession(sessionId);
   } catch (error) {
     logger.error(`Reconnection attempt ${attempts + 1} failed for session ${sessionId}: ${error.message}`);
-    // Keep retrying in background indefinitely
-    await autoReconnect(sessionId);
+    setTimeout(() => autoReconnect(sessionId), 10000);
   }
 }
 
