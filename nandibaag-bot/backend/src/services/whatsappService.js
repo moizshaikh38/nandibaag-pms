@@ -143,20 +143,18 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
   console.log(`[initSession] Added ${sessionId} to connectingSessions`);
 
   try {
-    if (cleanStart) {
-      console.log(`[initSession] Clean start requested for ${sessionId}`);
-      const useMongoAuthState = require('./mongoAuthState');
-      try {
-        const { deleteSession } = await useMongoAuthState(sessionId);
-        if (deleteSession) await deleteSession();
-      } catch (cleanErr) {}
-      deleteSessionFolder(sessionId);
-    }
+    // ALWAYS clean stale Mongo auth state if cleanStart is true OR if session is unauthenticated
+    const useMongoAuthState = require('./mongoAuthState');
+    try {
+      const { deleteSession } = await useMongoAuthState(sessionId);
+      if (deleteSession) await deleteSession();
+      logger.info(`[initSession] Purged old Mongo auth state for session ${sessionId}`);
+    } catch (cleanErr) {}
+    deleteSessionFolder(sessionId);
 
     logger.info(`[initSession] Initializing Baileys session: ${sessionId}`);
     console.log(`[initSession] Loading auth state from MongoDB...`);
 
-    const useMongoAuthState = require('./mongoAuthState');
     console.log(`[initSession] Calling useMongoAuthState for ${sessionId}...`);
     const { state, saveCreds } = await useMongoAuthState(sessionId);
     console.log(`[initSession] Auth state loaded, fetching Baileys version...`);
@@ -812,6 +810,12 @@ async function stopSession(sessionId) {
   activeSockets.delete(sessionId);
   reconnectAttempts.delete(sessionId);
   deleteSessionFolder(sessionId);
+
+  try {
+    const useMongoAuthState = require('./mongoAuthState');
+    const { deleteSession } = await useMongoAuthState(sessionId);
+    if (deleteSession) await deleteSession();
+  } catch (cleanErr) {}
 
   emitSocketEvent('whatsapp:session_destroyed', { sessionId });
 }
