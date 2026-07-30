@@ -262,6 +262,9 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
 
         emitSocketEvent('whatsapp:ready', { sessionId, phoneNumber });
         reconnectAttempts.set(sessionId, 0);
+
+        // Start background message queue processor
+        startMessageProcessor();
       }
 
       // ─── Disconnected ───────────────────────────────────────────
@@ -582,6 +585,73 @@ function getAllSessionsStatus(whatsappNumbers = []) {
   return statusMap;
 }
 
+// ─── Offline Message Queueing & Processor ─────────────────────────────
+let messageProcessorHandle = null;
+
+async function queueMessage(sessionId, chatId, text) {
+  try {
+    const { MessageQueue } = require('../models');
+    const existing = await MessageQueue.findOne({ chatId, text, status: 'pending' });
+    if (!existing) {
+      await MessageQueue.create({
+        sessionId: sessionId || 'primary',
+        chatId,
+        text,
+        status: 'pending'
+      });
+      logger.info(`[Queue] Message queued for: ${chatId}`);
+    }
+  } catch (error) {
+    logger.error(`[Queue] Error queueing message for ${chatId}: ${error.message}`);
+  }
+}
+
+function startMessageProcessor() {
+  if (messageProcessorHandle) return;
+
+  logger.info('[Queue] Starting offline message processor interval (5s check)...');
+
+  messageProcessorHandle = setInterval(async () => {
+    try {
+      if (activeSockets.size === 0) return;
+
+      const { MessageQueue } = require('../models');
+      const pending = await MessageQueue.find({ status: 'pending' }).limit(20);
+
+      if (pending.length > 0) {
+        logger.info(`[Queue] Processing ${pending.length} pending message(s)...`);
+
+        for (const msgItem of pending) {
+          try {
+            await sendMessage(msgItem.sessionId || 'primary', msgItem.chatId, msgItem.text);
+            await MessageQueue.updateOne(
+              { _id: msgItem._id },
+              { status: 'sent', sentAt: new Date() }
+            );
+            logger.info(`[Queue] ✓ Sent queued message to: ${msgItem.chatId}`);
+          } catch (error) {
+            msgItem.attempts = (msgItem.attempts || 0) + 1;
+            if (msgItem.attempts >= (msgItem.maxAttempts || 5)) {
+              await MessageQueue.updateOne(
+                { _id: msgItem._id },
+                { status: 'failed', attempts: msgItem.attempts, error: error.message }
+              );
+              logger.error(`[Queue] ✗ Max attempts reached for ${msgItem.chatId}: ${error.message}`);
+            } else {
+              await MessageQueue.updateOne(
+                { _id: msgItem._id },
+                { attempts: msgItem.attempts, error: error.message }
+              );
+            }
+          }
+        }
+      }
+    } catch (error) {
+      logger.error(`[Queue] Processor error: ${error.message}`);
+    }
+  }, 5000);
+}
+
 // ─── Message Sending ─────────────────────────────────────────────────
 
 async function sendMessage(sessionId, toPhone, text) {
@@ -612,7 +682,9 @@ async function sendMessage(sessionId, toPhone, text) {
   }
 
   if (!entry?.sock) {
-    throw new Error(`WhatsApp Session '${sessionId}' is not connected. Connect a WhatsApp number first.`);
+    logger.warn(`[sendMessage] Session '${sessionId}' is not ready. Queueing message for: ${toPhone}`);
+    await queueMessage(sessionId, toPhone, text);
+    return false;
   }
 
   const sock = entry.sock;
@@ -632,7 +704,12 @@ async function sendMessage(sessionId, toPhone, text) {
     try {
       await sock.sendMessage(jid, { text });
       logger.info(`Message sent successfully to ${jid}`);
-      return;
+      // Clear pending queue items for this recipient
+      try {
+        const { MessageQueue } = require('../models');
+        await MessageQueue.deleteMany({ chatId: toPhone, status: 'pending' });
+      } catch (qErr) {}
+      return true;
     } catch (error) {
       lastError = error;
       logger.warn(`Send attempt ${attempt + 1} failed to ${jid}: ${error.message}`);
@@ -640,7 +717,9 @@ async function sendMessage(sessionId, toPhone, text) {
     }
   }
 
-  throw new Error(`Failed to deliver message to ${toPhone} after 2 attempts: ${lastError.message}`);
+  logger.error(`Failed to deliver message to ${toPhone} after 2 attempts. Queueing message.`);
+  await queueMessage(sessionId, toPhone, text);
+  return false;
 }
 
 // ─── Session Teardown ────────────────────────────────────────────────
