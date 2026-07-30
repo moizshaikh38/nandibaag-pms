@@ -7,6 +7,27 @@ const logger = require('../config/logger');
 const router = express.Router();
 
 /**
+ * GET /api/whatsapp/status
+ * Returns current connection status
+ */
+router.get('/status', verifyToken, async (req, res, next) => {
+  try {
+    const settings = await Settings.findOne();
+    const whatsappNumbers = settings?.whatsappNumbers || [];
+    const statusMap = getAllSessionsStatus(whatsappNumbers);
+    const isAnyConnected = Object.values(statusMap).includes('connected');
+    
+    res.json({
+      success: true,
+      status: isAnyConnected ? 'connected' : 'disconnected',
+      sessions: statusMap
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * GET /api/whatsapp/sessions
  * Returns status of all WhatsApp sessions
  */

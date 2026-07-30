@@ -56,9 +56,14 @@ function extractBookingDetails(text, today = new Date()) {
     if (day >= 1 && day <= 31 && month >= 0 && month <= 11) {
       targetDate = new Date(year, month, day);
     }
-  } else if (lower.includes('tomorrow') || lower.includes('kal')) {
+  } else if (lower.includes('tomorrow') || lower.includes('kal') || lower.includes('udya')) {
     targetDate = new Date(today);
     targetDate.setDate(targetDate.getDate() + 1);
+  } else if (lower.includes('this weekend') || lower.includes('next weekend') || lower.includes('weekend')) {
+    targetDate = new Date(today);
+    const currentDay = targetDate.getDay();
+    const daysUntilSaturday = (6 - currentDay + 7) % 7 || 7;
+    targetDate.setDate(targetDate.getDate() + daysUntilSaturday);
   }
 
   if (targetDate && !isNaN(targetDate.getTime())) {
@@ -67,7 +72,7 @@ function extractBookingDetails(text, today = new Date()) {
 
   const adultMatch = lower.match(/(\d+)\s*(?:adult|adults|adlt|bade)/i);
   const kidMatch = lower.match(/(\d+)\s*(?:kid|kids|child|children|bache|bhaache)/i);
-  const totalGuestMatch = lower.match(/(\d+)\s*(?:guest|guests|people|person|log|members|pax)/i);
+  const totalGuestMatch = lower.match(/(\d+)\s*(?:guest|guests|people|person|log|members|pax|janan|janansathi)/i);
 
   if (adultMatch) {
     result.adults = parseInt(adultMatch[1], 10);
@@ -449,15 +454,30 @@ async function handleMessage(sessionId, msg) {
     } catch (aiError) {
       logger.error(`AI generation failed for ${customerPhone}: ${aiError.message}`);
       
-      // Stop typing state presence on error
+      const fallbackReply = `Namaste! 🌿 Main Nandibaag Resort Assistant hun. Date aur total guests batayein, main abhi availability check karke batata hun! Contact: 9257657665 📞`;
+      
+      chat.messages.push({
+        sender: 'bot',
+        text: fallbackReply,
+        timestamp: new Date(),
+        messageType: 'text'
+      });
+      await chat.save();
+
+      try {
+        await whatsappService.sendMessage(sessionId, customerPhone, fallbackReply);
+      } catch (sendErr) {
+        logger.error(`Failed to send fallback message to ${customerPhone}: ${sendErr.message}`);
+      }
+
       if (sock) {
         try {
           await sock.sendPresenceUpdate('paused', msg.key.remoteJid);
         } catch (e) {}
       }
 
-      await chat.save();
-      
+      emitRealtimeUpdate(fallbackReply, 'bot');
+
       const { emitAIFailureAlert } = require('./leadScoring');
       emitAIFailureAlert(chat._id, customerPhone, aiError.message);
     }
