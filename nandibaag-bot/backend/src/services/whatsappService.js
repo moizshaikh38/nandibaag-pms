@@ -140,9 +140,11 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
   }
 
   connectingSessions.add(sessionId);
+  console.log(`[initSession] Added ${sessionId} to connectingSessions`);
 
   try {
     if (cleanStart) {
+      console.log(`[initSession] Clean start requested for ${sessionId}`);
       const useMongoAuthState = require('./mongoAuthState');
       try {
         const { deleteSession } = await useMongoAuthState(sessionId);
@@ -152,10 +154,14 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
     }
 
     logger.info(`[initSession] Initializing Baileys session: ${sessionId}`);
+    console.log(`[initSession] Loading auth state from MongoDB...`);
 
     const useMongoAuthState = require('./mongoAuthState');
+    console.log(`[initSession] Calling useMongoAuthState for ${sessionId}...`);
     const { state, saveCreds } = await useMongoAuthState(sessionId);
+    console.log(`[initSession] Auth state loaded, fetching Baileys version...`);
     const { version } = await fetchLatestBaileysVersion();
+    console.log(`[initSession] Baileys version: ${version}`);
 
     // Assign a unique ID to this specific socket instance
     const mySocketId = ++socketIdCounter;
@@ -167,7 +173,7 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
         keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
       },
       logger: pino({ level: 'silent' }),
-      printQRInTerminal: false,
+      printQRInTerminal: true, // Enable terminal QR for debugging
       browser: ['Nandibaag Resort', 'Chrome', '120.0.0'],
       keepAliveIntervalMs: 60000, // Increased from 25s to 60s for stability
       connectTimeoutMs: 90000, // Increased from 60s to 90s
@@ -181,6 +187,8 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
       waWebSocketUrl: 'wss://web.whatsapp.com/ws',
       qrMaxRetries: 5,
     });
+    
+    console.log(`[initSession] makeWASocket created for ${sessionId}`);
 
     // Store socket with its unique ID
     activeSockets.set(sessionId, { sock, socketId: mySocketId });
@@ -217,9 +225,11 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
 
       // ─── QR Code ────────────────────────────────────────────────
       if (qr) {
+        console.log(`[initSession] QR Code received for ${sessionId}`);
         try {
           const qrDataUrl = await qrcode.toDataURL(qr);
           logger.info(`QR code generated for session ${sessionId}`);
+          console.log(`[initSession] QR Data URL created, emitting socket event`);
 
           try {
             const { Settings } = require('../models');
