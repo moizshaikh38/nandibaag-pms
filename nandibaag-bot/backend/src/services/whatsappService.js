@@ -276,12 +276,21 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
           return;
         }
 
-        const statusCode = (lastDisconnect?.error)?.output?.statusCode;
-        const reasonMsg = lastDisconnect?.error?.message || 'unknown';
+        const errorObj = lastDisconnect?.error;
+        const statusCode = errorObj?.output?.statusCode || errorObj?.output?.payload?.statusCode;
+        const reasonMsg = errorObj?.message || errorObj?.output?.payload?.message || 'unknown';
+        const errorStack = errorObj?.stack || '';
         const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401 || statusCode === 403;
         const isImmediate = statusCode === DisconnectReason.restartRequired || statusCode === 515;
 
-        logger.warn(`❌ Session ${sessionId} DISCONNECTED. StatusCode: ${statusCode}, Reason: ${reasonMsg}, socketId: #${mySocketId}`);
+        const os = require('os');
+        const freeMemMB = Math.round(os.freemem() / (1024 * 1024));
+        const totalMemMB = Math.round(os.totalmem() / (1024 * 1024));
+
+        logger.warn(`❌ [DISCONNECT DIAGNOSTIC] Timestamp: ${new Date().toISOString()} | Session: '${sessionId}' | SocketId: #${mySocketId} | StatusCode: ${statusCode} | Reason: "${reasonMsg}" | RAM: ${freeMemMB}MB free of ${totalMemMB}MB | LoggedOut: ${isLoggedOut} | Immediate: ${isImmediate}`);
+        if (errorStack) {
+          logger.debug(`[DISCONNECT STACK] ${errorStack}`);
+        }
 
         // Only now remove from activeSockets
         activeSockets.delete(sessionId);
@@ -555,14 +564,30 @@ async function sendMessage(sessionId, toPhone, text) {
   logger.info(`[sendMessage] Active sessions: [${activeKeys.join(', ')}], Requested: '${sessionId}'`);
 
   let entry = activeSockets.get(sessionId);
+
   if (!entry?.sock) {
-    const fallbackKey = activeKeys[0];
-    if (fallbackKey) {
-      logger.warn(`[sendMessage] Session '${sessionId}' not found. Falling back to '${fallbackKey}'.`);
-      entry = activeSockets.get(fallbackKey);
-    } else {
-      throw new Error(`WhatsApp Session '${sessionId}' is not connected. Connect a WhatsApp number first.`);
+    // 1. Fuzzy match by label / number / substring
+    for (const [key, val] of activeSockets.entries()) {
+      if (key === sessionId || key.includes(sessionId) || sessionId.includes(key)) {
+        entry = val;
+        break;
+      }
     }
+  }
+
+  if (!entry?.sock && activeSockets.size > 0) {
+    // 2. Fall back to ANY active connected socket
+    for (const [key, val] of activeSockets.entries()) {
+      if (val?.sock?.user?.id) {
+        entry = val;
+        logger.warn(`[sendMessage] Session '${sessionId}' not found directly. Falling back to active socket key '${key}'.`);
+        break;
+      }
+    }
+  }
+
+  if (!entry?.sock) {
+    throw new Error(`WhatsApp Session '${sessionId}' is not connected. Connect a WhatsApp number first.`);
   }
 
   const sock = entry.sock;
