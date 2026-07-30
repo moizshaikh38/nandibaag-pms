@@ -435,7 +435,7 @@ async function handleMessage(sessionId, msg) {
       // Send reply via WhatsApp
       const tSendStart = Date.now();
       console.log(`[TIMING] [5/6] Sending message back via WhatsApp at ${new Date().toISOString()}`);
-      await whatsappService.sendMessage(sessionId, customerPhone, aiReply);
+      await whatsappService.sendMessage(sessionId, rawJid, aiReply);
       console.log(`[TIMING] [6/6] Sent message back via WhatsApp in ${Date.now() - tSendStart}ms. Total end-to-end processing time: ${Date.now() - tStart}ms.`);
       
       // Stop typing state presence
@@ -471,7 +471,7 @@ async function handleMessage(sessionId, msg) {
       await chat.save();
 
       try {
-        await whatsappService.sendMessage(sessionId, customerPhone, fallbackReply);
+        await whatsappService.sendMessage(sessionId, rawJid, fallbackReply);
       } catch (sendErr) {
         logger.error(`Failed to send fallback message to ${customerPhone}: ${sendErr.message}`);
       }

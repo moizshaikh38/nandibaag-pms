@@ -567,10 +567,10 @@ async function sendMessage(sessionId, toPhone, text) {
 
   const sock = entry.sock;
   let jid;
-  if (toPhone.endsWith('@s.whatsapp.net') || toPhone.endsWith('@g.us')) {
+  if (toPhone.includes('@')) {
     jid = toPhone;
   } else {
-    let digits = toPhone.split('@')[0].replace(/\D/g, '');
+    let digits = toPhone.replace(/\D/g, '');
     if (digits.length === 10) digits = '91' + digits;
     jid = `${digits}@s.whatsapp.net`;
   }
