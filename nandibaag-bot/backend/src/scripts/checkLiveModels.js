@@ -1,3 +1,4 @@
+require('dotenv').config();
 const OpenAI = require('openai');
 
 async function testOpenRouterAndGroq() {

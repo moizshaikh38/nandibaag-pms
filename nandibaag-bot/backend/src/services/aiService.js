@@ -1021,7 +1021,7 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
     }
   } else {
     // ── PRODUCTION FALLBACK TIER CHAIN ───────────────────────────────
-    // OpenRouter: PRIMARY | Groq: SECONDARY
+    // OpenRouter: PRIMARY | Groq: SECONDARY (Verified Live Slugs)
     const TIER_CHAIN = [
       {
         name: 'openrouter_primary_gpt4o',
@@ -1031,25 +1031,18 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
         priority: 1
       },
       {
-        name: 'openrouter_llama_free',
+        name: 'openrouter_llama_70b',
         provider: 'openrouter',
-        model: 'meta-llama/llama-3.3-70b-instruct:free',
+        model: 'meta-llama/llama-3.1-70b-instruct',
         timeout: 8000,
         priority: 2
       },
       {
-        name: 'groq_secondary',
+        name: 'groq_secondary_llama33',
         provider: 'groq',
         model: groqModel || 'llama-3.3-70b-versatile',
         timeout: 8000,
         priority: 3
-      },
-      {
-        name: 'openrouter_claude_tertiary',
-        provider: 'openrouter',
-        model: 'anthropic/claude-3.5-sonnet',
-        timeout: 10000,
-        priority: 4
       }
     ];
 
