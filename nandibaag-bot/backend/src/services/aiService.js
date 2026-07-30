@@ -685,16 +685,7 @@ function detectLanguage(text) {
 
   // 1. Check Devanagari script
   if (/[\u0900-\u097F]/.test(trimmed)) {
-    const devanagariMarathiKeywords = [
-      'आहे', 'आहेत', 'नाही', 'पाहिजे', 'सांगा', 'किती', 'कुठे', 'कधी',
-      'येणार', 'करायचं', 'करायची', 'करू', 'शकतो', 'शकता', 'साठी', 'ला',
-      'मध्ये', 'तारखेला', 'लोकांसाठी', 'झाली'
-    ];
-    let marathiDevScore = 0;
-    for (const kw of devanagariMarathiKeywords) {
-      if (trimmed.includes(kw)) marathiDevScore += 2;
-    }
-    return marathiDevScore > 0 ? 'marathi' : 'hinglish';
+    return 'marathi';
   }
 
   // 2. Check Roman script Marathi
@@ -705,7 +696,9 @@ function detectLanguage(text) {
     /\bshakto\b/i, /\bshakta\b/i, /\bsathi\b/i, /\bmadhye\b/i, /\bbagha\b/i,
     /\byeil\b/i, /\bjavaycha\b/i, /\baamhi\b/i, /\btumhi\b/i, /\btumhala\b/i,
     /\baamchya\b/i, /\btumchya\b/i, /\blokanji\b/i, /\bjanansathi\b/i, /\btarakh\b/i,
-    /\bweekend\s+la\b/i, /\bdates\s+sanga\b/i, /\broom\s+available\s+aahe\b/i
+    /\bweekend\s+la\b/i, /\bdates\s+sanga\b/i, /\broom\s+available\s+aahe\b/i,
+    /\bnamaskar\b/i, /\budya\b/i, /\bkay\b/i, /\bpathva\b/i, /\bdya\b/i, /\bswast\b/i,
+    /\bkasa\b/i, /\bkashi\b/i, /\bjanan\b/i, /\bjanansathi\b/i
   ];
 
   let romanMarathiScore = 0;
@@ -720,8 +713,11 @@ function detectLanguage(text) {
   // 3. Check English vs Hinglish
   const englishPatterns = [
     /\bwhat\b/i, /\bwhen\b/i, /\bwhere\b/i, /\bwhich\b/i, /\bhow\b/i, /\bwhy\b/i,
-    /\bcan\s+you\b/i, /\bwould\s+like\b/i, /\bis\s+there\b/i, /\bprice\s+for\b/i,
-    /\bavailable\s+on\b/i, /\bplease\b/i, /\bthank\s+you\b/i
+    /\bcan\b/i, /\bwould\b/i, /\bis\b/i, /\bare\b/i, /\bdo\b/i, /\bdoes\b/i,
+    /\bplease\b/i, /\bthank\b/i, /\bprice\b/i, /\brates\b/i, /\bavailable\b/i,
+    /\bphotos\b/i, /\blocation\b/i, /\bcheck-in\b/i, /\bcheck-out\b/i, /\bconfirm\b/i,
+    /\bignore\b/i, /\bshow\b/i, /\bgive\b/i, /\bsystem\b/i, /\bprompt\b/i, /\bkey\b/i,
+    /\bmodel\b/i, /\bstore\b/i, /\bhello\b/i, /\bhi\b/i, /\bbook\b/i, /\breservation\b/i
   ];
   let englishScore = 0;
   for (const pat of englishPatterns) {
@@ -733,7 +729,7 @@ function detectLanguage(text) {
     /\bkaun\b/i, /\bkyun\b/i, /\bbhai\b/i, /\bji\b/i, /\baccha\b/i, /\bachha\b/i,
     /\btheek\b/i, /\bthik\b/i, /\bsahi\b/i, /\bchahiye\b/i, /\bbatao\b/i,
     /\bbatayein\b/i, /\bkaro\b/i, /\bkarne\b/i, /\bhun\b/i, /\bhoon\b/i,
-    /\bhoga\b/i, /\bhogi\b/i, /\blog\b/i, /\blogo\b/i, /\bke\s+liye\b/i
+    /\bhoga\b/i, /\bhogi\b/i, /\blog\b/i, /\blogo\b/i, /\bke\s+liye\b/i, /\bbhejo\b/i
   ];
   let hinglishScore = 0;
   for (const pat of hinglishPatterns) {
@@ -1087,43 +1083,66 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
     }
   }
 
-  // ── FINAL FALLBACK: Smart Resort Intent Assistant ────────────────────
+  // ── FINAL FALLBACK: Multilingual Smart Resort Intent Assistant ──────────
   if (!result) {
-    logger.warn(`Using Smart Resort Assistant fallback for message: "${incomingMessage}"`);
+    logger.warn(`Using Smart Resort Assistant fallback for message: "${incomingMessage}" (language: ${languageToUse})`);
 
     const { resortContact1 } = require('../config/env');
-    const defaultBackup = resortContact1 || '9257657665';
-
-    let primaryNumber = resortSettings?.whatsappNumbers
-      ?.find(n => n.isPrimary)?.number;
-
-    if (!primaryNumber || !/^\+?\d+$/.test(primaryNumber)) {
-      const firstValidActive = resortSettings?.whatsappNumbers
-        ?.filter(n => n.isActive && /^\+?\d+$/.test(n.number))
-        ?.map(n => n.number)?.[0];
-      primaryNumber = firstValidActive || defaultBackup;
-    }
+    const primaryNumber = (resortContact1 || '9257657665').replace(/\D/g, '');
 
     const msgLower = (incomingMessage || '').toLowerCase();
 
-    if (systemNotes && systemNotes.includes('Availability confirmed')) {
-      const dateMatch = incomingMessage.match(/\d{1,2}\s*(?:st|nd|rd|th)?\s*[a-z]+/i) || systemNotes.match(/\d{4}-\d{2}-\d{2}/);
-      const dateStr = dateMatch ? dateMatch[0] : '28 August';
-      result = `Ji bilkul! ${dateStr} ke liye availability confirmed hai. Package me AC Cottage Stay + Swimming Pool + 4 Unlimited Meals included hain. Booking proceed karne ke liye details confirm karein! 🌿 Room photos: https://nandibaag.com/rooms`;
-    } else if (msgLower.includes('couple') || msgLower.includes('pair') || msgLower.includes('husband') || msgLower.includes('wife')) {
-      result = `Namaste! Nandibaag Resort me Deluxe Private Couple Cottages available hain. Package me AC Cottage Stay + Swimming Pool + Unlimited Meals (Breakfast, Lunch, Evening High Tea & Dinner) included hota hai.\n\nAap kis Check-in Date par visit karna chahte hain? Room photos: https://nandibaag.com/rooms 🌿`;
-    } else if (msgLower.includes('rate') || msgLower.includes('price') || msgLower.includes('cost') || msgLower.includes('kitna') || msgLower.includes('charge')) {
-      result = `Nandibaag Resort Packages:\n1. 🏡 Couple Stay: ₹4,000 - ₹5,500/night (Private AC Cottage + All Meals)\n2. 👨‍👩‍👧‍👦 Group Stay: ₹1,500/person (Cottage + All Meals)\n3. 🌊 Day Picnic: ₹900 - ₹1,100/person (9 AM to 6 PM with Meals & Pool)\n\nAapko kis package ke liye availability check karni hai? Date aur total guests batayein! 🗓️`;
-    } else if (msgLower.includes('location') || msgLower.includes('address') || msgLower.includes('kaha') || msgLower.includes('where')) {
-      result = `📍 Nandibaag Resort Location:\nVaijnath Tata Power Road, Karjat, Maharashtra 410201 (Karjat Station 14km, Mumbai/Pune ~2 hrs).\n\nGoogle Maps location link: https://maps.app.goo.gl/h6PB4y4G4oSWyFxdA 📍 Call: ${primaryNumber} 📞`;
+    // Check confirmation request -> NEVER confirm booking!
+    const isConfirming = /confirm|book\s+kar\s+do|pakka|book\s+it|payment\s+kar|reservation|zali/i.test(msgLower);
+
+    if (isConfirming) {
+      if (languageToUse === 'roman_marathi') {
+        result = `Ho ji 👍 Booking confirm karayla staff sobat bolava lagel 👇 ${primaryNumber}`;
+      } else if (languageToUse === 'marathi') {
+        result = `हो जी 👍 बुकिंग कन्फर्म करण्यासाठी स्टाफ सोबत बोलून घ्या 👇 ${primaryNumber}`;
+      } else if (languageToUse === 'english') {
+        result = `To confirm your booking, please connect with our staff 👇 ${primaryNumber}`;
+      } else {
+        result = `Booking confirm karne ke liye staff se baat karein 👇 ${primaryNumber}`;
+      }
+    } else if (msgLower.includes('contact') || msgLower.includes('phone') || msgLower.includes('number') || msgLower.includes('call')) {
+      result = `Resort contact number: ${primaryNumber} 📞`;
+    } else if (msgLower.includes('location') || msgLower.includes('address') || msgLower.includes('kaha') || msgLower.includes('where') || msgLower.includes('kuth')) {
+      if (languageToUse === 'roman_marathi') {
+        result = `📍 Location: Vaijnath Tata Power Road, Karjat (Mumbai/Pune ~2 hrs). Google Maps link: https://maps.app.goo.gl/h6PB4y4G4oSWyFxdA 📍`;
+      } else if (languageToUse === 'marathi') {
+        result = `📍 लोकेशन: वैजनाथ टाटा पॉवर रोड, कर्जत. Google Maps लिंक: https://maps.app.goo.gl/h6PB4y4G4oSWyFxdA 📍`;
+      } else {
+        result = `📍 Location: Vaijnath Tata Power Road, Karjat, Maharashtra. Google Maps link: https://maps.app.goo.gl/h6PB4y4G4oSWyFxdA 📍`;
+      }
     } else if (msgLower.includes('photo') || msgLower.includes('pic') || msgLower.includes('image') || msgLower.includes('gallery')) {
-      result = `Nandibaag Resort ke AC rooms, cottages aur swimming pool ke photos humari gallery link par dekhein: https://nandibaag.com/rooms 📷 Videos ke liye Instagram: https://www.instagram.com/nandibaagresort/?hl=en 🎥`;
-    } else if (msgLower.includes('availab') || msgLower.includes('date') || msgLower.includes('book') || msgLower.includes('room') || msgLower.includes('cottage')) {
-      result = `Live availability check karne ke liye:\n1. Check-in Date (e.g. 15th August)\n2. Total Guests (Adults + Kids)\n\nBatayein, main abhi cottage availability calculate karke batata hun! Room photos: https://nandibaag.com/rooms 🌿`;
-    } else if (/^(hi|hello|hey|namaste|hlo|hii|namaskar)/i.test(msgLower.trim())) {
-      result = `Namaste! Welcome to Nandibaag Resort 🌿\n\nAapko Couple Stay, Family Group Stay ya Day Picnic kis type ki booking ke baare me enquiry karni hai?`;
+      if (languageToUse === 'roman_marathi') {
+        result = `Nandibaag Resort ke AC rooms ani cottages che photos gallery madhe baghu shakta: https://nandibaag.com/rooms 📷`;
+      } else if (languageToUse === 'marathi') {
+        result = `नंदीबाग रिसॉर्टच्या कॉटेजचे फोटो गॅलरीमध्ये पाहू शकता: https://nandibaag.com/rooms 📷`;
+      } else {
+        result = `Nandibaag Resort ke AC rooms aur cottages ke photos gallery me dekhein: https://nandibaag.com/rooms 📷`;
+      }
+    } else if (msgLower.includes('rate') || msgLower.includes('price') || msgLower.includes('cost') || msgLower.includes('kitn') || msgLower.includes('charge') || msgLower.includes('kay')) {
+      if (languageToUse === 'roman_marathi') {
+        result = `Nandibaag Resort Rates:\n1. 🏡 Couple Stay: ₹2,500 (Weekday) / ₹3,500 (Weekend)\n2. 👨‍👩‍👧‍👦 Group Stay: ₹2,000 (Weekday) / ₹2,400 (Weekend) per person\n3. 🌊 Day Picnic: ₹1,200/person (12 PM - 8 PM)\n\nDates sanga, exact availability ani total sangto! 🗓️`;
+      } else if (languageToUse === 'marathi') {
+        result = `नंदीबाग रिसॉर्ट दर:\n1. 🏡 कपल्स: ₹२,५०० (Weekdays) / ₹३,५०० (Weekends)\n2. 👨‍👩‍👧‍👦 फॅमिली: ₹२,००० (Weekdays) / ₹२,४०० (Weekends) प्रति व्यक्ती\n3. 🌊 पिकनिक: ₹१,२००/व्यक्ती (12 PM - 8 PM)\n\nतारखा सांगा, availability सांगतो! 🗓️`;
+      } else if (languageToUse === 'english') {
+        result = `Nandibaag Resort Rates:\n1. 🏡 Couple Stay: ₹2,500 (Weekday) / ₹3,500 (Weekend)\n2. 👨‍👩‍👧‍👦 Group Stay: ₹2,000 (Weekday) / ₹2,400 (Weekend) per person\n3. 🌊 Day Picnic: ₹1,200/person (12 PM - 8 PM)\n\nPlease share your dates for availability! 🗓️`;
+      } else {
+        result = `Nandibaag Resort Packages:\n1. 🏡 Couple Stay: ₹2,500 (Weekday) / ₹3,500 (Weekend)\n2. 👨‍👩‍👧‍👦 Group Stay: ₹2,000 (Weekday) / ₹2,400 (Weekend) per person\n3. 🌊 Day Picnic: ₹1,200/person (12 PM - 8 PM)\n\nCheck-in date aur total guests batayein! 🗓️`;
+      }
     } else {
-      result = `Ji bilkul! Iske baare me jankari aur cottage availability ke liye date aur total guests batayein, ya humari team se baat karein: ${primaryNumber} 📞`;
+      if (languageToUse === 'roman_marathi') {
+        result = `Namaste! 🌿 Nandibaag Resort madhe aaple swagat aahe. Couple stay, family group stay ki day picnic — konta pahije?`;
+      } else if (languageToUse === 'marathi') {
+        result = `नमस्ते! 🌿 नंदीबाग रिसॉर्टमध्ये आपले स्वागत आहे. कपल स्टे, फॅमिली स्टे की वन डे पिकनिक — कोणतं बुकिंग हवं आहे?`;
+      } else if (languageToUse === 'english') {
+        result = `Namaste! 🌿 Welcome to Nandibaag Resort. Are you planning for a Couple Stay, Family Group Stay, or Day Picnic?`;
+      } else {
+        result = `Namaste! 🌿 Welcome to Nandibaag Resort. Aap Couple Stay, Family Group Stay ya Day Picnic kis package ke baare mein enquire karna chahte hain?`;
+      }
     }
   }
 
