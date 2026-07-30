@@ -164,7 +164,8 @@ async function handleMessage(sessionId, msg) {
     logger.info(`Processing message from ${customerPhone}: ${messageText.substring(0, 50)}...`);
 
     // Trigger WhatsApp typing state via Baileys presence update
-    const sock = whatsappService.activeSockets.get(sessionId);
+    const sockEntry = whatsappService.activeSockets.get(sessionId);
+    const sock = sockEntry?.sock || null;
     if (sock) {
       try {
         await sock.sendPresenceUpdate('composing', msg.key.remoteJid);
