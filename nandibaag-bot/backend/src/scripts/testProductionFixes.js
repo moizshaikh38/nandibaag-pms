@@ -22,29 +22,24 @@ function runTests() {
     }
   }
 
-  // ── TEST 1: Friday is Weekday, Weekend is Sat+Sun ──
-  const fri = new Date('2026-08-01T00:00:00'); // Fri (Wait: 2026-08-01 is Saturday! Let's get real dates)
-  // In 2026:
-  // Aug 1 2026 = Saturday (6)
-  // Aug 2 2026 = Sunday (0)
-  // Aug 7 2026 = Friday (5)
-  // Aug 8 2026 = Saturday (6)
+  // ── TEST 1: Friday, Saturday, Sunday ARE Weekend ──
   const friDate = new Date(2026, 7, 7); // Friday Aug 7 2026 (day 5)
   const satDate = new Date(2026, 7, 8); // Saturday Aug 8 2026 (day 6)
   const sunDate = new Date(2026, 7, 9); // Sunday Aug 9 2026 (day 0)
+  const thuDate = new Date(2026, 7, 6); // Thursday Aug 6 2026 (day 4)
 
-  assert(!isWeekend(friDate), 'TEST 1a: Friday (Aug 7) is NOT a weekend', `isWeekend(Fri) = ${isWeekend(friDate)}`);
+  assert(isWeekend(friDate), 'TEST 1a: Friday (Aug 7) IS a weekend', `isWeekend(Fri) = ${isWeekend(friDate)}`);
   assert(isWeekend(satDate), 'TEST 1b: Saturday (Aug 8) IS a weekend', `isWeekend(Sat) = ${isWeekend(satDate)}`);
   assert(isWeekend(sunDate), 'TEST 1c: Sunday (Aug 9) IS a weekend', `isWeekend(Sun) = ${isWeekend(sunDate)}`);
+  assert(!isWeekend(thuDate), 'TEST 1d: Thursday (Aug 6) is NOT a weekend', `isWeekend(Thu) = ${isWeekend(thuDate)}`);
 
-  // ── TEST 2: Pricing Calculation (1 Friday + 1 Saturday + 1 Sunday = 1 Weekday + 2 Weekend nights) ──
+  // ── TEST 2: Group Pricing Calculation (Fri, Sat, Sun = 3 Weekend nights @ 3000/person/night for 5 guests) ──
   const pricing = calculatePricing('2026-08-07', '2026-08-10', 5); // 5 guests, Fri Aug 7 to Mon Aug 10 (3 nights)
-  assert(pricing.raw.weekdayNights === 1, 'TEST 2a: Fri-Mon pricing has 1 weekday night', `weekdayNights = ${pricing.raw.weekdayNights}`);
-  assert(pricing.raw.weekendNights === 2, 'TEST 2b: Fri-Mon pricing has 2 weekend nights', `weekendNights = ${pricing.raw.weekendNights}`);
-  assert(pricing.raw.weekdayTotal === 10000, 'TEST 2c: Weekday total = 1 night * 5 guests * 2000 = 10,000', `weekdayTotal = ${pricing.raw.weekdayTotal}`);
-  assert(pricing.raw.weekendTotal === 24000, 'TEST 2d: Weekend total = 2 nights * 5 guests * 2400 = 24,000', `weekendTotal = ${pricing.raw.weekendTotal}`);
-  assert(pricing.raw.grandTotal === 34000, 'TEST 2e: Grand total = 34,000', `grandTotal = ${pricing.raw.grandTotal}`);
-  assert(pricing.formatted.includes('BOOKING SUMMARY'), 'TEST 2f: Formatted string contains BOOKING SUMMARY', pricing.formatted);
+  assert(pricing.raw.weekdayNights === 0, 'TEST 2a: Fri-Mon pricing has 0 weekday nights', `weekdayNights = ${pricing.raw.weekdayNights}`);
+  assert(pricing.raw.weekendNights === 3, 'TEST 2b: Fri-Mon pricing has 3 weekend nights', `weekendNights = ${pricing.raw.weekendNights}`);
+  assert(pricing.raw.weekendTotal === 45000, 'TEST 2c: Weekend total = 3 nights * 5 guests * 3000 = 45,000', `weekendTotal = ${pricing.raw.weekendTotal}`);
+  assert(pricing.raw.grandTotal === 45000, 'TEST 2d: Grand total = 45,000', `grandTotal = ${pricing.raw.grandTotal}`);
+  assert(pricing.formatted.includes('BOOKING SUMMARY'), 'TEST 2e: Formatted string contains BOOKING SUMMARY', pricing.formatted);
 
   // ── TEST 3: Language Detection ──
   assert(detectLanguage('room available aahe ka?') === 'roman_marathi', 'TEST 3a: "room available aahe ka?" -> roman_marathi');

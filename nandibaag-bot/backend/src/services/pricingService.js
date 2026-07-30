@@ -2,12 +2,20 @@
  * Pricing Service for Nandibaag Resort
  * Calculates authoritative pricing for bookings and returns both raw machine-readable data
  * and a formatted human-readable WhatsApp summary block.
+ * 
+ * PRICING RULES (as of July 2026):
+ * - WEEKDAY = Mon, Tue, Wed, Thu (Mon-Thu)
+ * - WEEKEND = Fri, Sat, Sun (Fri-Sun)  ← Friday IS a weekend
+ * 
+ * GROUP (3+ people): Weekday ₹2,000/person | Weekend ₹3,000/person
+ * COUPLE (2 people): Weekday ₹5,000/couple | Weekend ₹6,500/couple
+ * DAY PICNIC: ₹1,200/person (Breakfast-Dinner) | ₹1,000/person (Breakfast-Tea)
+ * KIDS: Below 5 FREE | 6-10 ₹1,000 | Above 10 adult rate
  */
 
 /**
  * Checks if a given date is a Weekend.
- * Weekend is strictly Saturday (6) and Sunday (0).
- * Friday (5) is ALWAYS a Weekday.
+ * Weekend = Friday (5), Saturday (6), Sunday (0).
  * 
  * @param {Date|string|number} dateInput 
  * @returns {boolean}
@@ -15,7 +23,8 @@
 function isWeekend(dateInput) {
   const date = new Date(dateInput);
   const day = date.getDay();
-  return day === 0 || day === 6; // Sunday = 0, Saturday = 6
+  // Sunday = 0, Friday = 5, Saturday = 6
+  return day === 0 || day === 5 || day === 6;
 }
 
 /**
@@ -37,19 +46,28 @@ function formatDateShort(dateInput) {
 }
 
 /**
+ * Get day label for a date (e.g. "Friday" or "WEEKEND"/"WEEKDAY")
+ */
+function getDayName(dateInput) {
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const d = new Date(dateInput);
+  return dayNames[d.getDay()];
+}
+
+/**
  * Calculates pricing for a stay.
  * 
  * Rates:
  * 1. COUPLE STAY (guestCount <= 2 or stayType === 'couple'):
- *    - Weekdays (Mon-Fri): ₹2,500/night
- *    - Weekends (Sat-Sun): ₹3,500/night
+ *    - Weekdays (Mon-Thu): ₹5,000/couple/night
+ *    - Weekends (Fri-Sun): ₹6,500/couple/night
  * 
  * 2. FAMILY / GROUP STAY (guestCount >= 3 or stayType === 'group'):
- *    - Weekdays (Mon-Fri): ₹2,000/person/night
- *    - Weekends (Sat-Sun): ₹2,400/person/night
+ *    - Weekdays (Mon-Thu): ₹2,000/person/night
+ *    - Weekends (Fri-Sun): ₹3,000/person/night
  * 
  * 3. ONE DAY PICNIC (stayType === 'picnic'):
- *    - ₹1,200/person (12 PM - 8 PM, no overnight room stay)
+ *    - ₹1,200/person (12 PM - 8 PM, Breakfast to Dinner)
  * 
  * @param {Date|string} checkInInput - Check-in date
  * @param {Date|string} checkOutInput - Check-out date
@@ -75,6 +93,7 @@ function calculatePricing(checkInInput, checkOutInput, guestCount = 2, stayTypeH
     const ratePerPerson = 1200;
     const grandTotal = numGuests * ratePerPerson;
     const dateStr = formatDateShort(checkInDate) || 'Selected Date';
+    const dayName = getDayName(checkInDate);
     
     return {
       raw: {
@@ -90,15 +109,18 @@ function calculatePricing(checkInInput, checkOutInput, guestCount = 2, stayTypeH
         grandTotal
       },
       formatted: `✓ BOOKING SUMMARY
-━━━━━━━━━━━━━━━━━━
-📅 Date: ${dateStr} (12 PM - 8 PM Picnic)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📅 Date: ${dateStr} (${dayName}) — Day Picnic (12 PM - 8 PM)
 👥 Guests: ${numGuests} ${numGuests === 1 ? 'person' : 'people'}
 
 PRICING BREAKDOWN:
-• One Day Picnic: ${numGuests} @ ₹${ratePerPerson.toLocaleString('en-IN')}/person = ₹${grandTotal.toLocaleString('en-IN')}
-━━━━━━━━━━━━━━━━━━
+- Day Picnic: ${numGuests} × ₹${ratePerPerson.toLocaleString('en-IN')}/person = ₹${grandTotal.toLocaleString('en-IN')}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💰 TOTAL: ₹${grandTotal.toLocaleString('en-IN')}
-✓ All meals & activities included`
+(Final price, NO extra charges)
+
+✅ Includes: All meals + activities`
     };
   }
 
@@ -108,9 +130,10 @@ PRICING BREAKDOWN:
     checkOutDate.setDate(checkOutDate.getDate() + 1);
   }
 
-  // Count weekday nights vs weekend nights
+  // Count weekday nights vs weekend nights and build per-night breakdown
   let weekdayNights = 0;
   let weekendNights = 0;
+  const nightBreakdown = [];
   
   const cur = new Date(checkInDate);
   cur.setHours(0, 0, 0, 0);
@@ -118,10 +141,16 @@ PRICING BREAKDOWN:
   end.setHours(0, 0, 0, 0);
 
   while (cur < end) {
-    if (isWeekend(cur)) {
+    const dayName = getDayName(cur);
+    const dateStr = formatDateShort(cur);
+    const weekend = isWeekend(cur);
+    
+    if (weekend) {
       weekendNights++;
+      nightBreakdown.push({ dateStr, dayName, type: 'WEEKEND' });
     } else {
       weekdayNights++;
+      nightBreakdown.push({ dateStr, dayName, type: 'WEEKDAY' });
     }
     cur.setDate(cur.getDate() + 1);
   }
@@ -134,14 +163,14 @@ PRICING BREAKDOWN:
   let weekendTotal = 0;
 
   if (stayType === 'couple') {
-    weekdayRate = 2500; // per couple/night
-    weekendRate = 3500; // per couple/night
+    weekdayRate = 5000;  // per couple/night
+    weekendRate = 6500;  // per couple/night
     weekdayTotal = weekdayNights * weekdayRate;
     weekendTotal = weekendNights * weekendRate;
   } else {
     // group
-    weekdayRate = 2000; // per person/night
-    weekendRate = 2400; // per person/night
+    weekdayRate = 2000;  // per person/night
+    weekendRate = 3000;  // per person/night
     weekdayTotal = weekdayNights * numGuests * weekdayRate;
     weekendTotal = weekendNights * numGuests * weekendRate;
   }
@@ -150,34 +179,39 @@ PRICING BREAKDOWN:
 
   const inStr = formatDateShort(checkInDate);
   const outStr = formatDateShort(checkOutDate);
-  const dateRangeFormatted = `${inStr}-${outStr} (${totalNights} ${totalNights === 1 ? 'night' : 'nights'})`;
+  const inDayName = getDayName(checkInDate);
+  const outDayName = getDayName(checkOutDate);
 
-  const breakdownLines = [];
-  if (weekdayNights > 0) {
+  // Build per-night breakdown lines
+  const breakdownLines = nightBreakdown.map(n => {
     if (stayType === 'couple') {
-      breakdownLines.push(`• Weekdays (Mon-Fri): ${weekdayNights} ${weekdayNights === 1 ? 'night' : 'nights'} @ ₹${weekdayRate.toLocaleString('en-IN')}/night = ₹${weekdayTotal.toLocaleString('en-IN')}`);
+      const rate = n.type === 'WEEKEND' ? weekendRate : weekdayRate;
+      return `- ${n.dayName} (${n.dateStr}) - ${n.type}: ₹${rate.toLocaleString('en-IN')}`;
     } else {
-      breakdownLines.push(`• Weekdays (Mon-Fri): ${weekdayNights} ${weekdayNights === 1 ? 'night' : 'nights'} @ ₹${weekdayRate.toLocaleString('en-IN')}/night = ₹${weekdayTotal.toLocaleString('en-IN')}`);
+      const rate = n.type === 'WEEKEND' ? weekendRate : weekdayRate;
+      const nightTotal = numGuests * rate;
+      return `- ${n.dayName} (${n.dateStr}) - ${n.type}: ${numGuests}×₹${rate.toLocaleString('en-IN')} = ₹${nightTotal.toLocaleString('en-IN')}`;
     }
-  }
-  if (weekendNights > 0) {
-    if (stayType === 'couple') {
-      breakdownLines.push(`• Weekends (Sat-Sun): ${weekendNights} ${weekendNights === 1 ? 'night' : 'nights'} @ ₹${weekendRate.toLocaleString('en-IN')}/night = ₹${weekendTotal.toLocaleString('en-IN')}`);
-    } else {
-      breakdownLines.push(`• Weekends (Sat-Sun): ${weekendNights} ${weekendNights === 1 ? 'night' : 'nights'} @ ₹${weekendRate.toLocaleString('en-IN')}/night = ₹${weekendTotal.toLocaleString('en-IN')}`);
-    }
-  }
+  });
+
+  const roomType = stayType === 'couple' ? 'Couple Room' : 'Group Room';
 
   const formatted = `✓ BOOKING SUMMARY
-━━━━━━━━━━━━━━━━━━
-📅 Dates: ${dateRangeFormatted}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📅 Check-in: ${inStr} (${inDayName})
+📅 Check-out: ${outStr} (${outDayName})
 👥 Guests: ${numGuests} ${numGuests === 1 ? 'person' : 'people'}
+🛏️ Room Type: ${roomType}
 
 PRICING BREAKDOWN:
 ${breakdownLines.join('\n')}
-━━━━━━━━━━━━━━━━━━
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💰 TOTAL: ₹${grandTotal.toLocaleString('en-IN')}
-✓ All meals & amenities included`;
+(Final price, NO extra charges)
+
+✅ Includes: All meals + activities
+✅ Alcohol: Bring your own`;
 
   return {
     raw: {
