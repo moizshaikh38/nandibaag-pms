@@ -44,6 +44,9 @@ const messageQueueLocks = new Map();
 // sessionId -> true   (guard against duplicate initSession calls)
 const connectingSessions = new Set();
 
+// sessionId -> reconnect timeout handle
+const reconnectTimers = new Map();
+
 // Monotonically increasing counter to tag each socket uniquely
 let socketIdCounter = 0;
 
@@ -133,10 +136,20 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
       logger.warn(`[initSession] Session ${sessionId} is already connected. Reusing.`);
       return { sock: entry.sock };
     }
-    // Socket exists but isn't authenticated — close the zombie and replace
-    logger.info(`[initSession] Session ${sessionId} exists but is not authenticated. Replacing.`);
+    if (connectingSessions.has(sessionId)) {
+      logger.warn(`[initSession] Session ${sessionId} already has a socket connecting. Reusing.`);
+      return { sock: entry?.sock || null };
+    }
+    // Socket exists but is no longer actively initializing — close the zombie and replace
+    logger.info(`[initSession] Session ${sessionId} exists but is not authenticated or initializing. Replacing.`);
     safeEndOldSocket(entry?.sock);
     activeSockets.delete(sessionId);
+  }
+
+  const pendingReconnect = reconnectTimers.get(sessionId);
+  if (pendingReconnect) {
+    clearTimeout(pendingReconnect);
+    reconnectTimers.delete(sessionId);
   }
 
   connectingSessions.add(sessionId);
@@ -177,11 +190,11 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
       logger: pino({ level: 'silent' }),
       printQRInTerminal: false,
       browser: ['Nandibaag Resort', 'Chrome', '120.0.0'],
-      keepAliveIntervalMs: 60000, // Increased from 25s to 60s for stability
-      connectTimeoutMs: 90000, // Increased from 60s to 90s
-      defaultQueryTimeoutMs: 90000, // Increased from 60s to 90s
+      keepAliveIntervalMs: 30000,
+      connectTimeoutMs: 60000,
+      defaultQueryTimeoutMs: 60000,
       emitOwnEvents: false,
-      markOnlineOnConnect: true,
+      markOnlineOnConnect: false,
       syncFullHistory: false,
       retryRequestDelayMs: 3000, // Increased from 2s to 3s
       generateHighQualityLinkPreview: false,
@@ -423,6 +436,7 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
 
     return { sock };
   } catch (error) {
+    connectingSessions.delete(sessionId);
     logger.error(`[initSession] Failed to initialize session ${sessionId}: ${error.message}`);
     emitSocketEvent('whatsapp:init_failed', { sessionId, message: error.message });
 
@@ -442,9 +456,6 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
     }
 
     throw error;
-  } finally {
-    // ALWAYS clear the connecting guard, even on error
-    connectingSessions.delete(sessionId);
   }
 }
 
@@ -482,6 +493,11 @@ async function autoReconnect(sessionId, isImmediate = false) {
     return;
   }
 
+  if (reconnectTimers.has(sessionId)) {
+    logger.warn(`[autoReconnect] Skipped for ${sessionId}: reconnect already scheduled.`);
+    return;
+  }
+
   // If session was already reconnected by someone else, skip
   const existing = activeSockets.get(sessionId);
   if (existing?.sock?.user?.id) {
@@ -497,23 +513,31 @@ async function autoReconnect(sessionId, isImmediate = false) {
   reconnectAttempts.set(sessionId, attempts + 1);
 
   logger.info(`[autoReconnect] Reconnecting ${sessionId} in ${delay / 1000}s (attempt ${attempts + 1})`);
-  await new Promise(resolve => setTimeout(resolve, delay));
+  const timer = setTimeout(async () => {
+    reconnectTimers.delete(sessionId);
 
-  // Re-check after waiting — maybe someone else already reconnected
-  const recheck = activeSockets.get(sessionId);
-  if (recheck?.sock?.user?.id) {
-    logger.info(`[autoReconnect] Session ${sessionId} was reconnected while waiting. Done.`);
-    reconnectAttempts.set(sessionId, 0);
-    return;
-  }
+    // Re-check after waiting — maybe someone else already reconnected
+    const recheck = activeSockets.get(sessionId);
+    if (recheck?.sock?.user?.id) {
+      logger.info(`[autoReconnect] Session ${sessionId} was reconnected while waiting. Done.`);
+      reconnectAttempts.set(sessionId, 0);
+      return;
+    }
 
-  try {
-    await initSession(sessionId);
-  } catch (error) {
-    logger.error(`[autoReconnect] Attempt ${attempts + 1} failed for ${sessionId}: ${error.message}`);
-    // Schedule next retry (non-recursive to avoid stack overflow)
-    setTimeout(() => autoReconnect(sessionId, false), 15000);
-  }
+    if (connectingSessions.has(sessionId)) {
+      logger.info(`[autoReconnect] Session ${sessionId} is already initializing after wait. Done.`);
+      return;
+    }
+
+    try {
+      await initSession(sessionId);
+    } catch (error) {
+      logger.error(`[autoReconnect] Attempt ${attempts + 1} failed for ${sessionId}: ${error.message}`);
+      autoReconnect(sessionId, false);
+    }
+  }, delay);
+  if (timer.unref) timer.unref();
+  reconnectTimers.set(sessionId, timer);
 }
 
 // ─── Watchdog Supervisor ─────────────────────────────────────────────
@@ -538,6 +562,11 @@ function startSessionWatchdog() {
 
         // Skip deactivated / auth-failed sessions
         if (numberConfig.status === 'auth_failed' || numberConfig.isActive === false) {
+          continue;
+        }
+
+        if (connectingSessions.has(sessionId)) {
+          logger.info(`[Watchdog] Session '${sessionId}' is already initializing. Skipping.`);
           continue;
         }
 
@@ -615,15 +644,6 @@ function getSessionStatus(sessionId, dbStatus) {
     }
   }
 
-  if (!entry && activeSockets.size > 0) {
-    for (const [key, val] of activeSockets.entries()) {
-      if (val?.sock?.user?.id) {
-        entry = val;
-        break;
-      }
-    }
-  }
-
   if (entry?.sock) {
     if (entry.sock.user && entry.sock.user.id) {
       return 'connected';
@@ -631,7 +651,7 @@ function getSessionStatus(sessionId, dbStatus) {
     return 'connecting';
   }
 
-  if (connectingSessions.has(sessionId) || connectingSessions.size > 0) {
+  if (connectingSessions.has(sessionId)) {
     return 'connecting';
   }
 
@@ -834,6 +854,11 @@ async function stopSession(sessionId) {
 
   activeSockets.delete(sessionId);
   reconnectAttempts.delete(sessionId);
+  const reconnectTimer = reconnectTimers.get(sessionId);
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimers.delete(sessionId);
+  }
   deleteSessionFolder(sessionId);
 
   try {
@@ -891,6 +916,11 @@ async function destroyAllSessions() {
     logger.info(`Session ${sessionId} ended cleanly`);
   }
   activeSockets.clear();
+  for (const timer of reconnectTimers.values()) {
+    clearTimeout(timer);
+  }
+  reconnectTimers.clear();
+  connectingSessions.clear();
 }
 
 // ─── Exports ─────────────────────────────────────────────────────────
