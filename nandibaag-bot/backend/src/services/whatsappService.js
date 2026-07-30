@@ -656,8 +656,6 @@ function startMessageProcessor() {
 
 async function sendMessage(sessionId, toPhone, text) {
   const activeKeys = Array.from(activeSockets.keys());
-  logger.info(`[sendMessage] Active sessions: [${activeKeys.join(', ')}], Requested: '${sessionId}'`);
-
   let entry = activeSockets.get(sessionId);
 
   if (!entry?.sock) {
@@ -675,11 +673,21 @@ async function sendMessage(sessionId, toPhone, text) {
     for (const [key, val] of activeSockets.entries()) {
       if (val?.sock?.user?.id) {
         entry = val;
-        logger.warn(`[sendMessage] Session '${sessionId}' not found directly. Falling back to active socket key '${key}'.`);
         break;
       }
     }
   }
+
+  const isReady = !!(entry?.sock && entry.sock.user && entry.sock.user.id);
+
+  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('[WhatsApp:Send] Called for:', toPhone);
+  console.log('[WhatsApp:Send] Text length:', text ? text.length : 0);
+  console.log('[WhatsApp:Send] Active sessions:', activeKeys);
+  console.log('[WhatsApp:Send] Client ready?', isReady);
+  console.log('[WhatsApp:Send] Client exists?', !!entry?.sock);
+  console.log('[WhatsApp:Send] Client JID:', entry?.sock?.user?.id || 'NULL');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
   if (!entry?.sock) {
     logger.warn(`[sendMessage] Session '${sessionId}' is not ready. Queueing message for: ${toPhone}`);
