@@ -37,10 +37,18 @@ router.get('/sessions', verifyToken, async (req, res, next) => {
     const whatsappNumbers = settings?.whatsappNumbers || [];
     
     const statusMap = getAllSessionsStatus(whatsappNumbers);
+    const qrCodes = {};
+    for (const num of whatsappNumbers) {
+      if (num.qrCode && (num.status === 'qr_pending' || num.status === 'connecting')) {
+        const key = num.label || num.number;
+        qrCodes[key] = num.qrCode;
+      }
+    }
     
     res.json({
       success: true,
-      sessions: statusMap
+      sessions: statusMap,
+      qrCodes
     });
   } catch (error) {
     next(error);

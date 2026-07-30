@@ -225,12 +225,23 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
             const { Settings } = require('../models');
             const settings = await Settings.findOne();
             if (settings) {
-              const numberObj = settings.whatsappNumbers.find(n => n.label === sessionId || n.number === sessionId);
-              if (numberObj) {
+              let numberObj = settings.whatsappNumbers.find(n => n.label === sessionId || n.number === sessionId);
+              if (!numberObj) {
+                numberObj = {
+                  number: sessionId,
+                  label: sessionId,
+                  isActive: true,
+                  isPrimary: settings.whatsappNumbers.length === 0,
+                  status: 'qr_pending',
+                  connectedAt: null,
+                  qrCode: qrDataUrl
+                };
+                settings.whatsappNumbers.push(numberObj);
+              } else {
                 numberObj.qrCode = qrDataUrl;
                 numberObj.status = 'qr_pending';
-                await settings.save();
               }
+              await settings.save();
             }
           } catch (dbErr) {
             logger.error(`Failed to save QR status to DB: ${dbErr.message}`);

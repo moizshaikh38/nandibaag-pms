@@ -82,12 +82,17 @@ export default function ConnectPage() {
       try {
         const response = await api.get('/whatsapp/sessions');
         const sessionStatus = response.data.sessions?.[currentSessionId];
+        const qr = response.data.qrCodes?.[currentSessionId] || (response.data.qrCodes ? Object.values(response.data.qrCodes)[0] : null);
+        
         if (sessionStatus === 'connected') {
           setConnState('connected');
           setSessions(response.data.sessions);
+        } else if (qr && connState !== 'connected') {
+          setQrCode(qr);
+          setConnState('qr_ready');
         }
       } catch (_) {}
-    }, 3000);
+    }, 2000);
 
     return () => {
       if (pollIntervalRef.current) {
