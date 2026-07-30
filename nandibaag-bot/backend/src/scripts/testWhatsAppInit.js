@@ -9,7 +9,7 @@ const dotenv = require('dotenv');
 const path = require('path');
 
 // Load environment variables
-dotenv.config({ path: path.join(__dirname, '../../../.env') });
+dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 console.log('\n╔════════════════════════════════════════╗');
 console.log('║  TEST WHATSAPP INITIALIZATION          ║');

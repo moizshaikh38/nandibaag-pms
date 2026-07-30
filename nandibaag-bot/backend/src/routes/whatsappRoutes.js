@@ -75,7 +75,9 @@ router.post('/sessions', verifyToken, requireAdmin, async (req, res, next) => {
     }
 
     // Start initialization (non-blocking — returns immediately)
-    initSession(sessionId, { cleanStart: !!cleanStart });
+    initSession(sessionId, { cleanStart: !!cleanStart }).catch((error) => {
+      logger.error(`Background session initialization failed for ${sessionId}: ${error.message}`);
+    });
     
     res.json({
       success: true,

@@ -171,7 +171,7 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
         keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
       },
       logger: pino({ level: 'silent' }),
-      printQRInTerminal: true, // Enable terminal QR for debugging
+      printQRInTerminal: false,
       browser: ['Nandibaag Resort', 'Chrome', '120.0.0'],
       keepAliveIntervalMs: 60000, // Increased from 25s to 60s for stability
       connectTimeoutMs: 90000, // Increased from 60s to 90s
@@ -181,8 +181,9 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
       syncFullHistory: false,
       retryRequestDelayMs: 3000, // Increased from 2s to 3s
       generateHighQualityLinkPreview: false,
-      // Additional stability settings
-      waWebSocketUrl: 'wss://web.whatsapp.com/ws',
+      // Baileys v6.7+ expects the WhatsApp Web chat socket. Using /ws
+      // connects but never receives the pair-device refs needed for QR.
+      waWebSocketUrl: 'wss://web.whatsapp.com/ws/chat',
       qrMaxRetries: 5,
     });
     
@@ -417,6 +418,26 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
     });
 
     return { sock };
+  } catch (error) {
+    logger.error(`[initSession] Failed to initialize session ${sessionId}: ${error.message}`);
+    emitSocketEvent('whatsapp:init_failed', { sessionId, message: error.message });
+
+    try {
+      const { Settings } = require('../models');
+      const settings = await Settings.findOne();
+      if (settings) {
+        const numberObj = settings.whatsappNumbers.find(n => n.label === sessionId || n.number === sessionId);
+        if (numberObj) {
+          numberObj.status = 'disconnected';
+          numberObj.qrCode = null;
+          await settings.save();
+        }
+      }
+    } catch (dbErr) {
+      logger.error(`Failed to save init failure for session ${sessionId}: ${dbErr.message}`);
+    }
+
+    throw error;
   } finally {
     // ALWAYS clear the connecting guard, even on error
     connectingSessions.delete(sessionId);
