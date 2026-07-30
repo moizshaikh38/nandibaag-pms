@@ -50,13 +50,13 @@ async function deleteAllChats() {
     const queueDeleteResult = await MessageQueue.deleteMany({});
     console.log(`✓ Deleted ${queueDeleteResult.deletedCount} queued messages`);
 
-    // Reset settings to ensure AI mode
+    // Reset settings to ensure AI mode for NEW chats
     console.log('[RESETTING SETTINGS]');
     const settings = await Settings.findOne();
     if (settings) {
       settings.globalMode = 'ai';
       await settings.save();
-      console.log('✓ Global mode set to AI');
+      console.log('✓ Global mode set to AI (for new chats)');
     } else {
       const newSettings = new Settings({
         globalMode: 'ai',
@@ -76,7 +76,10 @@ async function deleteAllChats() {
     console.log('Summary:');
     console.log(`- Deleted ${deleteResult.deletedCount} chats`);
     console.log(`- Deleted ${queueDeleteResult.deletedCount} queued messages`);
-    console.log('- Settings reset to AI mode');
+    console.log('- Global mode set to AI (for new chats)');
+    console.log('\nMode Behavior:');
+    console.log('- AI mode: Bot responds automatically to users');
+    console.log('- Human mode: Only staff can respond (AI never replies)');
     console.log('\nNext steps:');
     console.log('1. Restart the bot server');
     console.log('2. Send a test message to check if AI replies');

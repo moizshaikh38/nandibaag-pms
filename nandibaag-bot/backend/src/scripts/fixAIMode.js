@@ -61,21 +61,25 @@ async function fixAIMode() {
     console.log(`  Chats in human mode: ${chatsInHumanMode}`);
     console.log(`  Chats in AI mode: ${totalChats - chatsInHumanMode}`);
     
-    if (chatsInHumanMode > 0) {
-      console.log('\n  Changing all chats to AI mode...');
-      await Chat.updateMany({ mode: 'human' }, { mode: 'ai' });
-      console.log('✓ All chats changed to AI mode');
-    }
+    // NOTE: We DON'T automatically change individual chat modes to AI
+    // Human mode chats should remain in human mode for staff handling only
+    console.log('  Individual chat modes left unchanged (human mode = staff only)');
     console.log();
 
     console.log('╔════════════════════════════════════════╗');
     console.log('║  AI MODE FIX COMPLETE                  ║');
     console.log('╚════════════════════════════════════════╝\n');
     
-    console.log('Next steps:');
+    console.log('Summary:');
+    console.log('- Global mode set to AI (new chats will use AI)');
+    console.log('- Individual chat modes unchanged (human mode = staff only)');
+    console.log('\nMode Behavior:');
+    console.log('- AI mode: Bot responds automatically to users');
+    console.log('- Human mode: Only staff can respond (AI never replies)');
+    console.log('\nNext steps:');
     console.log('1. Restart the bot server');
-    console.log('2. Users will now get AI responses automatically');
-    console.log('3. You can still switch specific chats to human mode from dashboard\n');
+    console.log('2. New users will get AI responses automatically');
+    console.log('3. Switch specific chats to human mode from dashboard for staff handling\n');
 
     await mongoose.disconnect();
     process.exit(0);

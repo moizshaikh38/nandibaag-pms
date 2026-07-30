@@ -13,7 +13,8 @@
     "fix-ai-mode": "node src/scripts/fixAIMode.js",
     "delete-all-chats": "node src/scripts/deleteAllChats.js",
     "deep-diagnostics": "node src/scripts/deepDiagnostics.js",
-    "init-whatsapp": "node src/scripts/initWhatsAppSession.js"
+    "init-whatsapp": "node src/scripts/initWhatsAppSession.js",
+    "test-mode-behavior": "node src/scripts/testModeBehavior.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.1.1",
