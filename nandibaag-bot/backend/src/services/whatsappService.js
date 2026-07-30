@@ -382,19 +382,8 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
           emitSocketEvent('whatsapp:disconnected', { sessionId, reason: reasonMsg, isLoggedOut: true });
         } else {
           // Transient disconnect (network glitch, restart required, etc.)
-          // Do NOT emit whatsapp:disconnected to frontend immediately during 1s auto-reconnect!
-          // Mark DB status as connecting so UI stays in a smooth transition without flashing error alerts.
-          try {
-            const { Settings } = require('../models');
-            const settings = await Settings.findOne();
-            if (settings) {
-              const numberObj = settings.whatsappNumbers.find(n => n.label === sessionId || n.number === sessionId);
-              if (numberObj && numberObj.status === 'connected') {
-                numberObj.status = 'connecting';
-                await settings.save();
-              }
-            }
-          } catch (e) {}
+          // Keep DB status as connected during automatic recovery so the
+          // dashboard doesn't pause AI replies for brief WhatsApp blips.
 
           autoReconnect(sessionId, isImmediate);
         }
@@ -644,18 +633,34 @@ function getSessionStatus(sessionId, dbStatus) {
     }
   }
 
+  const lastConnectedAt = lastSuccessfulConnection.get(sessionId) || 0;
+  const recentlyConnected = lastConnectedAt && (Date.now() - lastConnectedAt < 15 * 60 * 1000);
+
   if (entry?.sock) {
     if (entry.sock.user && entry.sock.user.id) {
+      return 'connected';
+    }
+    if (dbStatus === 'connected' || recentlyConnected) {
       return 'connected';
     }
     return 'connecting';
   }
 
   if (connectingSessions.has(sessionId)) {
+    if (dbStatus === 'connected' || recentlyConnected) {
+      return 'connected';
+    }
     return 'connecting';
   }
 
-  if (dbStatus === 'connected' || dbStatus === 'connecting') {
+  if (dbStatus === 'connected') {
+    return 'connected';
+  }
+
+  if (dbStatus === 'connecting') {
+    if (recentlyConnected || reconnectTimers.has(sessionId)) {
+      return 'connected';
+    }
     return 'connecting';
   }
 
