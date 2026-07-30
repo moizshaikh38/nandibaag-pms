@@ -357,7 +357,7 @@ const allowedResortWords = new Set();
 
 function initializeAllowedWords() {
   const manualWhitelist = [
-    // Safe common Hinglish / Resort English loanwords
+    // Safe common Hinglish / Resort English loanwords & URLs
     'booking', 'couple', 'group', 'picnic', 'resort', 'ac', 'dj', 'wifi', 'pool', 
     'cafe', 'cottages', 'kayaking', 'boating', 'games', 'buffet', 'veg', 'jain', 
     'pet', 'check', 'checkout', 'tea', 'taxi', 'rickshaw', 'instagram', 'website', 
@@ -372,6 +372,7 @@ function initializeAllowedWords() {
     'hi', 'hello', 'hey', 'sorry', 'thank', 'thanks', 'welcome', 'please', 'enquiry', 'enquiries',
     'swagat', 'kuch', 'kuchh', 'log', 'raat', 'bahut', 'bohot', 'bhut', 'madad', 'shayad', 'umeed', 
     'ummeed', 'waqt', 'vakt', 'soch', 'bach', 'baat', 'baatein', 'respect', 'package', 'packages', 'budget',
+    'https', 'http', 'www', 'com', 'org', 'net', 'nandibaag', 'rooms', 'maps', 'instagram', 'goo', 'gl', 'app', 'link', 'byob', 'pax', 'hrs', 'per', 'summary', 'breakdown', 'final', 'charge', 'charges',
     
     // User requested supplementary whitelist
     'okay', 'sure', 'thanks', 'card', 'cash', 'upi', 'google', 'id',
@@ -503,17 +504,17 @@ function isReplyValid(text) {
   const trimmed = text.trim();
   
   // 1. Length boundaries check
-  if (trimmed.length < 3 || trimmed.length > 700) {
+  if (trimmed.length < 3 || trimmed.length > 2000) {
     return false;
   }
   
-  // 2. Unexpected script check
-  if (/[^\x00-\x7F\u{0900}-\u{097F}\u{0A80}-\u{0AFF}\u{2000}-\u{206F}\u{20A0}-\u{20CF}\u{2100}-\u{214F}\u{2190}-\u{21FF}\u{2600}-\u{27BF}\u{1F000}-\u{1FAFF}\u{FE00}-\u{FE0F}]/u.test(trimmed)) {
+  // 2. Unexpected script check (Allows ASCII, Latin-1 Supplement \\u00A0-\\u00FF, Devanagari, Box Drawing U+2500-U+257F, Punctuation, Emojis)
+  if (/[^\x00-\x7F\u{00A0}-\u{00FF}\u{0900}-\u{097F}\u{0A80}-\u{0AFF}\u{2000}-\u{206F}\u{20A0}-\u{20CF}\u{2100}-\u{214F}\u{2190}-\u{21FF}\u{2500}-\u{257F}\u{2600}-\u{27BF}\u{1F000}-\u{1FAFF}\u{FE00}-\u{FE0F}]/u.test(trimmed)) {
     return false;
   }
   
-  // 3. Leftover markdown or code syntax checks
-  if (/`{3}|[\*#<>]/.test(trimmed)) {
+  // 3. Leftover markdown code blocks or HTML tags
+  if (/`{3}|[<>]/.test(trimmed)) {
     return false;
   }
 
@@ -582,12 +583,12 @@ function isReplyValid(text) {
   
   // 9. English word whitelist and Hinglish truncation checks
   const words = trimmed.toLowerCase().match(/[a-z]+/g) || [];
-  
+  const safeNoVowelWords = new Set(['https', 'http', 'www', 'byob', 'pax', 'hrs', 'sms', 'pdf']);
+
   for (const word of words) {
     if (word.length < 3) continue;
     if (allowedResortWords.has(word)) continue;
-    if (commonEnglishWords.has(word)) return false;
-    if (!/[aeiouy]/.test(word)) return false;
+    if (!/[aeiouy]/.test(word) && !safeNoVowelWords.has(word)) return false;
     if (/sakt$|chah$|karn$/.test(word)) return false;
   }
   
@@ -601,9 +602,9 @@ function getReplyRejectionReason(text) {
   if (!text || typeof text !== 'string') return 'EMPTY_OR_NOT_STRING';
   const trimmed = text.trim();
   if (trimmed.length < 3) return `TOO_SHORT (${trimmed.length} chars)`;
-  if (trimmed.length > 700) return `TOO_LONG (${trimmed.length} chars)`;
+  if (trimmed.length > 2000) return `TOO_LONG (${trimmed.length} chars)`;
 
-  const scriptMatch = trimmed.match(/[^\x00-\x7F\u0900-\u097F\u0A80-\u0AFF\u{2000}-\u{206F}\u{20A0}-\u{20CF}\u{2100}-\u{214F}\u{2190}-\u{21FF}\u2600-\u27BF\u{1F000}-\u{1FAFF}\u{FE00}-\u{FE0F}]/u);
+  const scriptMatch = trimmed.match(/[^\x00-\x7F\u{00A0}-\u{00FF}\u{0900}-\u{097F}\u{0A80}-\u{0AFF}\u{2000}-\u{206F}\u{20A0}-\u{20CF}\u{2100}-\u{214F}\u{2190}-\u{21FF}\u{2500}-\u{257F}\u{2600}-\u{27BF}\u{1F000}-\u{1FAFF}\u{FE00}-\u{FE0F}]/u);
   if (scriptMatch) return `UNEXPECTED_SCRIPT: char="${scriptMatch[0]}" U+${scriptMatch[0].codePointAt(0).toString(16).toUpperCase()}`;
 
   if (/`{3}/.test(trimmed)) return 'MARKDOWN_CODE_BLOCK';
@@ -661,11 +662,12 @@ function getReplyRejectionReason(text) {
   }
 
   const words = trimmed.toLowerCase().match(/[a-z]+/g) || [];
+  const safeNoVowelWords = new Set(['https', 'http', 'www', 'byob', 'pax', 'hrs', 'sms', 'pdf']);
+
   for (const word of words) {
     if (word.length < 3) continue;
     if (allowedResortWords.has(word)) continue;
-    if (commonEnglishWords.has(word)) return `COMMON_ENGLISH_WORD: "${word}"`;
-    if (!/[aeiouy]/.test(word)) return `NO_VOWELS: "${word}"`;
+    if (!/[aeiouy]/.test(word) && !safeNoVowelWords.has(word)) return `NO_VOWELS: "${word}"`;
     if (/sakt$|chah$|karn$/.test(word)) return `TRUNCATED_WORD: "${word}"`;
   }
 
@@ -1119,13 +1121,13 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
       }
     } else if (msgLower.includes('rate') || msgLower.includes('price') || msgLower.includes('cost') || msgLower.includes('kitn') || msgLower.includes('charge') || msgLower.includes('kay')) {
       if (languageToUse === 'roman_marathi') {
-        result = `Nandibaag Resort Rates:\n1. 🏡 Couple Stay: ₹2,500 (Weekday) / ₹3,500 (Weekend)\n2. 👨‍👩‍👧‍👦 Group Stay: ₹2,000 (Weekday) / ₹2,400 (Weekend) per person\n3. 🌊 Day Picnic: ₹1,200/person (12 PM - 8 PM)\n\nDates sanga, exact availability ani total sangto! 🗓️`;
+        result = `Nandibaag Resort Rates:\n1. 🏡 Couple Stay: ₹5,000 (Weekday) / ₹6,500 (Weekend)\n2. 👨‍👩‍👧‍👦 Group Stay: ₹2,000 (Weekday) / ₹3,000 (Weekend) per person\n3. 🌊 Day Picnic: ₹1,200/person (12 PM - 8 PM)\n\nDates sanga, exact availability ani total sangto! 🗓️`;
       } else if (languageToUse === 'marathi') {
-        result = `नंदीबाग रिसॉर्ट दर:\n1. 🏡 कपल्स: ₹२,५०० (Weekdays) / ₹३,५०० (Weekends)\n2. 👨‍👩‍👧‍👦 फॅमिली: ₹२,००० (Weekdays) / ₹२,४०० (Weekends) प्रति व्यक्ती\n3. 🌊 पिकनिक: ₹१,२००/व्यक्ती (12 PM - 8 PM)\n\nतारखा सांगा, availability सांगतो! 🗓️`;
+        result = `नंदीबाग रिसॉर्ट दर:\n1. 🏡 कपल्स: ₹५,००० (Weekdays) / ₹६,५०० (Weekends)\n2. 👨‍👩‍👧‍👦 फॅमिली: ₹२,००० (Weekdays) / ₹३,००० (Weekends) प्रति व्यक्ती\n3. 🌊 पिकनिक: ₹१,२००/व्यक्ती (12 PM - 8 PM)\n\nतारखा सांगा, availability सांगतो! 🗓️`;
       } else if (languageToUse === 'english') {
-        result = `Nandibaag Resort Rates:\n1. 🏡 Couple Stay: ₹2,500 (Weekday) / ₹3,500 (Weekend)\n2. 👨‍👩‍👧‍👦 Group Stay: ₹2,000 (Weekday) / ₹2,400 (Weekend) per person\n3. 🌊 Day Picnic: ₹1,200/person (12 PM - 8 PM)\n\nPlease share your dates for availability! 🗓️`;
+        result = `Nandibaag Resort Rates:\n1. 🏡 Couple Stay: ₹5,000 (Weekday) / ₹6,500 (Weekend)\n2. 👨‍👩‍👧‍👦 Group Stay: ₹2,000 (Weekday) / ₹3,000 (Weekend) per person\n3. 🌊 Day Picnic: ₹1,200/person (12 PM - 8 PM)\n\nPlease share your dates for availability! 🗓️`;
       } else {
-        result = `Nandibaag Resort Packages:\n1. 🏡 Couple Stay: ₹2,500 (Weekday) / ₹3,500 (Weekend)\n2. 👨‍👩‍👧‍👦 Group Stay: ₹2,000 (Weekday) / ₹2,400 (Weekend) per person\n3. 🌊 Day Picnic: ₹1,200/person (12 PM - 8 PM)\n\nCheck-in date aur total guests batayein! 🗓️`;
+        result = `Nandibaag Resort Packages:\n1. 🏡 Couple Stay: ₹5,000 (Weekday) / ₹6,500 (Weekend)\n2. 👨‍👩‍👧‍👦 Group Stay: ₹2,000 (Weekday) / ₹3,000 (Weekend) per person\n3. 🌊 Day Picnic: ₹1,200/person (12 PM - 8 PM)\n\nCheck-in date aur total guests batayein! 🗓️`;
       }
     } else {
       if (languageToUse === 'roman_marathi') {
