@@ -102,18 +102,17 @@ export default function ConnectPage() {
     if (!socket) return;
 
     const handleQR = (data) => {
-      if (data.sessionId === currentSessionId) {
+      console.log('RECEIVED whatsapp:qr event:', data);
+      if (data.qr) {
         setQrCode(data.qr);
         setConnState('qr_ready');
       }
     };
 
     const handleReady = (data) => {
-      if (data.sessionId === currentSessionId) {
-        setConnState('connected');
-        toast.success('WhatsApp Session Connected!');
-        fetchSessions();
-      }
+      console.log('RECEIVED whatsapp:ready event:', data);
+      setConnState('connected');
+      toast.success('WhatsApp Session Connected!');
       fetchSessions();
     };
 
