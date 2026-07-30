@@ -291,13 +291,20 @@ async function handleMessage(sessionId, msg) {
     if (shouldForceAI) {
       logger.info(`Chat ${customerPhone} in human mode but forcing AI response for initial message`);
     }
+    
+    const actualMode = shouldForceAI ? 'ai' : mode;
 
+    console.log(`[MessageHandler] Processing in ${actualMode} mode (original: ${mode}, forced: ${shouldForceAI})`);
+    
     // In AI mode, emit immediately when customer message arrives so dashboard updates instantly!
     emitRealtimeUpdate(messageText || '[Media]', 'customer');
     
     // AI mode - generate response
     try {
       let systemNotes = '';
+      
+      console.log(`[MessageHandler] Starting AI response generation for ${customerPhone}`);
+      console.log(`[MessageHandler] Chat mode: ${mode}, shouldForceAI: ${shouldForceAI}`);
       
       // Natural language date and guest count extraction from customer text
       const extracted = extractBookingDetails(messageText);
@@ -425,6 +432,12 @@ async function handleMessage(sessionId, msg) {
 
       const aiReply = await getAIResponse(chat, messageText, settings, systemNotes);
       console.log(`[TIMING] [4/6] getAIResponse finished, AI reply generated in ${Date.now() - tStart}ms`);
+      console.log(`[MessageHandler] AI reply received: "${aiReply?.substring(0, 50)}..."`);
+      
+      if (!aiReply || aiReply.trim() === '') {
+        console.error(`[MessageHandler] AI reply is empty! Skipping message send.`);
+        return;
+      }
       
       // Add AI reply to chat
       chat.messages.push({
@@ -439,11 +452,16 @@ async function handleMessage(sessionId, msg) {
       }
       
       await chat.save();
+      console.log(`[MessageHandler] Chat saved with AI reply`);
       
       // Send reply via WhatsApp
       const tSendStart = Date.now();
       console.log(`[TIMING] [5/6] Sending message back via WhatsApp at ${new Date().toISOString()}`);
-      await whatsappService.sendMessage(sessionId, rawJid, aiReply);
+      console.log(`[MessageHandler] Sending to: ${rawJid}, Session: ${sessionId}`);
+      
+      const sendResult = await whatsappService.sendMessage(sessionId, rawJid, aiReply);
+      
+      console.log(`[MessageHandler] WhatsApp send result: ${sendResult ? 'SUCCESS' : 'FAILED'}`);
       console.log(`[TIMING] [6/6] Sent message back via WhatsApp in ${Date.now() - tSendStart}ms. Total end-to-end processing time: ${Date.now() - tStart}ms.`);
       
       // Stop typing state presence

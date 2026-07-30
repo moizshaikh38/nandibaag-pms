@@ -10,7 +10,10 @@
     "monitor-whatsapp": "node src/scripts/monitorWhatsApp.js",
     "test-ai-validation": "node src/scripts/testAIValidation.js",
     "test-ai-flow": "node src/scripts/testAIMessageFlow.js",
-    "fix-ai-mode": "node src/scripts/fixAIMode.js"
+    "fix-ai-mode": "node src/scripts/fixAIMode.js",
+    "delete-all-chats": "node src/scripts/deleteAllChats.js",
+    "deep-diagnostics": "node src/scripts/deepDiagnostics.js",
+    "init-whatsapp": "node src/scripts/initWhatsAppSession.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.1.1",
