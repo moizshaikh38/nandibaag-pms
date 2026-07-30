@@ -109,6 +109,16 @@ function safeEndOldSocket(oldSock) {
  *   active socket. If it's a zombie (old socket), the event is ignored.
  */
 async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber = null } = {}) {
+  // If cleanStart is requested, forcibly clear any stale initializing guard & sockets
+  if (cleanStart) {
+    connectingSessions.delete(sessionId);
+    if (activeSockets.has(sessionId)) {
+      const oldEntry = activeSockets.get(sessionId);
+      safeEndOldSocket(oldEntry?.sock);
+      activeSockets.delete(sessionId);
+    }
+  }
+
   // Guard: don't create duplicate sockets if one is already initializing
   if (connectingSessions.has(sessionId)) {
     logger.warn(`[initSession] Session ${sessionId} is already initializing. Skipping.`);
@@ -116,8 +126,8 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
     return { sock: entry?.sock || null };
   }
 
-  // Guard: if session is already fully connected, reuse it
-  if (activeSockets.has(sessionId)) {
+  // Guard: if session is already fully connected and cleanStart is false, reuse it
+  if (activeSockets.has(sessionId) && !cleanStart) {
     const entry = activeSockets.get(sessionId);
     if (entry?.sock?.user?.id) {
       logger.warn(`[initSession] Session ${sessionId} is already connected. Reusing.`);
