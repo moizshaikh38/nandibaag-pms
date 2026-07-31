@@ -7,7 +7,7 @@ const mongoose = require('mongoose');
 const messageSchema = new mongoose.Schema({
   sender: {
     type: String,
-    enum: ['customer', 'bot', 'staff'],
+    enum: ['customer', 'bot', 'staff', 'agent'],
     required: true
   },
   text: {
@@ -86,7 +86,7 @@ const chatSchema = new mongoose.Schema({
   },
   language: {
     type: String,
-    enum: ['hindi', 'marathi', 'english', 'hinglish', 'gujarati', 'unknown'],
+    enum: ['hindi', 'marathi', 'roman_marathi', 'english', 'hinglish', 'gujarati', 'unknown'],
     default: 'unknown'
   },
   messages: [messageSchema],

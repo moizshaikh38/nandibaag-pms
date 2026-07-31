@@ -946,13 +946,20 @@ async function tryCloudflareCall(tierLabel, messages, systemPrompt, timeoutMs = 
  */
 async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes = '') {
   const bookingStage = chat.bookingStage || 'none';
+  const detectedLang = detectLanguage(incomingMessage);
+  if (chat && (chat.language === 'unknown' || !chat.language || chat.language !== detectedLang)) {
+    chat.language = detectedLang;
+  }
+  const languageToUse = (chat && chat.language && chat.language !== 'unknown') ? chat.language : detectedLang;
+  const staticFaqPattern = /\b(photo|photos|pic|image|gallery|location|address|map|maps|instagram|contact|phone|number|call|jain|veg|non-veg|nonveg|alcohol|byob|kayaking|activity|activities|pool|check-?in|check-?out|cancellation|taxi|auto|pet|dog|review|rating)\b/i;
   
   // Check cache for FAQ-type questions only (not booking-related)
   const nonBookingStages = ['none', 'type_selected'];
   const isBookingQuery = !nonBookingStages.includes(bookingStage);
+  const canUseCache = !isBookingQuery && !systemNotes && staticFaqPattern.test(incomingMessage || '');
   
-  if (!isBookingQuery) {
-    const cacheKey = hashString(incomingMessage + bookingStage);
+  if (canUseCache) {
+    const cacheKey = hashString(`${languageToUse}|${bookingStage}|${incomingMessage}`);
     const cached = responseCache.get(cacheKey);
     
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
@@ -972,18 +979,14 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
       content: msg.text
     }));
   
-  // Add current incoming message
-  messageHistory.push({
-    role: 'user',
-    content: incomingMessage
-  });
-  
-  // Detect language and ensure system prompt uses customer language
-  const detectedLang = detectLanguage(incomingMessage);
-  if (chat && (chat.language === 'unknown' || !chat.language)) {
-    chat.language = detectedLang;
+  // Add current incoming message only if the handler has not already saved it.
+  const lastHistoryMessage = messageHistory[messageHistory.length - 1];
+  if (!lastHistoryMessage || lastHistoryMessage.role !== 'user' || lastHistoryMessage.content !== incomingMessage) {
+    messageHistory.push({
+      role: 'user',
+      content: incomingMessage
+    });
   }
-  const languageToUse = (chat && chat.language && chat.language !== 'unknown') ? chat.language : detectedLang;
 
   // Build system prompt with today's date and detected language
   const today = new Date();
@@ -1087,11 +1090,22 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
     const primaryNumber = (resortContact1 || '9257657665').replace(/\D/g, '');
 
     const msgLower = (incomingMessage || '').toLowerCase();
+    const isDiscountRequest = /\b(discount|offer|kam|kum|less|negotiate|negotiable|sasta|cheap|budget|final price|best price)\b/i.test(msgLower);
 
     // Check confirmation request -> NEVER confirm booking!
     const isConfirming = /confirm|book\s+kar\s+do|pakka|book\s+it|payment\s+kar|reservation|zali/i.test(msgLower);
 
-    if (isConfirming) {
+    if (isDiscountRequest) {
+      if (languageToUse === 'roman_marathi') {
+        result = `Ho ji, rates already best ahet karan food + activities included aahet. Special approval sathi staff la call kara: ${primaryNumber} 📞`;
+      } else if (languageToUse === 'marathi') {
+        result = `हो जी, rates आधीच best आहेत कारण food + activities included आहेत. Special approval साठी staff ला call करा: ${primaryNumber} 📞`;
+      } else if (languageToUse === 'english') {
+        result = `Our rates are already best because food and activities are included. For any special approval, please call staff: ${primaryNumber} 📞`;
+      } else {
+        result = `Ji, rates already best hain kyunki food + activities included hain. Special approval ke liye staff se baat kar sakte hain: ${primaryNumber} 📞`;
+      }
+    } else if (isConfirming) {
       if (languageToUse === 'roman_marathi') {
         result = `Ho ji 👍 Booking confirm karayla staff sobat bolava lagel 👇 ${primaryNumber}`;
       } else if (languageToUse === 'marathi') {
@@ -1146,8 +1160,8 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
   result = sanitizeReply(result);
 
   // Cache FAQ responses
-  if (!isBookingQuery) {
-    const cacheKey = hashString(incomingMessage + bookingStage);
+  if (canUseCache) {
+    const cacheKey = hashString(`${languageToUse}|${bookingStage}|${incomingMessage}`);
     responseCache.set(cacheKey, {
       response: result,
       timestamp: Date.now()

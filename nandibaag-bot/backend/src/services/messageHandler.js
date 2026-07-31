@@ -96,6 +96,61 @@ function extractBookingDetails(text, today = new Date()) {
   return result;
 }
 
+function detectBookingType(text) {
+  const lower = (text || '').toLowerCase();
+  if (/\b(day\s*picnic|one\s*day|picnic|water\s*park|one day picnic)\b/i.test(lower)) return 'picnic';
+  if (/\b(couple|husband|wife|anniversary|2\s*(?:people|guest|guests|log|adult|adults))\b/i.test(lower)) return 'couple';
+  if (/\b(group|family|friends|team|corporate|3\+|[3-9]\s*(?:people|guest|guests|log|adult|adults))\b/i.test(lower)) return 'group';
+  return null;
+}
+
+function isDiscountIntent(text) {
+  return /\b(discount|offer|kam|kum|less|negotiate|negotiable|sasta|cheap|budget|final price|best price)\b/i.test(text || '');
+}
+
+function isGreetingOnly(text) {
+  return /^(hi|hello|hey|hii+|namaste|namaskar|good\s+(morning|afternoon|evening)|salam|salaam)[\s!.🙏🌿]*$/i.test((text || '').trim());
+}
+
+function buildEmergencyFallback(messageText, language = 'hinglish') {
+  const text = (messageText || '').toLowerCase();
+  const phone = '9257657665';
+
+  if (isDiscountIntent(text)) {
+    if (language === 'roman_marathi') {
+      return `Ho ji, rates already best ahet karan food + activities included aahet. Special approval sathi staff la call kara: ${phone} 📞`;
+    }
+    if (language === 'marathi') {
+      return `हो जी, rates आधीच best आहेत कारण food + activities included आहेत. Special approval साठी staff ला call करा: ${phone} 📞`;
+    }
+    return `Ji, rates already best hain kyunki food + activities included hain. Special approval ke liye staff se baat kar sakte hain: ${phone} 📞`;
+  }
+
+  if (/\b(photo|photos|pic|image|gallery)\b/i.test(text)) {
+    return `Photos yahan dekh sakte hain: https://nandibaag.com/rooms 📷`;
+  }
+
+  if (/\b(location|address|map|maps|kaha|kuth)\b/i.test(text)) {
+    return `Location: Karjat. Maps: https://maps.app.goo.gl/h6PB4y4G4oSWyFxdA 📍`;
+  }
+
+  if (/\b(contact|phone|number|call)\b/i.test(text)) {
+    return `Resort contact number: ${phone} 📞`;
+  }
+
+  if (isGreetingOnly(messageText)) {
+    if (language === 'roman_marathi') {
+      return `Namaste! 🌿 Couple Stay, Family Group Stay ki Day Picnic — konti mahiti pahije?`;
+    }
+    if (language === 'marathi') {
+      return `नमस्कार! 🌿 Couple Stay, Family Group Stay की Day Picnic — कोणती माहिती हवी?`;
+    }
+    return `Namaste! 🌿 Couple Stay, Family Group Stay ya Day Picnic me se kiski enquiry hai?`;
+  }
+
+  return `Ji, thoda technical issue aa raha hai. Aap apni date, package aur guest count ek message me bhej dein, ya staff ko call karein: ${phone} 📞`;
+}
+
 /**
  * Handles incoming WhatsApp messages (Baileys compatible)
  * 
@@ -292,10 +347,31 @@ async function handleMessage(sessionId, msg) {
     
     // AI mode - generate response
     try {
-      let systemNotes = '';
+      const systemNotesList = [];
+      const addSystemNote = (note) => {
+        if (note) systemNotesList.push(note);
+      };
       
       console.log(`[MessageHandler] Starting AI response generation for ${customerPhone}`);
       console.log(`[MessageHandler] Chat mode: ${mode}`);
+
+      const msgLower = (messageText || '').toLowerCase();
+      const bookingType = detectBookingType(messageText);
+      const discountIntent = isDiscountIntent(messageText);
+      const greetingOnly = isGreetingOnly(messageText);
+
+      if (bookingType) {
+        chat.bookingDraft.bookingType = bookingType;
+        if (chat.bookingStage === 'none') chat.bookingStage = 'type_selected';
+      }
+
+      if (greetingOnly) {
+        addSystemNote('[SYSTEM NOTE: Customer only greeted. Do NOT mention old dates, guest counts, or previous package choices unless the customer asks to continue. Send one short welcome line and ask whether they want Couple Stay, Family Group Stay, or Day Picnic.]');
+      }
+
+      if (discountIntent) {
+        addSystemNote('[SYSTEM NOTE: Customer is asking for a discount / lower price. Do NOT ask for date or guests again if pricing was already discussed. Politely say rates are already best/final because food, activities, and facilities are included. For special approval or group offer, ask them to call staff at 9257657665. Keep it warm and short.]');
+      }
       
       // Natural language date and guest count extraction from customer text
       const extracted = extractBookingDetails(messageText);
@@ -319,7 +395,6 @@ async function handleMessage(sessionId, msg) {
       const prevStage = chat.bookingStage;
 
       if (draft.availabilityChecked && draft.date && draft.adults) {
-        const msgLower = messageText.toLowerCase();
         const dateChangePatterns = /\d{1,2}\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|may|june|july|august|september|october|november|december)|next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)|tomorrow|today|yesterday|weekend|weekday|this\s+(saturday|sunday|monday|friday)/i;
         const guestChangePatterns = /(\d+)\s*(log|guest|people|person|adult|ladk|ladki|bache)/i;
         const mentionsDate = dateChangePatterns.test(msgLower);
@@ -355,7 +430,7 @@ async function handleMessage(sessionId, msg) {
             const capacityResult = await getCapacityAvailability(checkInDate, checkOutDate, guestCount);
 
             if (!capacityResult.available) {
-              systemNotes = '[SYSTEM NOTE: No availability — all rooms of sufficient capacity are booked for these dates. Do NOT quote any price. Politely tell the customer rooms are full for this date and ask them to try a different date.]';
+              addSystemNote('[SYSTEM NOTE: No availability — all rooms of sufficient capacity are booked for these dates. Do NOT quote any price. Politely tell the customer rooms are full for this date and ask them to try a different date.]');
 
               chat.bookingDraft.availabilityChecked = true;
               chat.bookingDraft.availabilityConfirmed = false;
@@ -373,7 +448,7 @@ async function handleMessage(sessionId, msg) {
               if (hasSingleRoom) {
                 const pricingResult = calculatePricing(checkInDate, checkOutDate, guestCount);
 
-                systemNotes = `[SYSTEM NOTE: Availability confirmed for ${guestCount} guests on ${checkInDate.toISOString()} to ${checkOutDate.toISOString()}.\n\nAUTHORITATIVE BACKEND PRICING BREAKDOWN:\n${pricingResult.formatted}\n\nINSTRUCTION: Present this exact pricing breakdown to the customer. Do NOT recalculate or alter any numbers.]`;
+                addSystemNote(`[SYSTEM NOTE: Availability confirmed for ${guestCount} guests on ${checkInDate.toISOString()} to ${checkOutDate.toISOString()}.\n\nAUTHORITATIVE BACKEND PRICING BREAKDOWN:\n${pricingResult.formatted}\n\nINSTRUCTION: Present this exact pricing breakdown to the customer. Do NOT recalculate or alter any numbers.]`);
 
                 chat.bookingDraft.availabilityChecked = true;
                 chat.bookingDraft.availabilityConfirmed = true;
@@ -382,7 +457,7 @@ async function handleMessage(sessionId, msg) {
 
                 logger.info(`Availability check: confirmed for ${guestCount} guests, ${capacityResult.availableCount} rooms available`);
               } else if (maxCapacityAvailable >= guestCount) {
-                systemNotes = `[SYSTEM NOTE: Guest count (${guestCount}) fits in a single room of capacity ${maxCapacityAvailable} but it will be a tight fit. Available options: 1 room of capacity ${maxCapacityAvailable} (tight fit). Ask the customer if they are okay with a tight fit in one room, or if they would prefer multiple rooms. Do NOT quote a price until they decide.]`;
+                addSystemNote(`[SYSTEM NOTE: Guest count (${guestCount}) fits in a single room of capacity ${maxCapacityAvailable} but it will be a tight fit. Available options: 1 room of capacity ${maxCapacityAvailable} (tight fit). Ask the customer if they are okay with a tight fit in one room, or if they would prefer multiple rooms. Do NOT quote a price until they decide.]`);
 
                 chat.bookingDraft.availabilityChecked = true;
                 chat.bookingDraft.availabilityConfirmed = true;
@@ -395,7 +470,7 @@ async function handleMessage(sessionId, msg) {
 
                 if (combinations.available && combinations.suggestions.length > 0) {
                   const suggestionDescriptions = combinations.suggestions.map(s => s.description).join('; ');
-                  systemNotes = `[SYSTEM NOTE: Guest count (${guestCount}) exceeds single room capacity. Available options: ${suggestionDescriptions}. Ask the customer whether they prefer a tight fit in one bigger room OR multiple smaller rooms. Present the options without mentioning room numbers. Do NOT quote a price until they decide.]`;
+                  addSystemNote(`[SYSTEM NOTE: Guest count (${guestCount}) exceeds single room capacity. Available options: ${suggestionDescriptions}. Ask the customer whether they prefer a tight fit in one bigger room OR multiple smaller rooms. Present the options without mentioning room numbers. Do NOT quote a price until they decide.]`);
 
                   chat.bookingDraft.availabilityChecked = true;
                   chat.bookingDraft.availabilityConfirmed = true;
@@ -404,7 +479,7 @@ async function handleMessage(sessionId, msg) {
 
                   logger.info(`Availability check: multi-room needed for ${guestCount} guests, suggestions: ${suggestionDescriptions}`);
                 } else {
-                  systemNotes = '[SYSTEM NOTE: No availability — cannot fit the guest count in any room combination for these dates. Do NOT quote any price. Politely tell the customer and ask for a different date.]';
+                  addSystemNote('[SYSTEM NOTE: No availability — cannot fit the guest count in any room combination for these dates. Do NOT quote any price. Politely tell the customer and ask for a different date.]');
 
                   chat.bookingDraft.availabilityChecked = true;
                   chat.bookingDraft.availabilityConfirmed = false;
@@ -421,6 +496,7 @@ async function handleMessage(sessionId, msg) {
         }
       }
 
+      const systemNotes = systemNotesList.join('\n\n');
       const aiReply = await getAIResponse(chat, messageText, settings, systemNotes);
       console.log(`[TIMING] [4/6] getAIResponse finished, AI reply generated in ${Date.now() - tStart}ms`);
       console.log(`[MessageHandler] AI reply received: "${aiReply?.substring(0, 50)}..."`);
@@ -477,7 +553,7 @@ async function handleMessage(sessionId, msg) {
     } catch (aiError) {
       logger.error(`AI generation failed for ${customerPhone}: ${aiError.message}`);
       
-      const fallbackReply = `Namaste! 🌿 Main Nandibaag Resort Assistant hun. Date aur total guests batayein, main abhi availability check karke batata hun! Contact: 9257657665 📞`;
+      const fallbackReply = buildEmergencyFallback(messageText, chat.language);
       
       chat.messages.push({
         sender: 'bot',
