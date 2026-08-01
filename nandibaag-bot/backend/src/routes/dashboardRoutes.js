@@ -22,8 +22,12 @@ router.get('/stats', verifyToken, async (req, res, next) => {
       createdAt: { $gte: todayStart }
     });
     
-    // Hot leads count
-    const hotLeadsCount = await Lead.countDocuments({ status: 'hot' });
+    // Hot leads count — only count hot leads for active, non-archived chats
+    const activeChatIds = await Chat.find({ isArchived: false }).distinct('_id');
+    const hotLeadsCount = await Lead.countDocuments({
+      chatId: { $in: activeChatIds },
+      status: 'hot'
+    });
     
     // AI failure count last 24h (this would need to be tracked separately, using placeholder)
     const aiFailuresLast24h = 0; // TODO: Implement AI failure tracking

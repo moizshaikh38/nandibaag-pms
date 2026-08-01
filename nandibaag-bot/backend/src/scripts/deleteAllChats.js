@@ -23,7 +23,7 @@ async function deleteAllChats() {
     await mongoose.connect(mongoUri);
     console.log('✓ Connected to database\n');
 
-    const { Chat, MessageQueue, Settings } = require('../models');
+    const { Chat, MessageQueue, Settings, Lead } = require('../models');
 
     // Get counts before deletion
     console.log('[BEFORE DELETION]');
@@ -49,6 +49,11 @@ async function deleteAllChats() {
     console.log('[DELETING QUEUED MESSAGES]');
     const queueDeleteResult = await MessageQueue.deleteMany({});
     console.log(`✓ Deleted ${queueDeleteResult.deletedCount} queued messages`);
+
+    // Delete all leads
+    console.log('[DELETING LEADS]');
+    const leadDeleteResult = await Lead.deleteMany({});
+    console.log(`✓ Deleted ${leadDeleteResult.deletedCount} leads`);
 
     // Reset settings to ensure AI mode for NEW chats
     console.log('[RESETTING SETTINGS]');
