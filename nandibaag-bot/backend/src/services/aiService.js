@@ -234,8 +234,8 @@ function sanitizeReply(text) {
   // Remove markdown headers (# text, ## text, etc.)
   sanitized = sanitized.replace(/^#{1,6}\s+/gm, '');
   
-  // Remove markdown links [text](url)
-  sanitized = sanitized.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+  // Convert markdown links [text](url) → just the URL (WhatsApp auto-links)
+  sanitized = sanitized.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$2');
   
   // Remove any remaining markdown-style formatting
   sanitized = sanitized.replace(/\*([^*]+)\*/g, '$1');
@@ -534,20 +534,24 @@ function isReplyValid(text) {
   }
 
   // 6. FORBIDDEN BOOKING CONFIRMATION CLAIMS CHECK
-  const FORBIDDEN_CONFIRMATIONS = [
-    /booking\s+(?:is\s+)?confirm(?:ed)?/i,
-    /room\s+(?:is\s+)?booked/i,
-    /reservation\s+confirm(?:ed)?/i,
-    /booking\s+confirm\s+ho\s+gayi/i,
-    /room\s+book\s+ho\s+gaya/i,
-    /booking\s+zali(?:\s+aahe)?/i,
-    /room\s+book\s+zala/i,
-    /booking\s+ho\s+gayi/i,
-    /room\s+confirm\s+zala/i
-  ];
-  for (const pattern of FORBIDDEN_CONFIRMATIONS) {
-    if (pattern.test(trimmed)) {
-      return false; // Rejects any AI reply claiming unauthorized booking confirmation!
+  // Exclude staff handover directives like "booking confirm karne ke liye" or "booking confirm karayla"
+  const isHandoverDirective = /\bconfirm\s*(?:karne|karayla|sathi|ke\s*liye|sobat|options?)\b/i.test(trimmed);
+  if (!isHandoverDirective) {
+    const FORBIDDEN_CONFIRMATIONS = [
+      /booking\s+(?:is\s+)?confirmed\b/i,
+      /room\s+(?:is\s+)?booked\b/i,
+      /reservation\s+confirmed\b/i,
+      /booking\s+confirm\s+ho\s+gayi/i,
+      /room\s+book\s+ho\s+gaya/i,
+      /booking\s+zali(?:\s+aahe)?/i,
+      /room\s+book\s+zala/i,
+      /booking\s+ho\s+gayi/i,
+      /room\s+confirm\s+zala/i
+    ];
+    for (const pattern of FORBIDDEN_CONFIRMATIONS) {
+      if (pattern.test(trimmed)) {
+        return false; // Rejects any AI reply claiming unauthorized booking confirmation!
+      }
     }
   }
 
@@ -621,19 +625,22 @@ function getReplyRejectionReason(text) {
     if (bannedRegex.test(trimmed)) return `BANNED_WORD: "${banned}"`;
   }
 
-  const FORBIDDEN_CONFIRMATIONS = [
-    /booking\s+(?:is\s+)?confirm(?:ed)?/i,
-    /room\s+(?:is\s+)?booked/i,
-    /reservation\s+confirm(?:ed)?/i,
-    /booking\s+confirm\s+ho\s+gayi/i,
-    /room\s+book\s+ho\s+gaya/i,
-    /booking\s+zali(?:\s+aahe)?/i,
-    /room\s+book\s+zala/i,
-    /booking\s+ho\s+gayi/i,
-    /room\s+confirm\s+zala/i
-  ];
-  for (const pattern of FORBIDDEN_CONFIRMATIONS) {
-    if (pattern.test(trimmed)) return `UNAUTHORIZED_BOOKING_CONFIRMATION_CLAIM`;
+  const isHandoverDirective = /\bconfirm\s*(?:karne|karayla|sathi|ke\s*liye|sobat|options?)\b/i.test(trimmed);
+  if (!isHandoverDirective) {
+    const FORBIDDEN_CONFIRMATIONS = [
+      /booking\s+(?:is\s+)?confirmed\b/i,
+      /room\s+(?:is\s+)?booked\b/i,
+      /reservation\s+confirmed\b/i,
+      /booking\s+confirm\s+ho\s+gayi/i,
+      /room\s+book\s+ho\s+gaya/i,
+      /booking\s+zali(?:\s+aahe)?/i,
+      /room\s+book\s+zala/i,
+      /booking\s+ho\s+gayi/i,
+      /room\s+confirm\s+zala/i
+    ];
+    for (const pattern of FORBIDDEN_CONFIRMATIONS) {
+      if (pattern.test(trimmed)) return `UNAUTHORIZED_BOOKING_CONFIRMATION_CLAIM`;
+    }
   }
 
   const { resortContact1, resortContact2, resortContact3 } = require('../config/env');
@@ -1132,6 +1139,16 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
         result = `नंदीबाग रिसॉर्टच्या कॉटेजचे फोटो गॅलरीमध्ये पाहू शकता: https://nandibaag.com/rooms 📷`;
       } else {
         result = `Nandibaag Resort ke AC rooms aur cottages ke photos gallery me dekhein: https://nandibaag.com/rooms 📷`;
+      }
+    } else if (/\b(gst|tax|service\s*charge|hidden\s*charge|additional\s*charge|extra\s*(charges?|cost|fee))\b/i.test(msgLower)) {
+      if (languageToUse === 'roman_marathi') {
+        result = `Nandibaag madhe kahi extra charges nahiyet — NO GST, NO service charge. Sangitleli price final aahe! ✅`;
+      } else if (languageToUse === 'marathi') {
+        result = `नंदीबाग मध्ये कोणतेही extra charges नाहीत — NO GST, NO service charge. सांगितलेली price final आहे! ✅`;
+      } else if (languageToUse === 'english') {
+        result = `No extra charges at Nandibaag Resort — NO GST, NO service charge. The price quoted is the final price! ✅`;
+      } else {
+        result = `Nandibaag Resort mein koi extra charges nahi hain — NO GST, NO service charge. Jo price bataya wahi final hai! ✅`;
       }
     } else if (msgLower.includes('rate') || msgLower.includes('price') || msgLower.includes('cost') || msgLower.includes('kitn') || msgLower.includes('charge') || msgLower.includes('kay')) {
       if (languageToUse === 'roman_marathi') {

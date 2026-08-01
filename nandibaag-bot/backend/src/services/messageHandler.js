@@ -105,7 +105,7 @@ function detectBookingType(text) {
 }
 
 function isDiscountIntent(text) {
-  return /\b(discount|offer|kam|kum|less|negotiate|negotiable|sasta|cheap|budget|final price|best price)\b/i.test(text || '');
+  return /\b(discount|offer|kam|kum|less|negotiate|negotiable|sasta|sasti|cheap|budget|final price|best price|swast|kami|mhag|mahag|mehenga|mehnga|kam karo|price kam)\b/i.test(text || '');
 }
 
 function isGreetingOnly(text) {

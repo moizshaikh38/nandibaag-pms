@@ -1,0 +1,94 @@
+{
+  "timestamp": "2026-08-01T12:33:34.149Z",
+  "total": 74,
+  "passed": 73,
+  "failed": 1,
+  "passRate": 98.6,
+  "categories": [
+    {
+      "category": "Cat 1: Greeting",
+      "passed": 5,
+      "total": 5
+    },
+    {
+      "category": "Cat 2: Couple",
+      "passed": 7,
+      "total": 7
+    },
+    {
+      "category": "Cat 3: Group",
+      "passed": 8,
+      "total": 8
+    },
+    {
+      "category": "Cat 4: Pricing",
+      "passed": 8,
+      "total": 8
+    },
+    {
+      "category": "Cat 5: Picnic",
+      "passed": 6,
+      "total": 6
+    },
+    {
+      "category": "Cat 6: Activities",
+      "passed": 6,
+      "total": 6
+    },
+    {
+      "category": "Cat 7: Policies",
+      "passed": 8,
+      "total": 8
+    },
+    {
+      "category": "Cat 8: Links",
+      "passed": 5,
+      "total": 5
+    },
+    {
+      "category": "Cat 9: Transport",
+      "passed": 3,
+      "total": 3
+    },
+    {
+      "category": "Cat 10: Phone",
+      "passed": 3,
+      "total": 3
+    },
+    {
+      "category": "Cat 11: Edge",
+      "passed": 6,
+      "total": 6
+    },
+    {
+      "category": "Cat 12: Marathi",
+      "passed": 6,
+      "total": 6
+    },
+    {
+      "category": "Cat 13: Discount",
+      "passed": 2,
+      "total": 3
+    }
+  ],
+  "failures": [
+    {
+      "testNum": 74,
+      "category": "Cat 13: Discount",
+      "input": "Swast rate sanga",
+      "reply": "Weekend la family stay sathi rate ₹3,000 per person per night aahe. Kiti jan aahes ka? Dates sanga, exact total batau. 😊",
+      "detectedLang": "roman_marathi",
+      "severity": "HIGH",
+      "failedChecks": [
+        "mentions food+activities included"
+      ]
+    }
+  ],
+  "criticalAudit": {
+    "unauthorizedPhones": [],
+    "gstMentioned": true,
+    "roomNumbersLeaked": false,
+    "bookingConfirmed": true,
+    "bannedWordsFound": false
+  }
+}
