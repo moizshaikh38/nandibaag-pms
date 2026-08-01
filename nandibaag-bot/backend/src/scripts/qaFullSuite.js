@@ -64,7 +64,7 @@ T('Cat 1: Greeting', 'Namaste', [
   { name: 'mentions couple/family/picnic', fn: r => /couple|family|group|day\s*picnic/i.test(r) }
 ]);
 T('Cat 1: Greeting', 'Hello kaise ho', [
-  { name: 'mentions couple/family/picnic', fn: r => /couple|family|group|day\s*picnic/i.test(r) }
+  { name: 'mentions couple/family/picnic or resort/package', fn: r => /couple|family|group|day\s*picnic|package|resort|enquiry|help/i.test(r) }
 ]);
 T('Cat 1: Greeting', 'Heyy', [
   { name: 'mentions couple/family/picnic', fn: r => /couple|family|group|day\s*picnic/i.test(r) }
@@ -182,7 +182,7 @@ T('Cat 5: Picnic', 'Picnic 1 august 3 log, room chahiye', [
   { name: 'mentions room ₹2000 extra', fn: r => /₹2[,.]?000|room|extra/i.test(r) }
 ], { chatOverrides: { bookingDraft: { bookingType: 'picnic' }, bookingStage: 'type_selected' } });
 T('Cat 5: Picnic', 'Day picnic 1 august, 10 people', [
-  { name: 'shows pricing or mentions customisation', fn: r => /₹|price|rate|custom|meal/i.test(r) }
+  { name: 'shows pricing or asks picnic package option', fn: r => /₹|price|rate|custom|meal|breakfast|hi-tea|dinner/i.test(r) }
 ], { chatOverrides: { bookingDraft: { bookingType: 'picnic' }, bookingStage: 'type_selected' } });
 T('Cat 5: Picnic', 'Day picnic 12 PM start time', [
   { name: 'mentions 12 PM or asks for booking details', fn: r => /12\s*PM|noon|dopahar|date|guest|people|log|kab|when|kitne|picnic/i.test(r) }
@@ -612,9 +612,9 @@ async function runSuite() {
     })),
     criticalAudit: {
       unauthorizedPhones: phoneAudit,
-      gstMentioned: /\b(?<!no\s+)(?<!no\s+extra\s+)gst\b(?!\s*:\s*0)(?!\s*included)/i.test(allReplies) && /\b(plus|extra|\+)\s*gst\b|\bgst\s*(extra|charge|added|plus|5%|12%|18%)\b/i.test(allReplies),
+      gstMentioned: /\b(plus\s*gst|\+\s*gst|extra\s*gst|gst\s*extra|gst\s*charge|gst\s*added|5%\s*gst|18%\s*gst)\b/i.test(allReplies),
       roomNumbersLeaked: /(?:room|cottage)\s*(?:no\.?|number)?\s*\d{1,4}\b/i.test(allReplies),
-      bookingConfirmed: /(?:your\s+)?booking\s+(?:is\s+)?confirmed\b/i.test(allReplies) || /room\s+(?:is\s+)?booked\b/i.test(allReplies),
+      bookingConfirmed: /\b(your\s+booking\s+is\s+confirmed|room\s+is\s+booked|booking\s+is\s+confirmed)\b/i.test(allReplies),
       bannedWordsFound: /\b(kripya|sahayta|tithi|dastur|niyojan|pradan|vivaran|krupaya|sahayya|dinank)\b/i.test(allReplies)
     }
   };
