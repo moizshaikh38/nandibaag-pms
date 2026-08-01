@@ -79,6 +79,11 @@ const chatSchema = new mongoose.Schema({
   whatsappNumberUsed: {
     type: String
   },
+  channel: {
+    type: String,
+    enum: ['whatsapp-web', 'fast2sms'],
+    default: 'whatsapp-web'
+  },
   mode: {
     type: String,
     enum: ['ai', 'human'],

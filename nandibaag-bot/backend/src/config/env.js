@@ -39,7 +39,14 @@ const envSchema = Joi.object({
 
   // ── Cerebras Tier (optional) ────────────────────────────────────────
   CEREBRAS_API_KEY: Joi.string().allow('', null).default('').description('Cerebras API Key'),
-  CEREBRAS_MODEL: Joi.string().default('gemma-4-31b').description('Cerebras AI Model')
+  CEREBRAS_MODEL: Joi.string().default('gemma-4-31b').description('Cerebras AI Model'),
+
+  // ── Fast2SMS WhatsApp Business Channel (parallel to Baileys) ────────
+  FAST2SMS_API_KEY: Joi.string().allow('', null).default('').description('Fast2SMS WhatsApp API key (from Fast2SMS dashboard)'),
+  FAST2SMS_API_URL: Joi.string().allow('', null).default('https://www.fast2sms.com/dev/whatsapp-session').description('Fast2SMS WhatsApp send endpoint'),
+  FAST2SMS_SENDER_NUMBERS: Joi.string().allow('', null).default('').description('Comma-separated Fast2SMS WhatsApp sender numbers, e.g. 9257657664,9257657663'),
+  FAST2SMS_PHONE_NUMBER_ID: Joi.string().allow('', null).default('').description('Meta-style phone number ID of the sender from the Fast2SMS dashboard (Get Phone Numbers API)'),
+  FAST2SMS_WEBHOOK_SECRET: Joi.string().allow('', null).default('').description('Shared secret used to verify Fast2SMS webhook authenticity')
 }).unknown();
 
 const { error, value: envVars } = envSchema.validate(process.env);
@@ -100,5 +107,12 @@ module.exports = {
   // Groq settings (production tier)
   groqApiKey: envVars.GROQ_API_KEY,
   groqModel: envVars.GROQ_MODEL,
-  groqBaseUrl: envVars.GROQ_BASE_URL
+  groqBaseUrl: envVars.GROQ_BASE_URL,
+
+  // Fast2SMS WhatsApp channel settings
+  fast2smsApiKey: envVars.FAST2SMS_API_KEY,
+  fast2smsApiUrl: envVars.FAST2SMS_API_URL,
+  fast2smsSenderNumbers: envVars.FAST2SMS_SENDER_NUMBERS,
+  fast2smsPhoneNumberId: envVars.FAST2SMS_PHONE_NUMBER_ID,
+  fast2smsWebhookSecret: envVars.FAST2SMS_WEBHOOK_SECRET
 };

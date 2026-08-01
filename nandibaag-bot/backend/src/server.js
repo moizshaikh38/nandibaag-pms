@@ -36,6 +36,9 @@ const pmsBookingRoutes = require('./routes/pmsBookingRoutes');
 const messageLogRoutes = require('./routes/messageLogRoutes');
 const numberRoutes = require('./routes/numberRoutes');
 const teamSecurityRoutes = require('./routes/teamSecurityRoutes');
+const fast2smsRoutes = require('./routes/fast2smsRoutes');
+const fast2smsService = require('./services/fast2smsService');
+const channelManager = require('./services/channelManager');
 
 const app = express();
 const server = http.createServer(app);
@@ -125,6 +128,7 @@ app.use('/api/availability', availabilityRoutes);
 app.use('/api/pms', pmsBookingRoutes);
 app.use('/api/message-log', messageLogRoutes);
 app.use('/api/team', teamSecurityRoutes);
+app.use('/api/fast2sms', fast2smsRoutes);
 
 // Global error handler (must be last)
 app.use(errorHandler);
@@ -199,6 +203,17 @@ const startServer = async () => {
     restartAllActiveSessions().catch(err => {
       logger.error(`Error restoring sessions: ${err.message}`);
     });
+    
+    // Initialize Fast2SMS channel (inert if API key missing — never blocks startup)
+    try {
+      fast2smsService.initialize();
+      // Wire the shared pipeline so fast2sms webhooks flow through the
+      // SAME AI/Human + booking logic as WhatsApp Web messages.
+      const { handleIncomingMessage } = require('./services/messageHandler');
+      global.messageHandlerCallback = handleIncomingMessage;
+    } catch (fast2smsErr) {
+      logger.error(`Fast2SMS initialization error: ${fast2smsErr.message}`);
+    }
     
     // Start follow-up & lifecycle cron jobs
     startFollowUpCron();
