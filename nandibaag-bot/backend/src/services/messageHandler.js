@@ -4,6 +4,7 @@ const { calculatePricing } = require('./pricingService');
 const { scoreMessage } = require('./leadScoring');
 const { scheduleFollowUps, cancelPendingFollowUps, containsOptOutPhrases, markChatAsOptedOut } = require('./followUpService');
 const whatsappService = require('./whatsappService');
+const channelManager = require('./channelManager');
 const { getCapacityAvailability, suggestRoomCombinations } = require('./availabilityService');
 const logger = require('../config/logger');
 
@@ -152,12 +153,13 @@ function buildEmergencyFallback(messageText, language = 'hinglish') {
 }
 
 /**
- * Handles incoming WhatsApp messages (Baileys compatible)
+ * Handles incoming messages (Baileys compatible)
  * 
  * @param {string} sessionId - WhatsApp session ID
  * @param {object} msg - Baileys proto.IWebMessageInfo object
+ * @param {'whatsapp-web' | 'fast2sms'} [channel='whatsapp-web'] - source channel
  */
-async function handleMessage(sessionId, msg) {
+async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
   const tStart = Date.now();
   try {
     // Extract customer phone (always clean numeric phone string)
@@ -224,8 +226,10 @@ async function handleMessage(sessionId, msg) {
     logger.info(`Processing message from ${customerPhone}: ${messageText.substring(0, 50)}...`);
 
     // Trigger WhatsApp typing state via Baileys presence update
-    const sockEntry = whatsappService.activeSockets.get(sessionId);
-    const sock = sockEntry?.sock || null;
+    // (only meaningful for the whatsapp-web channel — skip for fast2sms)
+    const sock = channel === 'whatsapp-web'
+      ? (whatsappService.activeSockets.get(sessionId)?.sock || null)
+      : null;
     if (sock) {
       try {
         await sock.sendPresenceUpdate('composing', msg.key.remoteJid);
@@ -251,6 +255,7 @@ async function handleMessage(sessionId, msg) {
         customerPhone,
         customerName: pushName || null,
         whatsappNumberUsed: sessionId,
+        channel,
         mode: settings.globalMode,
         language: 'unknown',
         messages: [],
@@ -526,9 +531,9 @@ async function handleMessage(sessionId, msg) {
       console.log(`[TIMING] [5/6] Sending message back via WhatsApp at ${new Date().toISOString()}`);
       console.log(`[MessageHandler] Sending to: ${rawJid}, Session: ${sessionId}`);
       
-      const sendResult = await whatsappService.sendMessage(sessionId, rawJid, aiReply);
+      const sendResult = await channelManager.sendMessageViaChannel(rawJid, aiReply, channel, sessionId);
       
-      console.log(`[MessageHandler] WhatsApp send result: ${sendResult ? 'SUCCESS' : 'FAILED'}`);
+      console.log(`[MessageHandler] Send result (${channel}): ${sendResult ? 'SUCCESS' : 'FAILED'}`);
       console.log(`[TIMING] [6/6] Sent message back via WhatsApp in ${Date.now() - tSendStart}ms. Total end-to-end processing time: ${Date.now() - tStart}ms.`);
       
       // Stop typing state presence
@@ -564,7 +569,7 @@ async function handleMessage(sessionId, msg) {
       await chat.save();
 
       try {
-        await whatsappService.sendMessage(sessionId, rawJid, fallbackReply);
+        await channelManager.sendMessageViaChannel(rawJid, fallbackReply, channel, sessionId);
       } catch (sendErr) {
         logger.error(`Failed to send fallback message to ${customerPhone}: ${sendErr.message}`);
       }
@@ -586,6 +591,37 @@ async function handleMessage(sessionId, msg) {
   }
 }
 
+/**
+ * Normalized entry point for messages arriving from ANY channel.
+ * Used by the channelManager for fast2sms (and reusable for other channels).
+ *
+ * @param {{from: string, body: string}} message
+ *        from — chatId format (e.g. "919876543210@s.whatsapp.net")
+ *        body — message text
+ * @param {'whatsapp-web' | 'fast2sms'} [channel='whatsapp-web']
+ */
+async function handleIncomingMessage(message, channel = 'whatsapp-web') {
+  const from = message?.from;
+  const body = message?.body;
+
+  if (!from || !body) {
+    logger.warn(`[handleIncomingMessage] Missing from/body for channel ${channel}`);
+    return;
+  }
+
+  // Build a Baileys-compatible message envelope so the SAME processing
+  // pipeline (AI, booking, pricing, mode) runs unchanged.
+  const msg = {
+    key: { remoteJid: from, fromMe: false },
+    message: { conversation: body },
+    pushName: message.name || null,
+    messageTimestamp: Math.floor(Date.now() / 1000)
+  };
+
+  await handleMessage(message.sessionId || (channel === 'fast2sms' ? 'fast2sms' : 'primary'), msg, channel);
+}
+
 module.exports = {
-  handleMessage
+  handleMessage,
+  handleIncomingMessage
 };

@@ -41,7 +41,7 @@ const QUICK_REPLIES = [
   { label: '💳 Payment Details', text: 'You can pay advance via Google Pay / PhonePe / Paytm / UPI to confirm your cottage reservation.' }
 ];
 
-export default function ChatWindow({ chat, onClose, onModeChange }) {
+export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated }) {
   const navigate = useNavigate();
   const socket = useSocket();
   const messagesEndRef = useRef(null);
@@ -86,6 +86,47 @@ export default function ChatWindow({ chat, onClose, onModeChange }) {
       }));
     }
   }, [chat]);
+
+  const fetchSingleChat = useCallback(async () => {
+    if (!chat?._id) return;
+    try {
+      const res = await api.get(`/chats/${chat._id}`);
+      if (res.data?.chat && onChatUpdated) {
+        onChatUpdated(res.data.chat);
+      }
+    } catch (err) {
+      console.error('Failed to fetch chat details:', err);
+    }
+  }, [chat?._id, onChatUpdated]);
+
+  useEffect(() => {
+    fetchSingleChat();
+  }, [chat?._id]);
+
+  useEffect(() => {
+    if (!socket || !chat?._id) return;
+
+    const handleMessageEvent = (data) => {
+      const targetId = data._id || data.chatId || data.chat?._id;
+      if (targetId === chat._id) {
+        if (data.chat && onChatUpdated) {
+          onChatUpdated(data.chat);
+        } else {
+          fetchSingleChat();
+        }
+      }
+    };
+
+    socket.on('chat:updated', handleMessageEvent);
+    socket.on('chat:new_message', handleMessageEvent);
+    socket.on('new_message', handleMessageEvent);
+
+    return () => {
+      socket.off('chat:updated', handleMessageEvent);
+      socket.off('chat:new_message', handleMessageEvent);
+      socket.off('new_message', handleMessageEvent);
+    };
+  }, [socket, chat?._id, fetchSingleChat, onChatUpdated]);
 
   useEffect(() => {
     if (!isUserScrolledUp && messagesEndRef.current) {
@@ -226,6 +267,11 @@ export default function ChatWindow({ chat, onClose, onModeChange }) {
         }
       }
       if (!textToSend) setMessageText('');
+      if (res?.data?.chat && onChatUpdated) {
+        onChatUpdated(res.data.chat);
+      } else {
+        fetchSingleChat();
+      }
       toast.success('Message sent to WhatsApp');
     } catch (error) {
       toast.error(error.response?.data?.message || 'Message failed to send — check WhatsApp connection');

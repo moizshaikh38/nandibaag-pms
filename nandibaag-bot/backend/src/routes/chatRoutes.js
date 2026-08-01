@@ -1,7 +1,7 @@
 const express = require('express');
 const { verifyToken } = require('../middleware/auth');
 const { Chat, Lead } = require('../models');
-const { sendMessage } = require('../services/whatsappService');
+const { sendMessageViaChannel } = require('../services/channelManager');
 const { cancelPendingFollowUps, containsOptOutPhrases, markChatAsOptedOut } = require('../services/followUpService');
 const logger = require('../config/logger');
 
@@ -184,16 +184,17 @@ const handleStaffSendMessage = async (req, res, next) => {
     console.log(`[StaffSendMessage] Attempting send to ${chat.customerPhone} (chatId: ${chat._id})`);
     
     const sessionId = chat.whatsappNumberUsed || 'resort_primary';
+    const channel = chat.channel || 'whatsapp-web';
     let deliveryStatus = 'sent';
     let sendError = null;
 
     try {
-      await sendMessage(sessionId, chat.customerPhone, text.trim());
-      console.log(`[StaffSendMessage] Baileys socket send succeeded for ${chat.customerPhone}`);
+      await sendMessageViaChannel(chat.customerPhone, text.trim(), channel, sessionId);
+      console.log(`[StaffSendMessage] Send via ${channel} succeeded for ${chat.customerPhone}`);
     } catch (err) {
       deliveryStatus = 'failed';
       sendError = err.message;
-      logger.error(`[StaffSendMessage] Baileys socket send failed for ${chat.customerPhone}: ${err.message}`);
+      logger.error(`[StaffSendMessage] Send via ${channel} failed for ${chat.customerPhone}: ${err.message}`);
     }
 
     const newMessageObj = {

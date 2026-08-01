@@ -381,9 +381,18 @@ export default function ChatsPage() {
                       </p>
 
                       <div className="flex items-center justify-between pt-1">
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          {formatPhoneDisplay(chat.customerPhone)}
-                        </span>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold border shrink-0 ${
+                            chat.channel === 'fast2sms'
+                              ? 'bg-sky-50 text-sky-700 border-sky-200'
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          }`} title={chat.channel === 'fast2sms' ? 'Fast2SMS WhatsApp Business channel' : 'WhatsApp Web channel'}>
+                            {chat.channel === 'fast2sms' ? '📡 Fast2SMS' : '📱 WhatsApp Web'}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono truncate">
+                            {formatPhoneDisplay(chat.customerPhone)}
+                          </span>
+                        </div>
 
                         {/* Mode Toggle Button */}
                         <button
@@ -415,6 +424,19 @@ export default function ChatsPage() {
             chat={selectedChat}
             onClose={() => setSelectedChatId(null)}
             onModeChange={(newMode) => handleListRowToggle(selectedChat._id, newMode)}
+            onChatUpdated={(updatedChat) => {
+              setChats(prev => {
+                const index = prev.findIndex(c => c._id === updatedChat._id);
+                if (index >= 0) {
+                  const newArr = [...prev];
+                  newArr[index] = { ...newArr[index], ...updatedChat, lastMessageAt: new Date() };
+                  const [moved] = newArr.splice(index, 1);
+                  newArr.unshift(moved);
+                  return newArr;
+                }
+                return [updatedChat, ...prev];
+              });
+            }}
           />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-3">
