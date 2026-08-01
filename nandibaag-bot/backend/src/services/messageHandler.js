@@ -511,20 +511,22 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
         return;
       }
       
-      // Add AI reply to chat
-      chat.messages.push({
+      // Add AI reply to chat — mark as 'pending' until WhatsApp confirms delivery
+      const botMsg = {
         sender: 'bot',
         text: aiReply,
         timestamp: new Date(),
-        messageType: 'text'
-      });
+        messageType: 'text',
+        deliveryStatus: 'pending'
+      };
+      chat.messages.push(botMsg);
       
       if (chat.isNewConversation) {
         chat.isNewConversation = false;
       }
       
       await chat.save();
-      console.log(`[MessageHandler] Chat saved with AI reply`);
+      console.log(`[MessageHandler] Chat saved with AI reply (status: pending)`);
       
       // Send reply via WhatsApp
       const tSendStart = Date.now();
@@ -533,8 +535,31 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
       
       const sendResult = await channelManager.sendMessageViaChannel(rawJid, aiReply, channel, sessionId);
       
-      console.log(`[MessageHandler] Send result (${channel}): ${sendResult ? 'SUCCESS' : 'FAILED'}`);
+      // Update delivery status based on actual send result
+      const lastMsg = chat.messages[chat.messages.length - 1];
+      if (lastMsg && lastMsg.sender === 'bot') {
+        lastMsg.deliveryStatus = sendResult ? 'sent' : 'queued';
+      }
+      await chat.save();
+      
+      console.log(`[MessageHandler] Send result (${channel}): ${sendResult ? 'SUCCESS ✓' : 'FAILED ✗ (queued for retry)'}`);
       console.log(`[TIMING] [6/6] Sent message back via WhatsApp in ${Date.now() - tSendStart}ms. Total end-to-end processing time: ${Date.now() - tStart}ms.`);
+      
+      if (!sendResult) {
+        logger.error(`⚠️  [DELIVERY FAILED] AI reply for ${customerPhone} was NOT delivered via WhatsApp. Message queued for retry.`);
+        try {
+          const { getIO } = require('../sockets');
+          const io = getIO();
+          if (io) {
+            io.emit('chat:delivery_failed', {
+              chatId: chat._id,
+              customerPhone,
+              message: aiReply.substring(0, 80),
+              reason: 'WhatsApp send failed — queued for retry'
+            });
+          }
+        } catch (socketErr) {}
+      }
       
       // Stop typing state presence
       if (sock) {
@@ -553,7 +578,7 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
       }
       
       emitRealtimeUpdate(aiReply, 'bot');
-      logger.info(`AI response sent to ${customerPhone}`);
+      logger.info(`AI response ${sendResult ? 'sent' : 'QUEUED (delivery pending)'} to ${customerPhone}`);
       
     } catch (aiError) {
       logger.error(`AI generation failed for ${customerPhone}: ${aiError.message}`);
@@ -564,15 +589,24 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
         sender: 'bot',
         text: fallbackReply,
         timestamp: new Date(),
-        messageType: 'text'
+        messageType: 'text',
+        deliveryStatus: 'pending'
       });
       await chat.save();
 
+      let fallbackSent = false;
       try {
-        await channelManager.sendMessageViaChannel(rawJid, fallbackReply, channel, sessionId);
+        fallbackSent = await channelManager.sendMessageViaChannel(rawJid, fallbackReply, channel, sessionId);
       } catch (sendErr) {
         logger.error(`Failed to send fallback message to ${customerPhone}: ${sendErr.message}`);
       }
+      
+      // Update delivery status
+      const lastFallbackMsg = chat.messages[chat.messages.length - 1];
+      if (lastFallbackMsg && lastFallbackMsg.sender === 'bot') {
+        lastFallbackMsg.deliveryStatus = fallbackSent ? 'sent' : 'queued';
+      }
+      await chat.save();
 
       if (sock) {
         try {
