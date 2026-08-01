@@ -42,7 +42,9 @@ async function routeIncomingMessage(message, channel) {
  */
 async function sendMessageViaChannel(chatId, text, channel, sessionId = 'primary') {
   if (channel === 'fast2sms') {
-    return await fast2smsService.sendMessage(chatId, text);
+    const success = await fast2smsService.sendMessage(chatId, text);
+    if (success) return true;
+    console.log(`[ChannelManager] Fast2SMS send failed or not configured for ${chatId}. Attempting WhatsApp Web (Baileys) fallback...`);
   }
   // default / fallback to whatsapp-web
   return await whatsappService.sendMessage(sessionId, chatId, text);
