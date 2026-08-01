@@ -1,13 +1,13 @@
 {
-  "timestamp": "2026-08-01T12:33:34.149Z",
+  "timestamp": "2026-08-01T12:37:59.737Z",
   "total": 74,
-  "passed": 73,
-  "failed": 1,
-  "passRate": 98.6,
+  "passed": 72,
+  "failed": 2,
+  "passRate": 97.3,
   "categories": [
     {
       "category": "Cat 1: Greeting",
-      "passed": 5,
+      "passed": 4,
       "total": 5
     },
     {
@@ -27,7 +27,7 @@
     },
     {
       "category": "Cat 5: Picnic",
-      "passed": 6,
+      "passed": 5,
       "total": 6
     },
     {
@@ -67,28 +67,39 @@
     },
     {
       "category": "Cat 13: Discount",
-      "passed": 2,
+      "passed": 3,
       "total": 3
     }
   ],
   "failures": [
     {
-      "testNum": 74,
-      "category": "Cat 13: Discount",
-      "input": "Swast rate sanga",
-      "reply": "Weekend la family stay sathi rate ₹3,000 per person per night aahe. Kiti jan aahes ka? Dates sanga, exact total batau. 😊",
-      "detectedLang": "roman_marathi",
+      "testNum": 4,
+      "category": "Cat 1: Greeting",
+      "input": "Hello kaise ho",
+      "reply": "Hello! 😊 Main bilkul theek hoon. Aap kaise hain? Nandibaag Resort ke packages ke baare mein koi enquiry hai?",
+      "detectedLang": "hinglish",
       "severity": "HIGH",
       "failedChecks": [
-        "mentions food+activities included"
+        "mentions couple/family/picnic"
+      ]
+    },
+    {
+      "testNum": 33,
+      "category": "Cat 5: Picnic",
+      "input": "Day picnic 1 august, 10 people",
+      "reply": "Aapka Day Picnic 1st August ke liye hai. Ye picnic package mein 10 logon ke liye kya chahiye? Breakfast se Dinner ya Breakfast se Hi-Tea? 😊",
+      "detectedLang": "hinglish",
+      "severity": "HIGH",
+      "failedChecks": [
+        "shows pricing or mentions customisation"
       ]
     }
   ],
   "criticalAudit": {
     "unauthorizedPhones": [],
-    "gstMentioned": true,
+    "gstMentioned": false,
     "roomNumbersLeaked": false,
-    "bookingConfirmed": true,
+    "bookingConfirmed": false,
     "bannedWordsFound": false
   }
 }

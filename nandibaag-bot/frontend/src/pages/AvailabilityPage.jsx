@@ -71,6 +71,14 @@ export default function AvailabilityPage() {
     setSelectedDate(target.toISOString().split('T')[0]);
   };
 
+  const handlePresetWeekend = () => {
+    const target = new Date();
+    const day = target.getDay();
+    const daysUntilSat = (6 - day + 7) % 7;
+    target.setDate(target.getDate() + (daysUntilSat === 0 && day === 6 ? 0 : daysUntilSat));
+    setSelectedDate(target.toISOString().split('T')[0]);
+  };
+
   const fetchGrid = async () => {
     try {
       setLoading(true);
@@ -250,66 +258,106 @@ export default function AvailabilityPage() {
         </div>
       </div>
 
-      {/* Single Calendar Date Picker */}
-      <div className="glass-card p-4 rounded-2xl bg-white border border-slate-200 flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-3 w-full md:w-auto">
+      {/* Mobile-Optimized Calendar Date Picker */}
+      <div className="glass-card p-3.5 sm:p-4 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-3 md:space-y-0 md:flex md:items-center md:justify-between md:gap-4">
+        
+        {/* Main Date Navigation & Touch Trigger */}
+        <div className="flex items-center justify-between gap-2 w-full md:w-auto">
+          {/* Previous Day */}
           <button
+            type="button"
             onClick={() => handleNavigateDate(-1)}
-            className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors"
+            className="p-2.5 sm:p-3 bg-slate-100 hover:bg-emerald-100 active:scale-95 text-slate-700 hover:text-emerald-900 rounded-xl transition-all shadow-2xs flex items-center justify-center shrink-0"
             title="Previous Day"
+            aria-label="Previous Day"
           >
-            <ChevronLeft size={18} />
+            <ChevronLeft size={20} />
           </button>
 
-          <div className="flex items-center gap-2.5 bg-emerald-50/80 text-emerald-950 px-4 py-2 rounded-xl border border-emerald-200 shadow-xs">
-            <CalendarIcon size={18} className="text-emerald-700" />
-            <span className="text-xs font-bold">Calendar Date:</span>
-            <span className="text-xs font-bold text-emerald-900 bg-white px-2.5 py-1 rounded-lg border border-emerald-200 shadow-2xs font-mono">
-              {formatDMY(selectedDate)}
-            </span>
+          {/* Interactive Date Picker Box (Tapping ANYWHERE opens native phone calendar) */}
+          <div 
+            onClick={(e) => {
+              const input = e.currentTarget.querySelector('input[type="date"]');
+              if (input && typeof input.showPicker === 'function') {
+                try { input.showPicker(); } catch (err) {}
+              }
+            }}
+            className="relative flex-1 md:flex-none flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 text-emerald-950 px-3.5 py-2.5 rounded-xl border border-emerald-300 shadow-2xs cursor-pointer transition-all active:scale-[0.99] group overflow-hidden"
+          >
+            <CalendarIcon size={18} className="text-emerald-700 group-hover:scale-110 transition-transform shrink-0" />
+            
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-xs font-semibold text-emerald-800 hidden sm:inline">Date:</span>
+              <span className="text-xs sm:text-sm font-bold text-emerald-950 font-mono tracking-tight bg-white/90 px-2 py-0.5 rounded-lg border border-emerald-200/80 shadow-2xs">
+                {formatDMY(selectedDate)}
+              </span>
+              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-200/60 px-1.5 py-0.5 rounded-md capitalize shrink-0">
+                {new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'short' })}
+              </span>
+            </div>
+
+            {/* Native Date Input overlaid 100% across the container */}
             <input
               type="date"
               value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer w-7 opacity-70 hover:opacity-100"
+              onChange={(e) => {
+                if (e.target.value) setSelectedDate(e.target.value);
+              }}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
               title="Change Date"
             />
           </div>
 
+          {/* Next Day */}
           <button
+            type="button"
             onClick={() => handleNavigateDate(1)}
-            className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors"
+            className="p-2.5 sm:p-3 bg-slate-100 hover:bg-emerald-100 active:scale-95 text-slate-700 hover:text-emerald-900 rounded-xl transition-all shadow-2xs flex items-center justify-center shrink-0"
             title="Next Day"
+            aria-label="Next Day"
           >
-            <ChevronRight size={18} />
+            <ChevronRight size={20} />
           </button>
         </div>
 
-        {/* Quick Date Presets */}
-        <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+        {/* Quick Date Presets (Scrollable Touch Bar on Mobile) */}
+        <div className="flex items-center gap-1.5 w-full md:w-auto overflow-x-auto no-scrollbar py-0.5">
           <button
+            type="button"
             onClick={() => handlePresetDate(0)}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+            className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all whitespace-nowrap active:scale-95 ${
               selectedDate === todayStr ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
             }`}
           >
             Today
           </button>
           <button
+            type="button"
             onClick={() => handlePresetDate(1)}
-            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg"
+            className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all whitespace-nowrap active:scale-95 ${
+              selectedDate === new Date(Date.now() + 86400000).toISOString().split('T')[0] ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+            }`}
           >
             Tomorrow
           </button>
           <button
-            onClick={() => handlePresetDate(5)}
-            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg"
+            type="button"
+            onClick={handlePresetWeekend}
+            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl whitespace-nowrap active:scale-95"
           >
             This Weekend
           </button>
           <button
+            type="button"
+            onClick={() => handlePresetDate(7)}
+            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl whitespace-nowrap active:scale-95"
+          >
+            +1 Week
+          </button>
+          <button
+            type="button"
             onClick={fetchGrid}
-            className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg ml-1"
+            className="p-2 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl transition-colors ml-auto md:ml-1 shrink-0"
             title="Refresh Grid"
           >
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
