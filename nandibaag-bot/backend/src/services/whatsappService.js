@@ -170,7 +170,6 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
     }
 
     logger.info(`[initSession] Initializing Baileys session: ${sessionId}`);
-    console.log(`[initSession] Loading auth state from MongoDB...`);
 
     const { state, saveCreds } = authState;
     const { version } = await fetchLatestBaileysVersion();
@@ -195,6 +194,7 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
       syncFullHistory: false,
       retryRequestDelayMs: 3000,
       generateHighQualityLinkPreview: false,
+      // Use standard WhatsApp Web socket for QR generation
       waWebSocketUrl: 'wss://web.whatsapp.com/ws',
       qrMaxRetries: 5,
     });
