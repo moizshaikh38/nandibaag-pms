@@ -11,16 +11,24 @@ const {
 } = require('../config/env');
 const crypto = require('crypto');
 
-// ── OpenRouter client (OpenAI-compatible) ─────────────────────────────
-const openai = new OpenAI({
-  baseURL: 'https://openrouter.ai/api/v1',
-  apiKey: openrouterApiKey || process.env.OPENROUTER_API_KEY || 'missing_key',
-  defaultHeaders: {
-    'HTTP-Referer': openrouterSiteUrl || process.env.OPENROUTER_SITE_URL || 'https://nandibaag.com',
-    'X-Title': openrouterAppName || process.env.OPENROUTER_APP_NAME || 'Nandibaag WhatsApp AI'
-  },
-  maxRetries: 0
-});
+// ── OpenRouter client (OpenAI-compatible, lazy-initialized) ─────────────
+let openAIClientInstance = null;
+function getOpenAIClient() {
+  const apiKey = openrouterApiKey || process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return null;
+  if (!openAIClientInstance) {
+    openAIClientInstance = new OpenAI({
+      baseURL: 'https://openrouter.ai/api/v1',
+      apiKey,
+      defaultHeaders: {
+        'HTTP-Referer': openrouterSiteUrl || process.env.OPENROUTER_SITE_URL || 'https://nandibaag.com',
+        'X-Title': openrouterAppName || process.env.OPENROUTER_APP_NAME || 'Nandibaag WhatsApp AI'
+      },
+      maxRetries: 0
+    });
+  }
+  return openAIClientInstance;
+}
 
 // ── Gemini client (lazy-initialized) ──────────────────────────────────
 let geminiClientInstance = null;
@@ -1070,8 +1078,9 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
           continue;
         }
         logger.info(`[${tierLabel}] attempting model: ${tier.model}...`);
+        const openAIClient = getOpenAIClient();
         result = await tryOpenAICompatibleCall(
-          openai, tier.model, `openrouter/${tier.model}`, tierLabel,
+          openAIClient, tier.model, `openrouter/${tier.model}`, tierLabel,
           messageHistory, finalSystemPrompt, tier.timeout
         );
       } else if (tier.provider === 'groq') {
