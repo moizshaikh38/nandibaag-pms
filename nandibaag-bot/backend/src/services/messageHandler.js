@@ -657,5 +657,6 @@ async function handleIncomingMessage(message, channel = 'whatsapp-web') {
 
 module.exports = {
   handleMessage,
-  handleIncomingMessage
+  handleIncomingMessage,
+  extractBookingDetails
 };
