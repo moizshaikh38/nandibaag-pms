@@ -236,12 +236,7 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
 
       // ─── QR Code ────────────────────────────────────────────────
       if (qr) {
-        try {
-          const qrDataUrl = await qrcode.toDataURL(qr);
-          logger.info(`QR code generated for session ${sessionId}`);
-
-      // ─── QR Code ────────────────────────────────────────────────
-      if (qr) {
+        console.log('[WhatsApp] ⚠️  QR Code - Scan to authenticate');
         try {
           const qrDataUrl = await qrcode.toDataURL(qr);
           logger.info(`QR code generated for session ${sessionId}`);
