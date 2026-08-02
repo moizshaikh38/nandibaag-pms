@@ -184,7 +184,6 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
         keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
       },
       logger: pino({ level: 'silent' }),
-      printQRInTerminal: true,
       browser: ['Nandibaag Resort', 'Chrome', '120.0.0'],
       keepAliveIntervalMs: 60000,
       connectTimeoutMs: 90000,
@@ -194,8 +193,7 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
       syncFullHistory: false,
       retryRequestDelayMs: 3000,
       generateHighQualityLinkPreview: false,
-      // Use standard WhatsApp Web socket for QR generation
-      waWebSocketUrl: 'wss://web.whatsapp.com/ws',
+      waWebSocketUrl: 'wss://web.whatsapp.com/ws/chat',
       qrMaxRetries: 5,
     });
     
@@ -224,6 +222,7 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
     // ── Connection Lifecycle ────────────────────────────────────────
     sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
+      console.log(`[Baileys:Debug] connection.update for ${sessionId}:`, JSON.stringify({ connection, hasQr: !!qr, lastDisconnect: lastDisconnect ? String(lastDisconnect) : undefined }));
 
       // ─── ZOMBIE CHECK ───────────────────────────────────────────
       // If this socket is NOT the current active socket for this sessionId,
@@ -236,7 +235,18 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
 
       // ─── QR Code ────────────────────────────────────────────────
       if (qr) {
-        console.log('[WhatsApp] ⚠️  QR Code - Scan to authenticate');
+        console.log('\n==================================================');
+        console.log(`[WhatsApp] ⚠️  QR Code received for session '${sessionId}' — Scan to authenticate`);
+        console.log('==================================================');
+
+        // Render ASCII QR Code directly in terminal
+        qrcode.toString(qr, { type: 'terminal', small: true }, (err, terminalQrStr) => {
+          if (!err && terminalQrStr) {
+            console.log(terminalQrStr);
+            console.log('==================================================\n');
+          }
+        });
+
         try {
           const qrDataUrl = await qrcode.toDataURL(qr);
           logger.info(`QR code generated for session ${sessionId}`);
