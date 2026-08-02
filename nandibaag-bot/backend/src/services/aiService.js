@@ -1162,18 +1162,22 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
       }
     } else {
       const draft = chat?.bookingDraft || {};
+      const { extractBookingDetails } = require('./messageHandler');
+      const extracted = typeof extractBookingDetails === 'function' ? extractBookingDetails(incomingMessage) : {};
+      const effectiveDate = draft.date || extracted.date;
+      const effectiveAdults = draft.adults || extracted.adults;
       const hasHistory = Array.isArray(chat?.messages) && chat.messages.filter(m => m.sender === 'customer').length > 1;
 
-      if (draft.date && draft.adults) {
+      if (effectiveDate && effectiveAdults) {
         if (languageToUse === 'roman_marathi') {
-          result = `Ho ji, aapli date (${draft.date}) ani guest count (${draft.adults}) milali aahe. Main availability check karun sangto! Rates: ₹2,000 (Weekday) / ₹3,000 (Weekend) per person. 🌿`;
+          result = `Ho ji, aapli date (${effectiveDate}) ani guest count (${effectiveAdults}) milali aahe. Rates: ₹2,000 (Weekday) / ₹3,000 (Weekend) per person (Food + Activities included). 🌿`;
         } else if (languageToUse === 'marathi') {
-          result = `हो जी, तुमची तारीख (${draft.date}) आणि व्यक्तींची संख्या (${draft.adults}) मिळाली आहे. दर: ₹२,००० (Weekdays) / ₹३,००० (Weekends) प्रति व्यक्ती. 🌿`;
+          result = `हो जी, तुमची तारीख (${effectiveDate}) आणि व्यक्तींची संख्या (${effectiveAdults}) मिळाली आहे. दर: ₹२,००० (Weekdays) / ₹३,००० (Weekends) प्रति व्यक्ती. 🌿`;
         } else {
-          result = `Ji, aapki date (${draft.date}) aur ${draft.adults} guests ki query mil gayi hai. Package rates: ₹2,000 (Weekday) / ₹3,000 (Weekend) per person (Food + Activities included). 🌿`;
+          result = `Ji, aapki date (${effectiveDate}) aur ${effectiveAdults} guests ki query mil gayi hai. Package rates: ₹2,000 (Weekday) / ₹3,000 (Weekend) per person (Food + Activities included). 🌿`;
         }
-      } else if (draft.bookingType || hasHistory) {
-        if (!draft.date) {
+      } else if (draft.bookingType || hasHistory || extracted.date || extracted.adults) {
+        if (!effectiveDate) {
           if (languageToUse === 'roman_marathi') {
             result = `Konta date sathi check-in plan karat aahat? (E.g. 15 August, 25 Dec, yaudya weekend) 🗓️`;
           } else if (languageToUse === 'marathi') {
@@ -1181,7 +1185,7 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
           } else {
             result = `Aap kis date pe check-in plan kar rahe hain? Check-in date batayein! 🗓️`;
           }
-        } else if (!draft.adults) {
+        } else if (!effectiveAdults) {
           if (languageToUse === 'roman_marathi') {
             result = `Ekaatra kiti adults ani kiti kids yenar aahat? (E.g. 4 adults, 2 kids) 👨‍👩‍👧‍👦`;
           } else if (languageToUse === 'marathi') {
