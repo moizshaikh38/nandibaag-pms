@@ -345,7 +345,7 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
       return;
     }
 
-    console.log(`[MessageHandler] Processing in AI mode`);
+
     
     // In AI mode, emit immediately when customer message arrives so dashboard updates instantly!
     emitRealtimeUpdate(messageText || '[Media]', 'customer');
@@ -357,8 +357,7 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
         if (note) systemNotesList.push(note);
       };
       
-      console.log(`[MessageHandler] Starting AI response generation for ${customerPhone}`);
-      console.log(`[MessageHandler] Chat mode: ${mode}`);
+
 
       const msgLower = (messageText || '').toLowerCase();
       const bookingType = detectBookingType(messageText);
@@ -504,7 +503,7 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
       const systemNotes = systemNotesList.join('\n\n');
       const aiReply = await getAIResponse(chat, messageText, settings, systemNotes);
       console.log(`[TIMING] [4/6] getAIResponse finished, AI reply generated in ${Date.now() - tStart}ms`);
-      console.log(`[MessageHandler] AI reply received: "${aiReply?.substring(0, 50)}..."`);
+
       
       if (!aiReply || aiReply.trim() === '') {
         console.error(`[MessageHandler] AI reply is empty! Skipping message send.`);
@@ -526,12 +525,12 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
       }
       
       await chat.save();
-      console.log(`[MessageHandler] Chat saved with AI reply (status: pending)`);
+
       
       // Send reply via WhatsApp
       const tSendStart = Date.now();
       console.log(`[TIMING] [5/6] Sending message back via WhatsApp at ${new Date().toISOString()}`);
-      console.log(`[MessageHandler] Sending to: ${rawJid}, Session: ${sessionId}`);
+
       
       const sendResult = await channelManager.sendMessageViaChannel(rawJid, aiReply, channel, sessionId);
       
@@ -542,7 +541,7 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
       }
       await chat.save();
       
-      console.log(`[MessageHandler] Send result (${channel}): ${sendResult ? 'SUCCESS ✓' : 'FAILED ✗ (queued for retry)'}`);
+
       console.log(`[TIMING] [6/6] Sent message back via WhatsApp in ${Date.now() - tSendStart}ms. Total end-to-end processing time: ${Date.now() - tStart}ms.`);
       
       if (!sendResult) {

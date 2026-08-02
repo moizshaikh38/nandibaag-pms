@@ -153,7 +153,6 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
   }
 
   connectingSessions.add(sessionId);
-  console.log(`[initSession] Added ${sessionId} to connectingSessions`);
 
   try {
     const useMongoAuthState = require('./mongoAuthState');
@@ -174,9 +173,7 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
     console.log(`[initSession] Loading auth state from MongoDB...`);
 
     const { state, saveCreds } = authState;
-    console.log(`[initSession] Auth state loaded, fetching Baileys version...`);
     const { version } = await fetchLatestBaileysVersion();
-    console.log(`[initSession] Baileys version: ${version}`);
 
     // Assign a unique ID to this specific socket instance
     const mySocketId = ++socketIdCounter;
@@ -188,19 +185,17 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
         keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
       },
       logger: pino({ level: 'silent' }),
-      printQRInTerminal: false,
+      printQRInTerminal: true,
       browser: ['Nandibaag Resort', 'Chrome', '120.0.0'],
-      keepAliveIntervalMs: 30000,
-      connectTimeoutMs: 60000,
-      defaultQueryTimeoutMs: 60000,
+      keepAliveIntervalMs: 60000,
+      connectTimeoutMs: 90000,
+      defaultQueryTimeoutMs: 90000,
       emitOwnEvents: false,
-      markOnlineOnConnect: false,
+      markOnlineOnConnect: true,
       syncFullHistory: false,
-      retryRequestDelayMs: 3000, // Increased from 2s to 3s
+      retryRequestDelayMs: 3000,
       generateHighQualityLinkPreview: false,
-      // Baileys v6.7+ expects the WhatsApp Web chat socket. Using /ws
-      // connects but never receives the pair-device refs needed for QR.
-      waWebSocketUrl: 'wss://web.whatsapp.com/ws/chat',
+      waWebSocketUrl: 'wss://web.whatsapp.com/ws',
       qrMaxRetries: 5,
     });
     
@@ -241,11 +236,9 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
 
       // ─── QR Code ────────────────────────────────────────────────
       if (qr) {
-        console.log(`[initSession] QR Code received for ${sessionId}`);
         try {
           const qrDataUrl = await qrcode.toDataURL(qr);
           logger.info(`QR code generated for session ${sessionId}`);
-          console.log(`[initSession] QR Data URL created, emitting socket event`);
 
           try {
             const { Settings } = require('../models');
@@ -413,7 +406,7 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
         messageQueueLocks.set(chatPhone, lock.then(async () => {
           try {
             const messageHandler = require('./messageHandler');
-            await messageHandler.handleMessage(sessionId, msg);
+            await messageHandler.handleMessage(sessionId, msg, 'whatsapp-web');
           } catch (error) {
             logger.error(`Error processing message from ${chatPhone}: ${error.message}`);
           } finally {
@@ -778,14 +771,7 @@ async function sendMessage(sessionId, toPhone, text) {
 
   const isReady = !!(entry?.sock && entry.sock.user && entry.sock.user.id);
 
-  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('[WhatsApp:Send] Called for:', toPhone);
-  console.log('[WhatsApp:Send] Text length:', text ? text.length : 0);
-  console.log('[WhatsApp:Send] Active sessions:', activeKeys);
-  console.log('[WhatsApp:Send] Client ready?', isReady);
-  console.log('[WhatsApp:Send] Client exists?', !!entry?.sock);
-  console.log('[WhatsApp:Send] Client JID:', entry?.sock?.user?.id || 'NULL');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
 
   if (!entry?.sock) {
     logger.warn(`[sendMessage] Session '${sessionId}' is not ready. Queueing message for: ${toPhone}`);
