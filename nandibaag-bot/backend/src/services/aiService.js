@@ -1161,14 +1161,47 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
         result = `Nandibaag Resort Packages:\n1. 🏡 Couple Stay: ₹5,000 (Weekday) / ₹6,500 (Weekend)\n2. 👨‍👩‍👧‍👦 Group Stay: ₹2,000 (Weekday) / ₹3,000 (Weekend) per person\n3. 🌊 Day Picnic: ₹1,200/person (12 PM - 8 PM)\n\nCheck-in date aur total guests batayein! 🗓️`;
       }
     } else {
-      if (languageToUse === 'roman_marathi') {
-        result = `Namaste! 🌿 Nandibaag Resort madhe aaple swagat aahe. Couple stay, family group stay ki day picnic — konta pahije?`;
-      } else if (languageToUse === 'marathi') {
-        result = `नमस्ते! 🌿 नंदीबाग रिसॉर्टमध्ये आपले स्वागत आहे. कपल स्टे, फॅमिली स्टे की वन डे पिकनिक — कोणतं बुकिंग हवं आहे?`;
-      } else if (languageToUse === 'english') {
-        result = `Namaste! 🌿 Welcome to Nandibaag Resort. Are you planning for a Couple Stay, Family Group Stay, or Day Picnic?`;
+      const draft = chat?.bookingDraft || {};
+      const hasHistory = Array.isArray(chat?.messages) && chat.messages.filter(m => m.sender === 'customer').length > 1;
+
+      if (draft.date && draft.adults) {
+        if (languageToUse === 'roman_marathi') {
+          result = `Ho ji, aapli date (${draft.date}) ani guest count (${draft.adults}) milali aahe. Main availability check karun sangto! Rates: ₹2,000 (Weekday) / ₹3,000 (Weekend) per person. 🌿`;
+        } else if (languageToUse === 'marathi') {
+          result = `हो जी, तुमची तारीख (${draft.date}) आणि व्यक्तींची संख्या (${draft.adults}) मिळाली आहे. दर: ₹२,००० (Weekdays) / ₹३,००० (Weekends) प्रति व्यक्ती. 🌿`;
+        } else {
+          result = `Ji, aapki date (${draft.date}) aur ${draft.adults} guests ki query mil gayi hai. Package rates: ₹2,000 (Weekday) / ₹3,000 (Weekend) per person (Food + Activities included). 🌿`;
+        }
+      } else if (draft.bookingType || hasHistory) {
+        if (!draft.date) {
+          if (languageToUse === 'roman_marathi') {
+            result = `Konta date sathi check-in plan karat aahat? (E.g. 15 August, 25 Dec, yaudya weekend) 🗓️`;
+          } else if (languageToUse === 'marathi') {
+            result = `कोणत्या तारखेला चेक-इन करायचे आहे? (उदा. १५ ऑगस्ट, पुढचा वीकेंड) 🗓️`;
+          } else {
+            result = `Aap kis date pe check-in plan kar rahe hain? Check-in date batayein! 🗓️`;
+          }
+        } else if (!draft.adults) {
+          if (languageToUse === 'roman_marathi') {
+            result = `Ekaatra kiti adults ani kiti kids yenar aahat? (E.g. 4 adults, 2 kids) 👨‍👩‍👧‍👦`;
+          } else if (languageToUse === 'marathi') {
+            result = `एकूण किती adults आणि लहान मुले येणार आहेत? 👨‍👩‍👧‍👦`;
+          } else {
+            result = `Total kitne adults aur kids aayenge? Total guest count batayein! 👨‍👩‍👧‍👦`;
+          }
+        } else {
+          result = `Ji, Nandibaag Resort mein Couple Stay (₹5,000 Wkday / ₹6,500 Wkend), Family Group (₹2,000 Wkday / ₹3,000 Wkend per head), aur Day Picnic (₹1,200/head) options available hain. Aap kiske baare mein aur janna chahte hain? 🌿`;
+        }
       } else {
-        result = `Namaste! 🌿 Welcome to Nandibaag Resort. Aap Couple Stay, Family Group Stay ya Day Picnic kis package ke baare mein enquire karna chahte hain?`;
+        if (languageToUse === 'roman_marathi') {
+          result = `Namaste! 🌿 Nandibaag Resort madhe aaple swagat aahe. Couple stay, family group stay ki day picnic — konta pahije?`;
+        } else if (languageToUse === 'marathi') {
+          result = `नमस्ते! 🌿 नंदीबाग रिसॉर्टमध्ये आपले स्वागत आहे. कपल स्टे, फॅमिली स्टे की वन डे पिकनिक — कोणतं बुकिंग हवं आहे?`;
+        } else if (languageToUse === 'english') {
+          result = `Namaste! 🌿 Welcome to Nandibaag Resort. Are you planning for a Couple Stay, Family Group Stay, or Day Picnic?`;
+        } else {
+          result = `Namaste! 🌿 Welcome to Nandibaag Resort. Aap Couple Stay, Family Group Stay ya Day Picnic kis package ke baare mein enquire karna chahte hain?`;
+        }
       }
     }
   }
