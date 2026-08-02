@@ -109,6 +109,41 @@ app.get('/health', async (req, res) => {
   }
 });
 
+// Diagnostic endpoint for remote debugging (no secrets exposed)
+app.get('/health/diagnostic', async (req, res) => {
+  try {
+    const env = require('./config/env');
+    const settings = await Settings.findOne();
+    const { getAllSessionsStatus, activeSockets } = require('./services/whatsappService');
+    const sessionStatuses = getAllSessionsStatus(settings?.whatsappNumbers || []);
+
+    res.json({
+      globalMode: settings?.globalMode,
+      aiKeys: {
+        openrouter: !!(env.openrouterApiKey || process.env.OPENROUTER_API_KEY),
+        groq: !!(env.groqApiKey || process.env.GROQ_API_KEY),
+        gemini: !!(env.geminiApiKey || process.env.GEMINI_API_KEY)
+      },
+      whatsapp: {
+        registeredNumbers: (settings?.whatsappNumbers || []).map(n => ({
+          label: n.label, status: n.status, active: n.isActive
+        })),
+        liveSocketCount: activeSockets ? activeSockets.size : 0,
+        sessionStatuses
+      },
+      fast2sms: {
+        configured: !!(env.fast2smsApiKey),
+        webhookSecret: !!(env.fast2smsWebhookSecret)
+      },
+      uptime: process.uptime(),
+      nodeEnv: env.nodeEnv,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 const { ensureDbConnected } = require('./config/db');
 
 // Ensure DB is connected before processing API requests
