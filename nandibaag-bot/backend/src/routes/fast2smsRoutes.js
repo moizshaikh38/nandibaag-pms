@@ -118,6 +118,25 @@ router.get('/webhook', (req, res) => {
   });
 });
 
+/** Check if text content matches known bot reply patterns */
+function isBotReply(text) {
+  if (!text || typeof text !== 'string') return false;
+  const botIndicators = [
+    'Namaste',
+    'Welcome to Nandibaag',
+    'Couple Stay',
+    'Family Group Stay',
+    'Day Picnic',
+    '₹',
+    'call karein',
+    '9257657665',
+    'Nandibaag ke baare mein',
+    'Booking confirm',
+    'included'
+  ];
+  return botIndicators.some(indicator => text.includes(indicator));
+}
+
 /**
  * POST /api/fast2sms/webhook
  * Receives incoming WhatsApp messages & test probes from Fast2SMS.
@@ -127,6 +146,16 @@ router.post('/webhook', async (req, res) => {
   const payload = req.body || {};
   console.log(`[Fast2SMS:Webhook] ⬇️ Incoming webhook hit at ${new Date().toISOString()}`);
   console.log(`[Fast2SMS:Webhook] Full payload: ${JSON.stringify(payload)}`);
+
+  // Extract raw text for bot reply detection
+  const parsedPreview = extractIncomingMessage(payload);
+  const messageTextPreview = parsedPreview?.body || payload.text || payload.message || payload.body || '';
+
+  // Check if content matches known bot reply patterns
+  if (isBotReply(messageTextPreview)) {
+    console.log('[Fast2SMS:Webhook] Detected bot reply content, ignoring:', messageTextPreview.slice(0, 50));
+    return res.status(200).json({ status: 'ignored_bot_reply' });
+  }
 
   // Check if this is an outgoing message (bot's own reply being echoed) or status update
   if (payload.direction === 'outgoing' || payload.type === 'message_status' || payload.event === 'message_status' || payload.status === 'sent' || payload.status === 'delivered') {

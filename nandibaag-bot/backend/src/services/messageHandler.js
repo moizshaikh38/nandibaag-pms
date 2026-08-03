@@ -6,12 +6,37 @@ const { scheduleFollowUps, cancelPendingFollowUps, containsOptOutPhrases, markCh
 const whatsappService = require('./whatsappService');
 const channelManager = require('./channelManager');
 const { getCapacityAvailability, suggestRoomCombinations } = require('./availabilityService');
+const crypto = require('crypto');
 const { sanitizeBookingDraft } = require('../utils/sanitizeBookingDraft');
 const logger = require('../config/logger');
 
-// Deduplicate: track processed message IDs to prevent echo loops
-const processedMessageIds = new Set();
-const MAX_PROCESSED_IDS = 10000;
+// Per-channel message cache (SHA256 hash -> timestamp) for robust deduplication
+const webhookMessageCache = new Map();
+
+function getMessageHash(from, text, channel = 'default') {
+  const timeWindow = Math.floor(Date.now() / 10000) * 10000;
+  const hashInput = `${from}||${(text || '').slice(0, 50)}||${timeWindow}||${channel}`;
+  return crypto.createHash('sha256').update(hashInput).digest('hex');
+}
+
+/** Check if text content matches known bot reply patterns */
+function isBotReplyText(text) {
+  if (!text || typeof text !== 'string') return false;
+  const botIndicators = [
+    'Namaste',
+    'Welcome to Nandibaag',
+    'Couple Stay',
+    'Family Group Stay',
+    'Day Picnic',
+    '₹',
+    'call karein',
+    '9257657665',
+    'Nandibaag ke baare mein',
+    'Booking confirm',
+    'included'
+  ];
+  return botIndicators.some(indicator => text.includes(indicator));
+}
 
 /**
  * Natural language parser for dates and guest counts from customer messages.
@@ -226,18 +251,21 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
     if (!rawJid) return;
 
     messageText = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
-    const messageId = msg.key?.id || `${rawJid}-${msg.messageTimestamp || Date.now()}-${messageText.slice(0, 20)}`;
-
-    if (processedMessageIds.has(messageId)) {
-      console.log('[MessageHandler] ⚠️  Duplicate message ID, skipping:', messageId);
+    
+    // Robust deduplication using sender + message content hash + 10s time window
+    const msgHash = getMessageHash(rawJid, messageText, channel);
+    const lastSeen = webhookMessageCache.get(msgHash);
+    if (lastSeen && Date.now() - lastSeen < 10000) {
+      console.log('[MessageHandler] ⚠️  Duplicate webhook message, skipping hash:', msgHash);
       return;
     }
-    processedMessageIds.add(messageId);
-    if (processedMessageIds.size > MAX_PROCESSED_IDS) {
-      const firstItem = processedMessageIds.values().next().value;
-      processedMessageIds.delete(firstItem);
+    webhookMessageCache.set(msgHash, Date.now());
+
+    // Filter out echoed bot replies by content
+    if (isBotReplyText(messageText)) {
+      console.log('[MessageHandler] 🛑 Detected bot reply content, skipping AI response:', messageText.substring(0, 50));
+      return;
     }
-    console.log('[MessageHandler] Processing new message ID:', messageId);
 
     if (msg.key.participant && msg.key.participant.includes('@s.whatsapp.net')) {
       customerPhone = msg.key.participant.replace('@s.whatsapp.net', '').replace(/\D/g, '');
@@ -326,8 +354,10 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
       chat.language = detectedLanguage;
     }
     
+    const senderRole = msg.key?.fromMe ? 'agent' : (isBotReplyText(messageText) ? 'bot' : 'customer');
+    
     chat.messages.push({
-      sender: 'customer',
+      sender: senderRole,
       text: messageText || '[Media]',
       timestamp: new Date(),
       messageType,
