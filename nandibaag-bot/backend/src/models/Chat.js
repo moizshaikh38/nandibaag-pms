@@ -25,7 +25,7 @@ const messageSchema = new mongoose.Schema({
   },
   deliveryStatus: {
     type: String,
-    enum: ['sending', 'sent', 'failed'],
+    enum: ['pending', 'sending', 'sent', 'queued', 'failed'],
     default: 'sent'
   }
 }, { _id: false });
