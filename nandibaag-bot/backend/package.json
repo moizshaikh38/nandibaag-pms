@@ -16,7 +16,8 @@
     "test-mode-behavior": "node src/scripts/testModeBehavior.js",
     "clean-whatsapp": "node src/scripts/cleanWhatsAppSession.js",
     "test-whatsapp-init": "node src/scripts/testWhatsAppInit.js",
-    "test-fast2sms": "node src/scripts/testFast2sms.js"
+    "test-fast2sms": "node src/scripts/testFast2sms.js",
+    "test-resilience": "node src/scripts/testMessageResilience.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.1.1",

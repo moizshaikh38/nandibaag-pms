@@ -25,5 +25,6 @@ module.exports = {
   Session,
   ActivityLog,
   BaileysAuth: require('./BaileysAuth'),
-  MessageQueue: require('./MessageQueue')
+  MessageQueue: require('./MessageQueue'),
+  FailedMessage: require('./FailedMessage')
 };

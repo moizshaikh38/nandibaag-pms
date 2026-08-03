@@ -6,6 +6,7 @@ const { scheduleFollowUps, cancelPendingFollowUps, containsOptOutPhrases, markCh
 const whatsappService = require('./whatsappService');
 const channelManager = require('./channelManager');
 const { getCapacityAvailability, suggestRoomCombinations } = require('./availabilityService');
+const { sanitizeBookingDraft } = require('../utils/sanitizeBookingDraft');
 const logger = require('../config/logger');
 
 /**
@@ -23,106 +24,124 @@ function extractBookingDetails(text, today = new Date()) {
     oct: 9, october: 9, nov: 10, november: 10, dec: 11, december: 11
   };
 
-  // Date range parsing (e.g. "5 aug - 7 aug", "5 to 7 august", "5th-7th aug")
-  const dateRangeRegex = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\s*(?:\-|to|se|\–)\s*(\d{1,2})(?:st|nd|rd|th)?\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)?\b/i;
-  
-  const dayMonthRegex = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\b/i;
-  const monthDayRegex = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i;
-  const numericDateRegex = /\b(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/;
+  // Sub-extraction 1: Dates & Date Ranges
+  try {
+    const dateRangeRegex = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\s*(?:\-|to|se|\–)\s*(\d{1,2})(?:st|nd|rd|th)?\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)?\b/i;
+    const dayMonthRegex = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\b/i;
+    const monthDayRegex = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i;
+    const numericDateRegex = /\b(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/;
 
-  let targetDate = null;
-  let rangeMatch = lower.match(dateRangeRegex);
+    let targetDate = null;
+    let rangeMatch = lower.match(dateRangeRegex);
 
-  if (rangeMatch) {
-    const startDay = parseInt(rangeMatch[1], 10);
-    const startMonthIdx = months[rangeMatch[2].toLowerCase()];
-    const endDay = parseInt(rangeMatch[3], 10);
-    const endMonthIdx = rangeMatch[4] ? months[rangeMatch[4].toLowerCase()] : startMonthIdx;
+    if (rangeMatch) {
+      const startDay = parseInt(rangeMatch[1], 10);
+      const startMonthIdx = months[rangeMatch[2].toLowerCase()];
+      const endDay = parseInt(rangeMatch[3], 10);
+      const endMonthIdx = rangeMatch[4] ? months[rangeMatch[4].toLowerCase()] : startMonthIdx;
 
-    if (startDay >= 1 && startDay <= 31 && startMonthIdx !== undefined && endDay >= 1 && endDay <= 31 && endMonthIdx !== undefined) {
-      let year = today.getFullYear();
-      const startDate = new Date(year, startMonthIdx, startDay);
-      const endDate = new Date(year, endMonthIdx, endDay);
-      if (startDate < new Date(today.setHours(0, 0, 0, 0))) {
-        startDate.setFullYear(year + 1);
-        endDate.setFullYear(year + 1);
-      }
-      targetDate = startDate;
-      const diffMs = endDate.getTime() - startDate.getTime();
-      const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
-      if (diffDays > 0) {
-        result.nights = diffDays;
-      }
-    }
-  }
-
-  if (!targetDate) {
-    let match = lower.match(dayMonthRegex);
-    if (match) {
-      const day = parseInt(match[1], 10);
-      const monthIdx = months[match[2].toLowerCase()];
-      if (day >= 1 && day <= 31 && monthIdx !== undefined) {
+      if (startDay >= 1 && startDay <= 31 && startMonthIdx !== undefined && endDay >= 1 && endDay <= 31 && endMonthIdx !== undefined) {
         let year = today.getFullYear();
-        targetDate = new Date(year, monthIdx, day);
-        if (targetDate < new Date(today.setHours(0, 0, 0, 0))) {
-          targetDate.setFullYear(year + 1);
+        const startDate = new Date(year, startMonthIdx, startDay);
+        const endDate = new Date(year, endMonthIdx, endDay);
+        if (startDate < new Date(today.setHours(0, 0, 0, 0))) {
+          startDate.setFullYear(year + 1);
+          endDate.setFullYear(year + 1);
+        }
+        targetDate = startDate;
+        const diffMs = endDate.getTime() - startDate.getTime();
+        const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+        if (diffDays > 0) {
+          result.nights = diffDays;
         }
       }
-    } else if ((match = lower.match(monthDayRegex))) {
-      const monthIdx = months[match[1].toLowerCase()];
-      const day = parseInt(match[2], 10);
-      if (day >= 1 && day <= 31 && monthIdx !== undefined) {
-        let year = today.getFullYear();
-        targetDate = new Date(year, monthIdx, day);
-        if (targetDate < new Date(today.setHours(0, 0, 0, 0))) {
-          targetDate.setFullYear(year + 1);
+    }
+
+    if (!targetDate) {
+      let match = lower.match(dayMonthRegex);
+      if (match) {
+        const day = parseInt(match[1], 10);
+        const monthIdx = months[match[2].toLowerCase()];
+        if (day >= 1 && day <= 31 && monthIdx !== undefined) {
+          let year = today.getFullYear();
+          targetDate = new Date(year, monthIdx, day);
+          if (targetDate < new Date(today.setHours(0, 0, 0, 0))) {
+            targetDate.setFullYear(year + 1);
+          }
         }
+      } else if ((match = lower.match(monthDayRegex))) {
+        const monthIdx = months[match[1].toLowerCase()];
+        const day = parseInt(match[2], 10);
+        if (day >= 1 && day <= 31 && monthIdx !== undefined) {
+          let year = today.getFullYear();
+          targetDate = new Date(year, monthIdx, day);
+          if (targetDate < new Date(today.setHours(0, 0, 0, 0))) {
+            targetDate.setFullYear(year + 1);
+          }
+        }
+      } else if ((match = lower.match(numericDateRegex))) {
+        const day = parseInt(match[1], 10);
+        const month = parseInt(match[2], 10) - 1;
+        let year = match[3] ? parseInt(match[3], 10) : today.getFullYear();
+        if (year < 100) year += 2000;
+        if (day >= 1 && day <= 31 && month >= 0 && month <= 11) {
+          targetDate = new Date(year, month, day);
+        }
+      } else if (lower.includes('tomorrow') || lower.includes('kal') || lower.includes('udya')) {
+        targetDate = new Date(today);
+        targetDate.setDate(targetDate.getDate() + 1);
+      } else if (lower.includes('this weekend') || lower.includes('next weekend') || lower.includes('weekend')) {
+        targetDate = new Date(today);
+        const currentDay = targetDate.getDay();
+        const daysUntilSaturday = (6 - currentDay + 7) % 7 || 7;
+        targetDate.setDate(targetDate.getDate() + daysUntilSaturday);
       }
-    } else if ((match = lower.match(numericDateRegex))) {
-      const day = parseInt(match[1], 10);
-      const month = parseInt(match[2], 10) - 1;
-      let year = match[3] ? parseInt(match[3], 10) : today.getFullYear();
-      if (year < 100) year += 2000;
-      if (day >= 1 && day <= 31 && month >= 0 && month <= 11) {
-        targetDate = new Date(year, month, day);
+    }
+
+    if (targetDate && !isNaN(targetDate.getTime())) {
+      result.date = targetDate.toISOString().split('T')[0];
+    }
+  } catch (dateErr) {
+    console.warn('[Extract] Date parsing failed:', dateErr.message);
+  }
+
+  // Sub-extraction 2: Adults
+  try {
+    const adultMatch = lower.match(/(\d+)\s*(?:adult|adults|adlt|bade)/i);
+    if (adultMatch) {
+      result.adults = parseInt(adultMatch[1], 10);
+    }
+  } catch (adultErr) {
+    console.warn('[Extract] Adult parsing failed:', adultErr.message);
+  }
+
+  // Sub-extraction 3: Kids
+  try {
+    const kidMatch = lower.match(/(\d+)\s*(?:kid|kids|child|children|bache|bhaache)/i);
+    if (kidMatch) {
+      const numKids = parseInt(kidMatch[1], 10);
+      result.kids = Array.from({ length: numKids }, () => ({ age: 5 }));
+    }
+  } catch (kidErr) {
+    console.warn('[Extract] Kid parsing failed:', kidErr.message);
+    result.kids = [];
+  }
+
+  // Sub-extraction 4: Total Guests / Couples fallback
+  try {
+    const totalGuestMatch = lower.match(/(\d+)\s*(?:guest|guests|people|person|log|members|pax|janan|janansathi)/i);
+    if (!result.adults && totalGuestMatch) {
+      const total = parseInt(totalGuestMatch[1], 10);
+      if (result.kids && result.kids.length > 0) {
+        result.adults = Math.max(1, total - result.kids.length);
+      } else {
+        result.adults = total;
       }
-    } else if (lower.includes('tomorrow') || lower.includes('kal') || lower.includes('udya')) {
-      targetDate = new Date(today);
-      targetDate.setDate(targetDate.getDate() + 1);
-    } else if (lower.includes('this weekend') || lower.includes('next weekend') || lower.includes('weekend')) {
-      targetDate = new Date(today);
-      const currentDay = targetDate.getDay();
-      const daysUntilSaturday = (6 - currentDay + 7) % 7 || 7;
-      targetDate.setDate(targetDate.getDate() + daysUntilSaturday);
+    } else if (!result.adults && lower.includes('couple')) {
+      result.adults = 2;
     }
-  }
-
-  if (targetDate && !isNaN(targetDate.getTime())) {
-    result.date = targetDate.toISOString().split('T')[0];
-  }
-
-  const adultMatch = lower.match(/(\d+)\s*(?:adult|adults|adlt|bade)/i);
-  const kidMatch = lower.match(/(\d+)\s*(?:kid|kids|child|children|bache|bhaache)/i);
-  const totalGuestMatch = lower.match(/(\d+)\s*(?:guest|guests|people|person|log|members|pax|janan|janansathi)/i);
-
-  if (adultMatch) {
-    result.adults = parseInt(adultMatch[1], 10);
-  }
-  if (kidMatch) {
-    const numKids = parseInt(kidMatch[1], 10);
-    // Correct schema structure: Array of objects [{ age: Number }]
-    result.kids = Array.from({ length: numKids }, () => ({ age: 5 }));
-  }
-
-  if (!result.adults && totalGuestMatch) {
-    const total = parseInt(totalGuestMatch[1], 10);
-    if (result.kids && result.kids.length > 0) {
-      result.adults = Math.max(1, total - result.kids.length);
-    } else {
-      result.adults = total;
-    }
-  } else if (!result.adults && lower.includes('couple')) {
-    result.adults = 2;
+  } catch (guestErr) {
+    console.warn('[Extract] Total guest parsing failed:', guestErr.message);
   }
 
   return result;
@@ -192,20 +211,23 @@ function buildEmergencyFallback(messageText, language = 'hinglish') {
  */
 async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
   const tStart = Date.now();
+  const rawJid = msg.key?.remoteJid;
+  let customerPhone = '';
+  let replyToSend = null;
+  let sendResult = false;
+  let chat = null;
+  let messageText = '';
+
   try {
-    // Extract customer phone (always clean numeric phone string)
-    const rawJid = msg.key.remoteJid;
-    let customerPhone = '';
+    if (!rawJid) return;
+    
     if (msg.key.participant && msg.key.participant.includes('@s.whatsapp.net')) {
       customerPhone = msg.key.participant.replace('@s.whatsapp.net', '').replace(/\D/g, '');
     } else {
       customerPhone = rawJid.split('@')[0].replace(/\D/g, '');
     }
     
-    // Extract text from the incoming message object
-    const messageText = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
-    
-    // Check for media
+    messageText = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
     const hasMedia = !!(msg.message?.imageMessage || msg.message?.videoMessage || msg.message?.audioMessage || msg.message?.documentMessage || msg.message?.stickerMessage);
     const messageType = hasMedia ? 'image' : 'text';
     
@@ -216,7 +238,7 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
 
     // Handle outgoing messages sent directly from phone or bot
     if (msg.key.fromMe) {
-      let chat = await Chat.findOne({ customerPhone });
+      chat = await Chat.findOne({ customerPhone });
       if (chat) {
         const text = messageText || (hasMedia ? '[Media]' : '');
         if (text) {
@@ -230,23 +252,7 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
               deliveryStatus: 'sent'
             });
             chat.lastMessageAt = new Date();
-            await chat.save();
-
-            try {
-              const { getIO } = require('../sockets');
-              const io = getIO();
-              if (io) {
-                io.emit('chat:updated', chat);
-                io.emit('chat:new_message', {
-                  chatId: chat._id,
-                  customerPhone,
-                  customerName: chat.customerName,
-                  message: text,
-                  sender: 'agent',
-                  chat
-                });
-              }
-            } catch (socketErr) {}
+            try { await chat.save(); } catch (_) {}
           }
         }
       }
@@ -256,17 +262,11 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
     console.log(`[TIMING] [1/6] Received message from WhatsApp at ${new Date().toISOString()}`);
     logger.info(`Processing message from ${customerPhone}: ${messageText.substring(0, 50)}...`);
 
-    // Trigger WhatsApp typing state via Baileys presence update
-    // (only meaningful for the whatsapp-web channel — skip for fast2sms)
     const sock = channel === 'whatsapp-web'
       ? (whatsappService.activeSockets.get(sessionId)?.sock || null)
       : null;
     if (sock) {
-      try {
-        await sock.sendPresenceUpdate('composing', msg.key.remoteJid);
-      } catch (presErr) {
-        logger.debug(`Failed to send composing presence: ${presErr.message}`);
-      }
+      try { await sock.sendPresenceUpdate('composing', msg.key.remoteJid); } catch (_) {}
     }
     
     const settings = await Settings.findOne();
@@ -275,11 +275,8 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
       return;
     }
     
-    // Extract customer push name from WhatsApp profile if available
     const pushName = msg.pushName;
-    
-    // Find or create chat
-    let chat = await Chat.findOne({ customerPhone });
+    chat = await Chat.findOne({ customerPhone });
     
     if (!chat) {
       chat = new Chat({
@@ -295,26 +292,23 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
         isNewConversation: true,
         isArchived: false
       });
-      await chat.save();
+      try { await chat.save(); } catch (_) {}
       logger.info(`Created new chat for ${customerPhone} (Name: ${pushName || 'N/A'})`);
     } else if (pushName && (!chat.customerName || chat.customerName !== pushName)) {
       chat.customerName = pushName;
     }
     
-    // Check for opt-out phrases
     if (containsOptOutPhrases(messageText)) {
       await markChatAsOptedOut(chat._id);
       logger.info(`Customer ${customerPhone} opted out`);
       return;
     }
     
-    // Update chat language detection
     const detectedLanguage = detectLanguage(messageText);
     if (chat.language === 'unknown' || chat.language !== detectedLanguage) {
       chat.language = detectedLanguage;
     }
     
-    // Add customer message to chat
     chat.messages.push({
       sender: 'customer',
       text: messageText || '[Media]',
@@ -324,17 +318,13 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
     });
     
     chat.lastMessageAt = new Date();
-    
-    // Cancel pending follow-ups since customer is engaged
-    await cancelPendingFollowUps(chat._id, 'customer_replied');
+    try { await cancelPendingFollowUps(chat._id, 'customer_replied'); } catch (_) {}
 
-    // Helper to emit real-time updates
     const emitRealtimeUpdate = (customMsgText, sender = 'customer') => {
       try {
         const { getIO } = require('../sockets');
         const io = getIO();
         if (io) {
-          console.log(`[messageHandler] EMITTING Socket.io event 'chat:updated' & 'chat:new_message' for ${customerPhone}`);
           io.emit('chat:updated', chat);
           io.emit('chat:new_message', {
             chatId: chat._id,
@@ -344,51 +334,29 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
             sender,
             chat
           });
-          io.emit('new_message', {
-            chatId: chat._id,
-            customerPhone,
-            customerName: chat.customerName,
-            message: customMsgText,
-            sender,
-            chat
-          });
         }
-      } catch (error) {
-        logger.error(`Failed to emit socket event: ${error.message}`);
-      }
+      } catch (error) {}
     };
     
     const mode = chat.mode;
-    
-    // In human mode, ONLY staff should respond - AI should never reply
     if (mode === 'human') {
-      await chat.save();
+      try { await chat.save(); } catch (_) {}
       logger.info(`Chat ${customerPhone} in human mode, message saved, emitting socket event`);
-      
       emitRealtimeUpdate(messageText || '[Media]', 'customer');
-      
-      // Stop typing presence
       if (sock) {
-        try {
-          await sock.sendPresenceUpdate('paused', msg.key.remoteJid);
-        } catch (e) {}
+        try { await sock.sendPresenceUpdate('paused', msg.key.remoteJid); } catch (_) {}
       }
       return;
     }
 
-
-    
-    // In AI mode, emit immediately when customer message arrives so dashboard updates instantly!
     emitRealtimeUpdate(messageText || '[Media]', 'customer');
     
-    // AI mode - generate response
+    // Primary Reply Computation Step
     try {
       const systemNotesList = [];
       const addSystemNote = (note) => {
         if (note) systemNotesList.push(note);
       };
-      
-
 
       const msgLower = (messageText || '').toLowerCase();
       const bookingType = detectBookingType(messageText);
@@ -401,294 +369,133 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
       }
 
       if (greetingOnly) {
-        addSystemNote('[SYSTEM NOTE: Customer only greeted. Do NOT mention old dates, guest counts, or previous package choices unless the customer asks to continue. Send one short welcome line and ask whether they want Couple Stay, Family Group Stay, or Day Picnic.]');
+        addSystemNote('[SYSTEM NOTE: Customer only greeted. Send one short welcome line and ask whether they want Couple Stay, Family Group Stay, or Day Picnic.]');
       }
 
       if (discountIntent) {
-        addSystemNote('[SYSTEM NOTE: Customer is asking for a discount / lower price. Do NOT ask for date or guests again if pricing was already discussed. Politely say rates are already best/final because food, activities, and facilities are included. For special approval or group offer, ask them to call staff at 9257657665. Keep it warm and short.]');
+        addSystemNote('[SYSTEM NOTE: Customer is asking for a discount / lower price. Politely say rates are already best/final because food, activities, and facilities are included. For special approval or group offer, ask them to call staff at 9257657665.]');
       }
       
-      // Natural language date and guest count extraction from customer text
       const extracted = extractBookingDetails(messageText);
       if (extracted.date) {
         chat.bookingDraft.date = extracted.date;
-        logger.info(`Extracted natural language date: ${extracted.date} from message "${messageText}"`);
       }
       if (extracted.adults) {
         chat.bookingDraft.adults = extracted.adults;
-        logger.info(`Extracted natural language adult count: ${extracted.adults} from message "${messageText}"`);
       }
       if (extracted.kids) {
-        chat.bookingDraft.kids = extracted.kids.map(k => (typeof k === 'number' ? { age: k } : k));
-        logger.info(`Extracted natural language kid count: ${extracted.kids.length} from message "${messageText}"`);
+        chat.bookingDraft.kids = extracted.kids;
       }
       if (extracted.nights) {
         chat.bookingDraft.nights = extracted.nights;
       }
+
+      // Sanitize booking draft defensively
+      chat.bookingDraft = sanitizeBookingDraft(chat.bookingDraft);
+
       if (chat.bookingDraft.date && chat.bookingDraft.adults && chat.bookingStage !== 'price_quoted' && chat.bookingStage !== 'completed') {
         chat.bookingStage = 'guests_given';
       }
 
       const draft = chat.bookingDraft || {};
-      const prevStage = chat.bookingStage;
 
       if (draft.availabilityChecked && draft.date && draft.adults) {
         const dateChangePatterns = /\d{1,2}\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|may|june|july|august|september|october|november|december)|next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)|tomorrow|today|yesterday|weekend|weekday|this\s+(saturday|sunday|monday|friday)/i;
         const guestChangePatterns = /(\d+)\s*(log|guest|people|person|adult|ladk|ladki|bache)/i;
-        const mentionsDate = dateChangePatterns.test(msgLower);
-        const mentionsGuests = guestChangePatterns.test(msgLower);
-
-        if (mentionsDate || mentionsGuests) {
+        if (dateChangePatterns.test(msgLower) || guestChangePatterns.test(msgLower)) {
           chat.bookingDraft.availabilityChecked = false;
           chat.bookingDraft.availabilityConfirmed = false;
-          chat.bookingDraft.roomPreference = 'not_applicable';
-          chat.bookingDraft.suggestedCombination = null;
-          logger.info(`Customer changed date/guests, resetting availability for re-check`);
         }
       }
 
-      const needsAvailabilityCheck =
-        draft.date &&
-        draft.adults &&
-        draft.adults > 0 &&
-        !draft.availabilityChecked;
-
-      if (needsAvailabilityCheck) {
+      if (draft.date && draft.adults && draft.adults > 0 && !draft.availabilityChecked) {
         try {
           const checkInDate = new Date(draft.date);
-          if (isNaN(checkInDate.getTime())) {
-            logger.warn(`Could not parse booking draft date: "${draft.date}", skipping availability check`);
-          } else {
+          if (!isNaN(checkInDate.getTime())) {
             const nights = draft.nights && draft.nights > 0 ? draft.nights : 1;
             const checkOutDate = new Date(checkInDate);
             checkOutDate.setDate(checkOutDate.getDate() + nights);
-
             const guestCount = draft.adults + (draft.kids?.length || 0);
 
             const capacityResult = await getCapacityAvailability(checkInDate, checkOutDate, guestCount);
-
             if (!capacityResult.available) {
-              addSystemNote('[SYSTEM NOTE: No availability — all rooms of sufficient capacity are booked for these dates. Do NOT quote any price. Politely tell the customer rooms are full for this date and ask them to try a different date.]');
-
+              addSystemNote('[SYSTEM NOTE: No availability for these dates. Ask customer to try another date.]');
               chat.bookingDraft.availabilityChecked = true;
               chat.bookingDraft.availabilityConfirmed = false;
-              chat.bookingDraft.roomPreference = 'not_applicable';
-              chat.bookingDraft.suggestedCombination = null;
-
-              logger.info(`Availability check: NO rooms available for ${guestCount} guests, ${checkInDate.toISOString()} to ${checkOutDate.toISOString()}`);
             } else {
-              const hasSingleRoom = capacityResult.available;
-
-              const allRoomsResult = await getCapacityAvailability(checkInDate, checkOutDate, 1);
-              const breakdownEntries = Object.values(allRoomsResult.breakdown || {});
-              const maxCapacityAvailable = breakdownEntries.reduce((max, b) => Math.max(max, b.capacity), 0);
-
-              if (hasSingleRoom) {
-                const pricingResult = calculatePricing(checkInDate, checkOutDate, guestCount);
-
-                addSystemNote(`[SYSTEM NOTE: Availability confirmed for ${guestCount} guests on ${checkInDate.toISOString()} to ${checkOutDate.toISOString()}.\n\nAUTHORITATIVE BACKEND PRICING BREAKDOWN:\n${pricingResult.formatted}\n\nINSTRUCTION: Present this exact pricing breakdown to the customer. Do NOT recalculate or alter any numbers.]`);
-
-                chat.bookingDraft.availabilityChecked = true;
-                chat.bookingDraft.availabilityConfirmed = true;
-                chat.bookingDraft.roomPreference = 'not_applicable';
-                chat.bookingDraft.suggestedCombination = null;
-
-                logger.info(`Availability check: confirmed for ${guestCount} guests, ${capacityResult.availableCount} rooms available`);
-              } else if (maxCapacityAvailable >= guestCount) {
-                addSystemNote(`[SYSTEM NOTE: Guest count (${guestCount}) fits in a single room of capacity ${maxCapacityAvailable} but it will be a tight fit. Available options: 1 room of capacity ${maxCapacityAvailable} (tight fit). Ask the customer if they are okay with a tight fit in one room, or if they would prefer multiple rooms. Do NOT quote a price until they decide.]`);
-
-                chat.bookingDraft.availabilityChecked = true;
-                chat.bookingDraft.availabilityConfirmed = true;
-                chat.bookingDraft.roomPreference = 'single_room_tight_fit';
-                chat.bookingDraft.suggestedCombination = `1x capacity-${maxCapacityAvailable} (tight fit)`;
-
-                logger.info(`Availability check: tight fit for ${guestCount} guests in capacity-${maxCapacityAvailable} room`);
-              } else {
-                const combinations = await suggestRoomCombinations(checkInDate, checkOutDate, guestCount);
-
-                if (combinations.available && combinations.suggestions.length > 0) {
-                  const suggestionDescriptions = combinations.suggestions.map(s => s.description).join('; ');
-                  addSystemNote(`[SYSTEM NOTE: Guest count (${guestCount}) exceeds single room capacity. Available options: ${suggestionDescriptions}. Ask the customer whether they prefer a tight fit in one bigger room OR multiple smaller rooms. Present the options without mentioning room numbers. Do NOT quote a price until they decide.]`);
-
-                  chat.bookingDraft.availabilityChecked = true;
-                  chat.bookingDraft.availabilityConfirmed = true;
-                  chat.bookingDraft.roomPreference = 'multiple_rooms';
-                  chat.bookingDraft.suggestedCombination = suggestionDescriptions;
-
-                  logger.info(`Availability check: multi-room needed for ${guestCount} guests, suggestions: ${suggestionDescriptions}`);
-                } else {
-                  addSystemNote('[SYSTEM NOTE: No availability — cannot fit the guest count in any room combination for these dates. Do NOT quote any price. Politely tell the customer and ask for a different date.]');
-
-                  chat.bookingDraft.availabilityChecked = true;
-                  chat.bookingDraft.availabilityConfirmed = false;
-                  chat.bookingDraft.roomPreference = 'not_applicable';
-                  chat.bookingDraft.suggestedCombination = null;
-
-                  logger.info(`Availability check: no valid combinations for ${guestCount} guests`);
-                }
-              }
+              const pricingResult = calculatePricing(checkInDate, checkOutDate, guestCount);
+              addSystemNote(`[SYSTEM NOTE: Availability confirmed.\nPRICING BREAKDOWN:\n${pricingResult.formatted}]`);
+              chat.bookingDraft.availabilityChecked = true;
+              chat.bookingDraft.availabilityConfirmed = true;
             }
           }
         } catch (availErr) {
-          logger.error(`Availability check failed: ${availErr.message}`);
+          logger.error(`Availability check error: ${availErr.message}`);
         }
       }
 
       const systemNotes = systemNotesList.join('\n\n');
-      const aiReply = await getAIResponse(chat, messageText, settings, systemNotes);
-      console.log(`[TIMING] [4/6] getAIResponse finished, AI reply generated in ${Date.now() - tStart}ms`);
-      console.log(`[MessageHandler] AI reply received: "${aiReply?.substring(0, 50)}..."`);
-      
-      if (!aiReply || aiReply.trim() === '') {
-        console.error(`[MessageHandler] AI reply is empty! Skipping message send.`);
-        return;
-      }
-      
-      // Add AI reply to chat — mark as 'pending' until WhatsApp confirms delivery
-      const botMsg = {
-        sender: 'bot',
-        text: aiReply,
-        timestamp: new Date(),
-        messageType: 'text',
-        deliveryStatus: 'pending'
-      };
-      chat.messages.push(botMsg);
-      
-      if (chat.isNewConversation) {
-        chat.isNewConversation = false;
-      }
-      
-      try {
-        await chat.save();
-      } catch (saveErr) {
-        logger.error(`Chat save warning before send: ${saveErr.message}`);
-        if (Array.isArray(chat.bookingDraft.kids)) {
-          chat.bookingDraft.kids = chat.bookingDraft.kids.map(k => (typeof k === 'number' ? { age: k } : k));
-        }
-        await chat.save();
-      }
-      
-      console.log(`[MessageHandler] Chat saved with AI reply (status: pending)`);
-      
-      // Send reply via WhatsApp
-      const tSendStart = Date.now();
-      console.log(`[TIMING] [5/6] Sending message back via WhatsApp at ${new Date().toISOString()}`);
-      console.log(`[MessageHandler] Sending to: ${rawJid}, Session: ${sessionId}`);
-      
-      const sendResult = await channelManager.sendMessageViaChannel(rawJid, aiReply, channel, sessionId);
-      
-      // Update delivery status based on actual send result
-      const lastMsg = chat.messages[chat.messages.length - 1];
-      if (lastMsg && lastMsg.sender === 'bot') {
-        lastMsg.deliveryStatus = sendResult ? 'sent' : 'queued';
-      }
-      try {
-        await chat.save();
-      } catch (saveErr2) {}
-      
-      console.log(`[MessageHandler] Send result (${channel}): ${sendResult ? 'SUCCESS ✓' : 'FAILED ✗ (queued for retry)'}`);
-      console.log(`[TIMING] [6/6] Sent message back via WhatsApp in ${Date.now() - tSendStart}ms. Total end-to-end processing time: ${Date.now() - tStart}ms.`);
-      
-      if (!sendResult) {
-        logger.error(`⚠️  [DELIVERY FAILED] AI reply for ${customerPhone} was NOT delivered via WhatsApp. Message queued for retry.`);
-        try {
-          const { getIO } = require('../sockets');
-          const io = getIO();
-          if (io) {
-            io.emit('chat:delivery_failed', {
-              chatId: chat._id,
-              customerPhone,
-              message: aiReply.substring(0, 80),
-              reason: 'WhatsApp send failed — queued for retry'
-            });
-          }
-        } catch (socketErr) {}
-      }
-      
-      // Stop typing state presence
-      if (sock) {
-        try {
-          await sock.sendPresenceUpdate('paused', msg.key.remoteJid);
-        } catch (presErr) {}
-      }
-
-      // Score the message for lead tracking
-      await scoreMessage(chat, messageText, aiReply);
-      
-      // Schedule follow-ups if this is first booking interest
-      const previousStage = chat.bookingStage;
-      if (previousStage === 'none' && chat.bookingStage !== 'none') {
-        await scheduleFollowUps(chat._id, customerPhone);
-      }
-      
-      emitRealtimeUpdate(aiReply, 'bot');
-      logger.info(`AI response ${sendResult ? 'sent' : 'QUEUED (delivery pending)'} to ${customerPhone}`);
-      
+      replyToSend = await getAIResponse(chat, messageText, settings, systemNotes);
     } catch (aiError) {
-      logger.error(`AI generation failed for ${customerPhone}: ${aiError.message}`);
-      logger.error(`AI generation STACK: ${aiError.stack}`);
-      
-      const fallbackReply = buildEmergencyFallback(messageText, chat.language);
-      
-      if (Array.isArray(chat?.bookingDraft?.kids)) {
-        chat.bookingDraft.kids = chat.bookingDraft.kids.map(k => (typeof k === 'number' ? { age: k } : k));
-      }
-
-      chat.messages.push({
-        sender: 'bot',
-        text: fallbackReply,
-        timestamp: new Date(),
-        messageType: 'text',
-        deliveryStatus: 'pending'
-      });
-      try {
-        await chat.save();
-      } catch (fallbackSaveErr) {
-        logger.error(`Fallback save error: ${fallbackSaveErr.message}`);
-      }
-
-      let fallbackSent = false;
-      try {
-        fallbackSent = await channelManager.sendMessageViaChannel(rawJid, fallbackReply, channel, sessionId);
-      } catch (sendErr) {
-        logger.error(`Failed to send fallback message to ${customerPhone}: ${sendErr.message}`);
-      }
-      
-      // Update delivery status
-      const lastFallbackMsg = chat.messages[chat.messages.length - 1];
-      if (lastFallbackMsg && lastFallbackMsg.sender === 'bot') {
-        lastFallbackMsg.deliveryStatus = fallbackSent ? 'sent' : 'queued';
-      }
-      try {
-        await chat.save();
-      } catch (_) {}
-
-      if (sock) {
-        try {
-          await sock.sendPresenceUpdate('paused', msg.key.remoteJid);
-        } catch (e) {}
-      }
-
-      emitRealtimeUpdate(fallbackReply, 'bot');
-
-      const { emitAIFailureAlert } = require('./leadScoring');
-      emitAIFailureAlert(chat._id, customerPhone, aiError.message);
+      logger.error(`[MessageHandler] Error in AI/computation flow: ${aiError.message}`);
+      logger.error(`STACK: ${aiError.stack}`);
+      replyToSend = buildEmergencyFallback(messageText, chat?.language);
     }
-    
-  } catch (error) {
-    logger.error(`Error handling message: ${error.message}`);
-    logger.error(`FATAL STACK: ${error.stack}`);
-    
-    // Top-level bulletproof fallback to guarantee WhatsApp message send
+
+  } catch (outerErr) {
+    logger.error(`[MessageHandler] Outer error: ${outerErr.message}`);
+    logger.error(`OUTER STACK: ${outerErr.stack}`);
+    replyToSend = "Samajh nahi aaya, phir se try karo 😊 Ya call karein: 9257657665";
+  }
+
+  // ─── INDEPENDENT REPLY SEND BLOCK ───────────────────────────────────
+  // Runs NO MATTER WHAT — a DB save error or AI crash can NEVER block message sending!
+  try {
+    if (!replyToSend || replyToSend.trim() === '') {
+      replyToSend = "Samajh nahi aaya, phir se try karo 😊 Ya call karein: 9257657665";
+    }
+    sendResult = await channelManager.sendMessageViaChannel(rawJid, replyToSend, channel, sessionId);
+    console.log(`[MessageHandler] Reply sent via ${channel}: ${sendResult ? 'SUCCESS ✓' : 'FAILED (queued)'}`);
+  } catch (sendError) {
+    logger.error(`[MessageHandler] ✗✗✗ CRITICAL: Even fallback send failed: ${sendError.message}`);
     try {
-      const fallbackMsg = "Samajh nahi aaya, phir se try karo 😊 Ya directly call karein: 9257657665";
-      const rawJid = msg.key?.remoteJid;
-      if (rawJid) {
-        await channelManager.sendMessageViaChannel(rawJid, fallbackMsg, channel, sessionId);
+      const { FailedMessage } = require('../models');
+      await FailedMessage.create({
+        chatId: rawJid,
+        customerPhone,
+        channel,
+        originalMessage: messageText,
+        errorMessage: sendError.message,
+        errorStack: sendError.stack
+      });
+    } catch (_) {}
+  }
+
+  // ─── INDEPENDENT DATABASE SAVE BLOCK ─────────────────────────────────
+  // Failure in DB save NEVER impacts the WhatsApp reply that was already attempted/sent
+  try {
+    if (chat) {
+      if (chat.bookingDraft) {
+        chat.bookingDraft = sanitizeBookingDraft(chat.bookingDraft);
       }
-    } catch (emergencySendErr) {
-      logger.error(`Emergency send failed: ${emergencySendErr.message}`);
+      if (replyToSend) {
+        chat.messages.push({
+          sender: 'bot',
+          text: replyToSend,
+          timestamp: new Date(),
+          messageType: 'text',
+          deliveryStatus: sendResult ? 'sent' : 'queued'
+        });
+      }
+      await chat.save();
+      
+      try {
+        const { scoreMessage } = require('./leadScoring');
+        await scoreMessage(chat, messageText, replyToSend);
+      } catch (_) {}
     }
+  } catch (saveError) {
+    logger.error(`[MessageHandler] DB save failed (reply was still sent): ${saveError.message}`);
   }
 }
 

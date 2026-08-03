@@ -137,4 +137,22 @@ router.delete('/:id', verifyToken, requireAdmin, async (req, res, next) => {
   }
 });
 
+/**
+ * GET /api/whatsapp/failed-messages
+ * List unresolved failed messages for staff review.
+ */
+router.get('/failed-messages', verifyToken, async (req, res, next) => {
+  try {
+    const { FailedMessage } = require('../models');
+    const list = await FailedMessage.find({ resolved: false }).sort({ timestamp: -1 }).limit(50).lean();
+    res.json({
+      success: true,
+      count: list.length,
+      failedMessages: list
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;
