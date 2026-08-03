@@ -23,48 +23,78 @@ function extractBookingDetails(text, today = new Date()) {
     oct: 9, october: 9, nov: 10, november: 10, dec: 11, december: 11
   };
 
+  // Date range parsing (e.g. "5 aug - 7 aug", "5 to 7 august", "5th-7th aug")
+  const dateRangeRegex = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\s*(?:\-|to|se|\–)\s*(\d{1,2})(?:st|nd|rd|th)?\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)?\b/i;
+  
   const dayMonthRegex = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\b/i;
   const monthDayRegex = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i;
   const numericDateRegex = /\b(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/;
 
   let targetDate = null;
-  let match = lower.match(dayMonthRegex);
-  if (match) {
-    const day = parseInt(match[1], 10);
-    const monthIdx = months[match[2].toLowerCase()];
-    if (day >= 1 && day <= 31 && monthIdx !== undefined) {
+  let rangeMatch = lower.match(dateRangeRegex);
+
+  if (rangeMatch) {
+    const startDay = parseInt(rangeMatch[1], 10);
+    const startMonthIdx = months[rangeMatch[2].toLowerCase()];
+    const endDay = parseInt(rangeMatch[3], 10);
+    const endMonthIdx = rangeMatch[4] ? months[rangeMatch[4].toLowerCase()] : startMonthIdx;
+
+    if (startDay >= 1 && startDay <= 31 && startMonthIdx !== undefined && endDay >= 1 && endDay <= 31 && endMonthIdx !== undefined) {
       let year = today.getFullYear();
-      targetDate = new Date(year, monthIdx, day);
-      if (targetDate < new Date(today.setHours(0, 0, 0, 0))) {
-        targetDate.setFullYear(year + 1);
+      const startDate = new Date(year, startMonthIdx, startDay);
+      const endDate = new Date(year, endMonthIdx, endDay);
+      if (startDate < new Date(today.setHours(0, 0, 0, 0))) {
+        startDate.setFullYear(year + 1);
+        endDate.setFullYear(year + 1);
+      }
+      targetDate = startDate;
+      const diffMs = endDate.getTime() - startDate.getTime();
+      const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+      if (diffDays > 0) {
+        result.nights = diffDays;
       }
     }
-  } else if ((match = lower.match(monthDayRegex))) {
-    const monthIdx = months[match[1].toLowerCase()];
-    const day = parseInt(match[2], 10);
-    if (day >= 1 && day <= 31 && monthIdx !== undefined) {
-      let year = today.getFullYear();
-      targetDate = new Date(year, monthIdx, day);
-      if (targetDate < new Date(today.setHours(0, 0, 0, 0))) {
-        targetDate.setFullYear(year + 1);
+  }
+
+  if (!targetDate) {
+    let match = lower.match(dayMonthRegex);
+    if (match) {
+      const day = parseInt(match[1], 10);
+      const monthIdx = months[match[2].toLowerCase()];
+      if (day >= 1 && day <= 31 && monthIdx !== undefined) {
+        let year = today.getFullYear();
+        targetDate = new Date(year, monthIdx, day);
+        if (targetDate < new Date(today.setHours(0, 0, 0, 0))) {
+          targetDate.setFullYear(year + 1);
+        }
       }
+    } else if ((match = lower.match(monthDayRegex))) {
+      const monthIdx = months[match[1].toLowerCase()];
+      const day = parseInt(match[2], 10);
+      if (day >= 1 && day <= 31 && monthIdx !== undefined) {
+        let year = today.getFullYear();
+        targetDate = new Date(year, monthIdx, day);
+        if (targetDate < new Date(today.setHours(0, 0, 0, 0))) {
+          targetDate.setFullYear(year + 1);
+        }
+      }
+    } else if ((match = lower.match(numericDateRegex))) {
+      const day = parseInt(match[1], 10);
+      const month = parseInt(match[2], 10) - 1;
+      let year = match[3] ? parseInt(match[3], 10) : today.getFullYear();
+      if (year < 100) year += 2000;
+      if (day >= 1 && day <= 31 && month >= 0 && month <= 11) {
+        targetDate = new Date(year, month, day);
+      }
+    } else if (lower.includes('tomorrow') || lower.includes('kal') || lower.includes('udya')) {
+      targetDate = new Date(today);
+      targetDate.setDate(targetDate.getDate() + 1);
+    } else if (lower.includes('this weekend') || lower.includes('next weekend') || lower.includes('weekend')) {
+      targetDate = new Date(today);
+      const currentDay = targetDate.getDay();
+      const daysUntilSaturday = (6 - currentDay + 7) % 7 || 7;
+      targetDate.setDate(targetDate.getDate() + daysUntilSaturday);
     }
-  } else if ((match = lower.match(numericDateRegex))) {
-    const day = parseInt(match[1], 10);
-    const month = parseInt(match[2], 10) - 1;
-    let year = match[3] ? parseInt(match[3], 10) : today.getFullYear();
-    if (year < 100) year += 2000;
-    if (day >= 1 && day <= 31 && month >= 0 && month <= 11) {
-      targetDate = new Date(year, month, day);
-    }
-  } else if (lower.includes('tomorrow') || lower.includes('kal') || lower.includes('udya')) {
-    targetDate = new Date(today);
-    targetDate.setDate(targetDate.getDate() + 1);
-  } else if (lower.includes('this weekend') || lower.includes('next weekend') || lower.includes('weekend')) {
-    targetDate = new Date(today);
-    const currentDay = targetDate.getDay();
-    const daysUntilSaturday = (6 - currentDay + 7) % 7 || 7;
-    targetDate.setDate(targetDate.getDate() + daysUntilSaturday);
   }
 
   if (targetDate && !isNaN(targetDate.getTime())) {
@@ -80,7 +110,8 @@ function extractBookingDetails(text, today = new Date()) {
   }
   if (kidMatch) {
     const numKids = parseInt(kidMatch[1], 10);
-    result.kids = Array(numKids).fill(5);
+    // Correct schema structure: Array of objects [{ age: Number }]
+    result.kids = Array.from({ length: numKids }, () => ({ age: 5 }));
   }
 
   if (!result.adults && totalGuestMatch) {
@@ -388,8 +419,11 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
         logger.info(`Extracted natural language adult count: ${extracted.adults} from message "${messageText}"`);
       }
       if (extracted.kids) {
-        chat.bookingDraft.kids = extracted.kids;
+        chat.bookingDraft.kids = extracted.kids.map(k => (typeof k === 'number' ? { age: k } : k));
         logger.info(`Extracted natural language kid count: ${extracted.kids.length} from message "${messageText}"`);
+      }
+      if (extracted.nights) {
+        chat.bookingDraft.nights = extracted.nights;
       }
       if (chat.bookingDraft.date && chat.bookingDraft.adults && chat.bookingStage !== 'price_quoted' && chat.bookingStage !== 'completed') {
         chat.bookingStage = 'guests_given';
@@ -503,7 +537,7 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
       const systemNotes = systemNotesList.join('\n\n');
       const aiReply = await getAIResponse(chat, messageText, settings, systemNotes);
       console.log(`[TIMING] [4/6] getAIResponse finished, AI reply generated in ${Date.now() - tStart}ms`);
-
+      console.log(`[MessageHandler] AI reply received: "${aiReply?.substring(0, 50)}..."`);
       
       if (!aiReply || aiReply.trim() === '') {
         console.error(`[MessageHandler] AI reply is empty! Skipping message send.`);
@@ -524,13 +558,22 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
         chat.isNewConversation = false;
       }
       
-      await chat.save();
-
+      try {
+        await chat.save();
+      } catch (saveErr) {
+        logger.error(`Chat save warning before send: ${saveErr.message}`);
+        if (Array.isArray(chat.bookingDraft.kids)) {
+          chat.bookingDraft.kids = chat.bookingDraft.kids.map(k => (typeof k === 'number' ? { age: k } : k));
+        }
+        await chat.save();
+      }
+      
+      console.log(`[MessageHandler] Chat saved with AI reply (status: pending)`);
       
       // Send reply via WhatsApp
       const tSendStart = Date.now();
       console.log(`[TIMING] [5/6] Sending message back via WhatsApp at ${new Date().toISOString()}`);
-
+      console.log(`[MessageHandler] Sending to: ${rawJid}, Session: ${sessionId}`);
       
       const sendResult = await channelManager.sendMessageViaChannel(rawJid, aiReply, channel, sessionId);
       
@@ -539,9 +582,11 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
       if (lastMsg && lastMsg.sender === 'bot') {
         lastMsg.deliveryStatus = sendResult ? 'sent' : 'queued';
       }
-      await chat.save();
+      try {
+        await chat.save();
+      } catch (saveErr2) {}
       
-
+      console.log(`[MessageHandler] Send result (${channel}): ${sendResult ? 'SUCCESS ✓' : 'FAILED ✗ (queued for retry)'}`);
       console.log(`[TIMING] [6/6] Sent message back via WhatsApp in ${Date.now() - tSendStart}ms. Total end-to-end processing time: ${Date.now() - tStart}ms.`);
       
       if (!sendResult) {
@@ -581,9 +626,14 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
       
     } catch (aiError) {
       logger.error(`AI generation failed for ${customerPhone}: ${aiError.message}`);
+      logger.error(`AI generation STACK: ${aiError.stack}`);
       
       const fallbackReply = buildEmergencyFallback(messageText, chat.language);
       
+      if (Array.isArray(chat?.bookingDraft?.kids)) {
+        chat.bookingDraft.kids = chat.bookingDraft.kids.map(k => (typeof k === 'number' ? { age: k } : k));
+      }
+
       chat.messages.push({
         sender: 'bot',
         text: fallbackReply,
@@ -591,7 +641,11 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
         messageType: 'text',
         deliveryStatus: 'pending'
       });
-      await chat.save();
+      try {
+        await chat.save();
+      } catch (fallbackSaveErr) {
+        logger.error(`Fallback save error: ${fallbackSaveErr.message}`);
+      }
 
       let fallbackSent = false;
       try {
@@ -605,7 +659,9 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
       if (lastFallbackMsg && lastFallbackMsg.sender === 'bot') {
         lastFallbackMsg.deliveryStatus = fallbackSent ? 'sent' : 'queued';
       }
-      await chat.save();
+      try {
+        await chat.save();
+      } catch (_) {}
 
       if (sock) {
         try {
@@ -621,6 +677,18 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
     
   } catch (error) {
     logger.error(`Error handling message: ${error.message}`);
+    logger.error(`FATAL STACK: ${error.stack}`);
+    
+    // Top-level bulletproof fallback to guarantee WhatsApp message send
+    try {
+      const fallbackMsg = "Samajh nahi aaya, phir se try karo 😊 Ya directly call karein: 9257657665";
+      const rawJid = msg.key?.remoteJid;
+      if (rawJid) {
+        await channelManager.sendMessageViaChannel(rawJid, fallbackMsg, channel, sessionId);
+      }
+    } catch (emergencySendErr) {
+      logger.error(`Emergency send failed: ${emergencySendErr.message}`);
+    }
   }
 }
 
