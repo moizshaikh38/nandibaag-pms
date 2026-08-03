@@ -128,6 +128,20 @@ router.post('/webhook', async (req, res) => {
   console.log(`[Fast2SMS:Webhook] ⬇️ Incoming webhook hit at ${new Date().toISOString()}`);
   console.log(`[Fast2SMS:Webhook] Full payload: ${JSON.stringify(payload)}`);
 
+  // Check if this is an outgoing message (bot's own reply being echoed) or status update
+  if (payload.direction === 'outgoing' || payload.type === 'message_status' || payload.event === 'message_status' || payload.status === 'sent' || payload.status === 'delivered') {
+    console.log('[Fast2SMS:Webhook] Ignoring outgoing/status message update');
+    return res.status(200).json({ status: 'ignored' });
+  }
+
+  // Also check if sender is OUR bot number (not customer)
+  const ourNumbers = (process.env.FAST2SMS_SENDER_NUMBERS || '9257657664,9257657663,9257657665').split(',').map(n => n.replace(/\D/g, ''));
+  const senderNumber = (payload.from || payload.number || payload.phone || '').replace(/\D/g, '');
+  if (senderNumber && ourNumbers.some(n => n && senderNumber.includes(n))) {
+    console.log('[Fast2SMS:Webhook] Ignoring message from OUR number:', senderNumber);
+    return res.status(200).json({ status: 'ignored' });
+  }
+
   // ALWAYS acknowledge receipt immediately with HTTP 200 OK so Fast2SMS test probes pass!
   res.status(200).json({
     success: true,

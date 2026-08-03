@@ -389,6 +389,12 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
       if (currentEntry && currentEntry.socketId !== mySocketId) return;
 
       for (const msg of messages) {
+        // IGNORE messages from bot itself (fromMe = true)
+        if (msg.key?.fromMe === true) {
+          console.log('[Baileys] Ignoring own message (fromMe=true):', msg.key?.id);
+          continue;
+        }
+
         const rawJid = msg.key.remoteJid;
         if (!rawJid || rawJid === 'status@broadcast' || rawJid.endsWith('@g.us')) continue;
 

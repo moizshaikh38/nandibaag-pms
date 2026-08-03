@@ -9,6 +9,10 @@ const { getCapacityAvailability, suggestRoomCombinations } = require('./availabi
 const { sanitizeBookingDraft } = require('../utils/sanitizeBookingDraft');
 const logger = require('../config/logger');
 
+// Deduplicate: track processed message IDs to prevent echo loops
+const processedMessageIds = new Set();
+const MAX_PROCESSED_IDS = 10000;
+
 /**
  * Natural language parser for dates and guest counts from customer messages.
  * Handles mixed phrasings like "28 august 5 guest 4 adult and 1 kid", "15th august 2 couples", "25 Dec 6 adults".
@@ -220,14 +224,27 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
 
   try {
     if (!rawJid) return;
-    
+
+    messageText = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
+    const messageId = msg.key?.id || `${rawJid}-${msg.messageTimestamp || Date.now()}-${messageText.slice(0, 20)}`;
+
+    if (processedMessageIds.has(messageId)) {
+      console.log('[MessageHandler] ⚠️  Duplicate message ID, skipping:', messageId);
+      return;
+    }
+    processedMessageIds.add(messageId);
+    if (processedMessageIds.size > MAX_PROCESSED_IDS) {
+      const firstItem = processedMessageIds.values().next().value;
+      processedMessageIds.delete(firstItem);
+    }
+    console.log('[MessageHandler] Processing new message ID:', messageId);
+
     if (msg.key.participant && msg.key.participant.includes('@s.whatsapp.net')) {
       customerPhone = msg.key.participant.replace('@s.whatsapp.net', '').replace(/\D/g, '');
     } else {
       customerPhone = rawJid.split('@')[0].replace(/\D/g, '');
     }
     
-    messageText = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
     const hasMedia = !!(msg.message?.imageMessage || msg.message?.videoMessage || msg.message?.audioMessage || msg.message?.documentMessage || msg.message?.stickerMessage);
     const messageType = hasMedia ? 'image' : 'text';
     
