@@ -389,12 +389,6 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
       if (currentEntry && currentEntry.socketId !== mySocketId) return;
 
       for (const msg of messages) {
-        // SAFETY: Skip bot's own messages (fromMe = true)
-        if (msg.key?.fromMe === true) {
-          console.log('[Baileys] Skipped own message (fromMe=true):', msg.key?.id);
-          continue;
-        }
-
         // SAFETY: Skip protocol or system notification messages
         if (msg.type === 'protocolMessage' || msg.type === 'notification' || msg.messageStubType) {
           console.log('[Baileys] Skipped system/protocol message:', msg.type || msg.messageStubType);

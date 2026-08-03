@@ -42,6 +42,24 @@ function getMessageHash(from, text, channel = 'default') {
   return crypto.createHash('sha256').update(hashInput).digest('hex');
 }
 
+function emitRealtimeUpdate(chat, customMsgText, senderRole = 'customer') {
+  try {
+    const { getIO } = require('../sockets');
+    const io = getIO();
+    if (io && chat) {
+      io.emit('chat:updated', chat);
+      io.emit('chat:new_message', {
+        chatId: chat._id,
+        customerPhone: chat.customerPhone,
+        customerName: chat.customerName,
+        message: customMsgText,
+        sender: senderRole,
+        chat
+      });
+    }
+  } catch (error) {}
+}
+
 /** Check if text content matches an exact outgoing bot reply fingerprint */
 function isBotReplyText(text) {
   if (!text || typeof text !== 'string') return false;
@@ -308,6 +326,8 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
             });
             chat.lastMessageAt = new Date();
             try { await chat.save(); } catch (_) {}
+
+            emitRealtimeUpdate(chat, text, 'agent');
           }
         }
       }
@@ -377,36 +397,20 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
     chat.lastMessageAt = new Date();
     try { await cancelPendingFollowUps(chat._id, 'customer_replied'); } catch (_) {}
 
-    const emitRealtimeUpdate = (customMsgText, sender = 'customer') => {
-      try {
-        const { getIO } = require('../sockets');
-        const io = getIO();
-        if (io) {
-          io.emit('chat:updated', chat);
-          io.emit('chat:new_message', {
-            chatId: chat._id,
-            customerPhone,
-            customerName: chat.customerName,
-            message: customMsgText,
-            sender,
-            chat
-          });
-        }
-      } catch (error) {}
-    };
+
     
     const mode = chat.mode;
     if (mode === 'human') {
       try { await chat.save(); } catch (_) {}
       logger.info(`Chat ${customerPhone} in human mode, message saved, emitting socket event`);
-      emitRealtimeUpdate(messageText || '[Media]', 'customer');
+      emitRealtimeUpdate(chat, messageText || '[Media]', 'customer');
       if (sock) {
         try { await sock.sendPresenceUpdate('paused', msg.key.remoteJid); } catch (_) {}
       }
       return;
     }
 
-    emitRealtimeUpdate(messageText || '[Media]', 'customer');
+    emitRealtimeUpdate(chat, messageText || '[Media]', 'customer');
     
     // Primary Reply Computation Step
     try {
@@ -548,6 +552,7 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
         });
       }
       await chat.save();
+      emitRealtimeUpdate(chat, replyToSend, 'bot');
       
       try {
         const { scoreMessage } = require('./leadScoring');
