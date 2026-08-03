@@ -623,38 +623,23 @@ function getSessionStatus(sessionId, dbStatus) {
     }
   }
 
-  const lastConnectedAt = lastSuccessfulConnection.get(sessionId) || 0;
-  const recentlyConnected = lastConnectedAt && (Date.now() - lastConnectedAt < 15 * 60 * 1000);
-
-  if (entry?.sock) {
-    if (entry.sock.user && entry.sock.user.id) {
-      return 'connected';
-    }
-    if (dbStatus === 'connected' || recentlyConnected) {
-      return 'connected';
-    }
-    return 'connecting';
-  }
-
-  if (connectingSessions.has(sessionId)) {
-    if (dbStatus === 'connected' || recentlyConnected) {
-      return 'connected';
-    }
-    return 'connecting';
-  }
-
-  if (dbStatus === 'connected') {
+  if (entry?.sock?.user?.id) {
     return 'connected';
   }
 
-  if (dbStatus === 'connecting') {
-    if (recentlyConnected || reconnectTimers.has(sessionId)) {
-      return 'connected';
-    }
+  if (connectingSessions.has(sessionId)) {
     return 'connecting';
   }
 
-  return dbStatus || 'disconnected';
+  if (dbStatus === 'connected' && entry?.sock) {
+    return 'connected';
+  }
+
+  if (dbStatus === 'connecting' && reconnectTimers.has(sessionId)) {
+    return 'connecting';
+  }
+
+  return dbStatus && dbStatus !== 'connected' ? dbStatus : 'disconnected';
 }
 
 function getAllSessionsStatus(whatsappNumbers = []) {
@@ -814,9 +799,13 @@ async function sendMessage(sessionId, toPhone, text) {
 // ─── Session Teardown ────────────────────────────────────────────────
 
 async function stopSession(sessionId) {
+  console.log(`[SessionDelete] Starting delete for: ${sessionId}`);
   const entry = activeSockets.get(sessionId);
+  console.log(`[SessionDelete] Socket found in memory? ${!!entry?.sock}`);
+
   if (entry?.sock) {
     try {
+      console.log(`[SessionDelete] Calling sock.logout()...`);
       await entry.sock.logout();
       logger.info(`Session ${sessionId} logged out via Baileys`);
     } catch (error) {
@@ -826,11 +815,14 @@ async function stopSession(sessionId) {
   }
 
   try {
+    console.log(`[SessionDelete] Updating DB status...`);
     const { Settings } = require('../models');
     const settings = await Settings.findOne();
-    if (settings) {
+    if (settings && Array.isArray(settings.whatsappNumbers)) {
       const originalLength = settings.whatsappNumbers.length;
-      settings.whatsappNumbers = settings.whatsappNumbers.filter(n => n.label !== sessionId);
+      settings.whatsappNumbers = settings.whatsappNumbers.filter(
+        n => n._id?.toString() !== sessionId && n.label !== sessionId && n.number !== sessionId
+      );
       if (settings.whatsappNumbers.length !== originalLength) {
         await settings.save();
         logger.info(`Removed session ${sessionId} from Settings database`);
@@ -840,16 +832,26 @@ async function stopSession(sessionId) {
     logger.error(`Failed to remove session ${sessionId} from DB: ${dbErr.message}`);
   }
 
+  console.log(`[SessionDelete] Removing from in-memory map & clearing connection timers...`);
   activeSockets.delete(sessionId);
   reconnectAttempts.delete(sessionId);
+  connectingSessions.delete(sessionId);
+  lastSuccessfulConnection.delete(sessionId);
+
   const reconnectTimer = reconnectTimers.get(sessionId);
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimers.delete(sessionId);
   }
+
+  console.log(`[SessionDelete] Deleting session folder...`);
   deleteSessionFolder(sessionId);
 
+  console.log(`[SessionDelete] Emitting disconnected event to frontend...`);
   emitSocketEvent('whatsapp:session_destroyed', { sessionId });
+  emitSocketEvent('whatsapp:disconnected', { sessionId });
+  emitSocketEvent('whatsapp:number_deleted', { sessionId });
+  console.log(`[SessionDelete] ✓ Complete for ${sessionId}`);
 }
 
 // ─── Restore All Sessions on Startup ─────────────────────────────────
