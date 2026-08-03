@@ -13,6 +13,29 @@ const logger = require('../config/logger');
 // Per-channel message cache (SHA256 hash -> timestamp) for robust deduplication
 const webhookMessageCache = new Map();
 
+// Cache of outgoing bot reply content hashes (SHA256 of text -> timestamp) to catch echoes
+const recentBotRepliesFingerprint = new Map();
+
+function registerBotReplyFingerprint(text) {
+  if (!text || typeof text !== 'string') return;
+  const hash = crypto.createHash('sha256').update(text.trim().slice(0, 80)).digest('hex');
+  recentBotRepliesFingerprint.set(hash, Date.now());
+  if (recentBotRepliesFingerprint.size > 2000) {
+    const firstKey = recentBotRepliesFingerprint.keys().next().value;
+    recentBotRepliesFingerprint.delete(firstKey);
+  }
+}
+
+function isBotReplyFingerprint(text) {
+  if (!text || typeof text !== 'string') return false;
+  const hash = crypto.createHash('sha256').update(text.trim().slice(0, 80)).digest('hex');
+  const timestamp = recentBotRepliesFingerprint.get(hash);
+  if (timestamp && Date.now() - timestamp < 120000) { // 2-minute window
+    return true;
+  }
+  return false;
+}
+
 function getMessageHash(from, text, channel = 'default') {
   const timeWindow = Math.floor(Date.now() / 10000) * 10000;
   const hashInput = `${from}||${(text || '').slice(0, 50)}||${timeWindow}||${channel}`;
@@ -22,6 +45,7 @@ function getMessageHash(from, text, channel = 'default') {
 /** Check if text content matches known bot reply patterns */
 function isBotReplyText(text) {
   if (!text || typeof text !== 'string') return false;
+  if (isBotReplyFingerprint(text)) return true;
   const botIndicators = [
     'Namaste',
     'Welcome to Nandibaag',
@@ -501,6 +525,9 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
     if (!replyToSend || replyToSend.trim() === '') {
       replyToSend = "Samajh nahi aaya, phir se try karo 😊 Ya call karein: 9257657665";
     }
+    // Register fingerprint of outgoing bot reply to catch webhook echoes instantly
+    registerBotReplyFingerprint(replyToSend);
+    
     sendResult = await channelManager.sendMessageViaChannel(rawJid, replyToSend, channel, sessionId);
     console.log(`[MessageHandler] Reply sent via ${channel}: ${sendResult ? 'SUCCESS ✓' : 'FAILED (queued)'}`);
   } catch (sendError) {
