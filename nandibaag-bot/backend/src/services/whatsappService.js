@@ -389,9 +389,21 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
       if (currentEntry && currentEntry.socketId !== mySocketId) return;
 
       for (const msg of messages) {
-        // IGNORE messages from bot itself (fromMe = true)
+        // SAFETY: Skip bot's own messages (fromMe = true)
         if (msg.key?.fromMe === true) {
-          console.log('[Baileys] Ignoring own message (fromMe=true):', msg.key?.id);
+          console.log('[Baileys] Skipped own message (fromMe=true):', msg.key?.id);
+          continue;
+        }
+
+        // SAFETY: Skip protocol or system notification messages
+        if (msg.type === 'protocolMessage' || msg.type === 'notification' || msg.messageStubType) {
+          console.log('[Baileys] Skipped system/protocol message:', msg.type || msg.messageStubType);
+          continue;
+        }
+
+        // SAFETY: Skip empty messages
+        if (!msg.message || (!msg.message.conversation && !msg.message.extendedTextMessage?.text && !msg.message.imageMessage && !msg.message.videoMessage && !msg.message.audioMessage && !msg.message.documentMessage && !msg.message.stickerMessage)) {
+          console.log('[Baileys] Skipped empty message');
           continue;
         }
 

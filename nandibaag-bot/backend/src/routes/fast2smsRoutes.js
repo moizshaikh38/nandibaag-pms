@@ -147,15 +147,8 @@ router.post('/webhook', async (req, res) => {
   console.log(`[Fast2SMS:Webhook] ⬇️ Incoming webhook hit at ${new Date().toISOString()}`);
   console.log(`[Fast2SMS:Webhook] Full payload: ${JSON.stringify(payload)}`);
 
-  // Extract raw text for bot reply detection
-  const parsedPreview = extractIncomingMessage(payload);
-  const messageTextPreview = parsedPreview?.body || payload.text || payload.message || payload.body || '';
-
-  // Check if content matches known bot reply patterns
-  if (isBotReply(messageTextPreview)) {
-    console.log('[Fast2SMS:Webhook] Detected bot reply content, ignoring:', messageTextPreview.slice(0, 50));
-    return res.status(200).json({ status: 'ignored_bot_reply' });
-  }
+  // Fast2SMS is disabled (FAST2SMS_ENABLED=false).
+  // If re-enabled in the future, payload signature validation or official SDK will handle message classification.
 
   // Check if this is an outgoing message (bot's own reply being echoed) or status update
   if (payload.direction === 'outgoing' || payload.type === 'message_status' || payload.event === 'message_status' || payload.status === 'sent' || payload.status === 'delivered') {

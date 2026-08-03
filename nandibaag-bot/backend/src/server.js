@@ -169,7 +169,9 @@ app.use('/api/availability', availabilityRoutes);
 app.use('/api/pms', pmsBookingRoutes);
 app.use('/api/message-log', messageLogRoutes);
 app.use('/api/team', teamSecurityRoutes);
-app.use('/api/fast2sms', fast2smsRoutes);
+if (process.env.FAST2SMS_ENABLED === 'true') {
+  app.use('/api/fast2sms', fast2smsRoutes);
+}
 
 // Global error handler (must be last)
 app.use(errorHandler);
@@ -245,13 +247,16 @@ const startServer = async () => {
       logger.error(`Error restoring sessions: ${err.message}`);
     });
     
-    // Initialize Fast2SMS channel (inert if API key missing — never blocks startup)
+    // Initialize Fast2SMS channel conditionally
     try {
-      fast2smsService.initialize();
-      // Wire the shared pipeline so fast2sms webhooks flow through the
-      // SAME AI/Human + booking logic as WhatsApp Web messages.
-      const { handleIncomingMessage } = require('./services/messageHandler');
-      global.messageHandlerCallback = handleIncomingMessage;
+      if (process.env.FAST2SMS_ENABLED === 'true') {
+        fast2smsService.initialize();
+        const { handleIncomingMessage } = require('./services/messageHandler');
+        global.messageHandlerCallback = handleIncomingMessage;
+        logger.info('[Startup] ✓ Fast2SMS channel enabled');
+      } else {
+        logger.info('[Startup] ⚠️  Fast2SMS channel disabled (FAST2SMS_ENABLED=false)');
+      }
     } catch (fast2smsErr) {
       logger.error(`Fast2SMS initialization error: ${fast2smsErr.message}`);
     }
