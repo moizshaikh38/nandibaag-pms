@@ -134,6 +134,12 @@ function isBotReply(text) {
  * Always acknowledges quickly with HTTP 200 OK so Fast2SMS dashboard test probes pass.
  */
 router.post('/webhook', async (req, res) => {
+  const env = require('../config/env');
+  if (!env.fast2smsEnabled) {
+    console.log('[Fast2SMS:Webhook] ⚠️ Fast2SMS channel is disabled (FAST2SMS_ENABLED=false) — dropping incoming webhook.');
+    return res.status(200).json({ success: true, status: 'disabled' });
+  }
+
   const payload = req.body || {};
   console.log(`[Fast2SMS:Webhook] ⬇️ Incoming webhook hit at ${new Date().toISOString()}`);
   console.log(`[Fast2SMS:Webhook] Full payload: ${JSON.stringify(payload)}`);
