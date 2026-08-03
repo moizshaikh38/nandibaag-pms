@@ -57,14 +57,16 @@ function extractIncomingMessage(payload) {
     logger.debug(`[Fast2SMS] Meta-shape parse error: ${e.message}`);
   }
 
-  // Shape 2: Fast2SMS simple — flat { number, text } / { from, message }
+  // Shape 2: Fast2SMS simple / WhatsApp Business API — flat or nested objects
   const direct = payload.data && typeof payload.data === 'object' ? payload.data : payload;
-  const from = direct.from || direct.number || direct.sender || direct.phone || direct.wa_id || null;
+  const from = direct.from || direct.number || direct.sender || direct.phone || direct.wa_id || direct.mobile || direct.mobile_no || direct.customer_phone || direct.sender_number || direct.contact || (Array.isArray(direct.contacts) ? direct.contacts[0]?.wa_id : null) || null;
   let body =
+    (typeof direct.text?.body === 'string' && direct.text.body) ||
     (typeof direct.text === 'string' && direct.text) ||
-    direct.message ||
-    direct.body ||
-    direct.content ||
+    (typeof direct.message?.text === 'string' && direct.message.text) ||
+    (typeof direct.message === 'string' && direct.message) ||
+    (typeof direct.body === 'string' && direct.body) ||
+    (typeof direct.content === 'string' && direct.content) ||
     null;
   if (typeof body !== 'string') body = null;
   if (from && body && typeof body === 'string') {
