@@ -4,3 +4,4 @@ services:
     env: node
     buildCommand: npm install
     startCommand: node nandibaag-bot/backend/src/server.js
+    healthCheckPath: /health

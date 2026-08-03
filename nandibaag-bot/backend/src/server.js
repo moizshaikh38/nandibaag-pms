@@ -1,3 +1,12 @@
+process.on('uncaughtException', (error) => {
+  console.error('[FATAL] Uncaught Exception:', error.message);
+  console.error(error.stack);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[FATAL] Unhandled Rejection:', reason);
+});
+
 const express = require('express');
 const http = require('http');
 const mongoose = require('mongoose');
@@ -41,6 +50,7 @@ const fast2smsService = require('./services/fast2smsService');
 const channelManager = require('./services/channelManager');
 
 const app = express();
+app.set('trust proxy', 1);
 const server = http.createServer(app);
 
 // Security middleware
@@ -79,26 +89,14 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
-// Rate limiting
-app.use('/api', generalLimiter);
-app.use('/api/auth/login', authLimiter);
-
-// Health check endpoint (before auth)
-app.get('/health', async (req, res) => {
+// Health check endpoint (before rate limiting & auth)
+const handleHealthCheck = async (req, res) => {
   try {
     const mongoConnected = mongoose.connection.readyState === 1;
-    
-    const settings = await Settings.findOne();
-    const whatsappNumbers = settings?.whatsappNumbers || [];
-    const { getAllSessionsStatus } = require('./services/whatsappService');
-    const sessionStatuses = getAllSessionsStatus(whatsappNumbers);
-    const activeSessions = Object.values(sessionStatuses).filter(status => status === 'connected').length;
-    
     res.json({
       status: 'ok',
       uptime: process.uptime(),
       mongoConnected,
-      activeWhatsappSessions: activeSessions,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -107,7 +105,15 @@ app.get('/health', async (req, res) => {
       message: error.message
     });
   }
-});
+};
+
+app.get('/', handleHealthCheck);
+app.get('/health', handleHealthCheck);
+app.get('/api/health', handleHealthCheck);
+
+// Rate limiting
+app.use('/api', generalLimiter);
+app.use('/api/auth/login', authLimiter);
 
 // Diagnostic endpoint for remote debugging (no secrets exposed)
 app.get('/health/diagnostic', async (req, res) => {
