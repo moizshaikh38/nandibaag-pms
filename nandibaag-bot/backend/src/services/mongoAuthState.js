@@ -2,13 +2,12 @@ const { initAuthCreds, BufferJSON, proto } = require('@whiskeysockets/baileys');
 const BaileysAuth = require('../models/BaileysAuth');
 const logger = require('../config/logger');
 
-// In-memory cache for session keys to eliminate Mongo query overhead and network latency drops
+// In-memory cache for session keys per process
 const memoryKeyCache = new Map();
 
 /**
  * Custom MongoDB Atlas Auth State Adapter for Baileys Multi-Device.
- * Stores all session credentials and signal keys in MongoDB Atlas with in-memory caching.
- * Solves Render ephemeral container disk wipes completely!
+ * Stores credentials and signal keys in MongoDB Atlas with exact useMultiFileAuthState semantics.
  */
 async function useMongoAuthState(sessionId) {
   const readData = async (keyId) => {
@@ -35,7 +34,9 @@ async function useMongoAuthState(sessionId) {
       memoryKeyCache.delete(cacheKey);
       try {
         await BaileysAuth.deleteOne({ sessionId, keyId });
-      } catch (err) {}
+      } catch (err) {
+        logger.error(`[MongoAuthState] Delete key error for ${sessionId}/${keyId}: ${err.message}`);
+      }
     } else {
       memoryKeyCache.set(cacheKey, data);
       try {
@@ -61,7 +62,7 @@ async function useMongoAuthState(sessionId) {
       await BaileysAuth.deleteMany({ sessionId });
       logger.info(`[MongoAuthState] Deleted all DB auth keys for session: ${sessionId}`);
     } catch (err) {
-      logger.error(`[MongoAuthState] Delete error for ${sessionId}: ${err.message}`);
+      logger.error(`[MongoAuthState] Delete session error for ${sessionId}: ${err.message}`);
     }
   };
 
@@ -80,9 +81,8 @@ async function useMongoAuthState(sessionId) {
               if (type === 'app-state-sync-key' && value) {
                 value = proto.Message.AppStateSyncKeyData.fromObject(value);
               }
-              if (value !== null && value !== undefined) {
-                data[id] = value;
-              }
+              // Unconditional assignment matching official useMultiFileAuthState semantics
+              data[id] = value;
             })
           );
           return data;

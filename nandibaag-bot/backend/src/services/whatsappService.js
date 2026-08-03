@@ -184,7 +184,7 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
         keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
       },
       logger: pino({ level: 'silent' }),
-      browser: ['Nandibaag Resort', 'Chrome', '120.0.0'],
+      browser: Browsers.macOS('Desktop'),
       keepAliveIntervalMs: 60000,
       connectTimeoutMs: 90000,
       defaultQueryTimeoutMs: 90000,
@@ -193,7 +193,6 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
       syncFullHistory: false,
       retryRequestDelayMs: 3000,
       generateHighQualityLinkPreview: false,
-      waWebSocketUrl: 'wss://web.whatsapp.com/ws/chat',
       qrMaxRetries: 5,
     });
     
