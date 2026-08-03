@@ -94,6 +94,22 @@ function isAuthorized(req) {
 }
 
 /**
+ * GET /api/fast2sms/webhook
+ * Health check & verification endpoint for Fast2SMS webhook URL.
+ */
+router.get('/webhook', (req, res) => {
+  const challenge = req.query['hub.challenge'] || req.query.challenge;
+  if (challenge) {
+    return res.status(200).send(challenge);
+  }
+  res.json({
+    status: 'online',
+    channel: 'fast2sms',
+    message: 'Fast2SMS Webhook endpoint is active and ready to receive incoming messages.'
+  });
+});
+
+/**
  * POST /api/fast2sms/webhook
  * Receives incoming WhatsApp messages from Fast2SMS.
  * Acknowledges quickly (200) since webhook senders expect fast acks;
