@@ -42,24 +42,10 @@ function getMessageHash(from, text, channel = 'default') {
   return crypto.createHash('sha256').update(hashInput).digest('hex');
 }
 
-/** Check if text content matches known bot reply patterns */
+/** Check if text content matches an exact outgoing bot reply fingerprint */
 function isBotReplyText(text) {
   if (!text || typeof text !== 'string') return false;
-  if (isBotReplyFingerprint(text)) return true;
-  const botIndicators = [
-    'Namaste',
-    'Welcome to Nandibaag',
-    'Couple Stay',
-    'Family Group Stay',
-    'Day Picnic',
-    '₹',
-    'call karein',
-    '9257657665',
-    'Nandibaag ke baare mein',
-    'Booking confirm',
-    'included'
-  ];
-  return botIndicators.some(indicator => text.includes(indicator));
+  return isBotReplyFingerprint(text);
 }
 
 /**
@@ -606,5 +592,6 @@ async function handleIncomingMessage(message, channel = 'whatsapp-web') {
 module.exports = {
   handleMessage,
   handleIncomingMessage,
-  extractBookingDetails
+  extractBookingDetails,
+  isBotReplyFingerprint
 };

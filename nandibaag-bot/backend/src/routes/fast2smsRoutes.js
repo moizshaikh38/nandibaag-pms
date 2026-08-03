@@ -118,23 +118,12 @@ router.get('/webhook', (req, res) => {
   });
 });
 
-/** Check if text content matches known bot reply patterns */
+const { isBotReplyFingerprint } = require('../services/messageHandler');
+
+/** Check if text content matches an exact outgoing bot reply fingerprint */
 function isBotReply(text) {
   if (!text || typeof text !== 'string') return false;
-  const botIndicators = [
-    'Namaste',
-    'Welcome to Nandibaag',
-    'Couple Stay',
-    'Family Group Stay',
-    'Day Picnic',
-    '₹',
-    'call karein',
-    '9257657665',
-    'Nandibaag ke baare mein',
-    'Booking confirm',
-    'included'
-  ];
-  return botIndicators.some(indicator => text.includes(indicator));
+  return isBotReplyFingerprint(text);
 }
 
 /**
