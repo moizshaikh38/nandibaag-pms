@@ -155,19 +155,12 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
   connectingSessions.add(sessionId);
 
   try {
-    const useMongoAuthState = require('./mongoAuthState');
-
-    let authState = await useMongoAuthState(sessionId);
+    const sessionPath = getSessionDataPath(sessionId);
     if (cleanStart) {
-      try {
-        if (authState.deleteSession) await authState.deleteSession();
-        deleteSessionFolder(sessionId);
-        logger.info(`[initSession] Purged old auth state for clean session start: ${sessionId}`);
-      } catch (cleanErr) {
-        logger.warn(`[initSession] Failed to purge auth state for ${sessionId}: ${cleanErr.message}`);
-      }
-      authState = await useMongoAuthState(sessionId);
+      deleteSessionFolder(sessionId);
+      logger.info(`[initSession] Purged session folder for clean session start: ${sessionId}`);
     }
+    const authState = await useMultiFileAuthState(sessionPath);
 
     logger.info(`[initSession] Initializing Baileys session: ${sessionId}`);
 
@@ -179,10 +172,7 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
 
     const sock = makeWASocket({
       version,
-      auth: {
-        creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
-      },
+      auth: state,
       logger: pino({ level: 'silent' }),
       browser: Browsers.macOS('Desktop'),
       keepAliveIntervalMs: 60000,
@@ -361,11 +351,6 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
           // User explicitly unlinked the device from their phone.
           // Clean up credentials completely — do NOT auto-reconnect.
           logger.error(`Session ${sessionId} was LOGGED OUT by user. Cleaning up credentials.`);
-          const useMongoAuthState = require('./mongoAuthState');
-          try {
-            const { deleteSession } = await useMongoAuthState(sessionId);
-            if (deleteSession) await deleteSession();
-          } catch (e) {}
           deleteSessionFolder(sessionId);
 
           try {
@@ -394,7 +379,9 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
     });
 
     // ── Message Handler ─────────────────────────────────────────────
-    sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    sock.ev.on('messages.upsert', async (m) => {
+      console.log('[Baileys:RAW] FIRED. Count:', m.messages?.length, 'Type:', m.type);
+      const { messages, type } = m;
       if (type !== 'notify' && type !== 'append') return;
 
       // Zombie check for message handler too
@@ -862,12 +849,6 @@ async function stopSession(sessionId) {
   }
   deleteSessionFolder(sessionId);
 
-  try {
-    const useMongoAuthState = require('./mongoAuthState');
-    const { deleteSession } = await useMongoAuthState(sessionId);
-    if (deleteSession) await deleteSession();
-  } catch (cleanErr) {}
-
   emitSocketEvent('whatsapp:session_destroyed', { sessionId });
 }
 
@@ -875,6 +856,9 @@ async function stopSession(sessionId) {
 
 async function restoreAllSessions(ioInstance) {
   if (ioInstance) setSocketIo(ioInstance);
+  const sessionBaseDir = path.resolve(__dirname, '../../sessions');
+  logger.info(`[Startup] WhatsApp Session Directory: ${sessionBaseDir}`);
+  logger.warn(`[Startup] ⚠️ Ensure '${sessionBaseDir}' is mounted on PERSISTENT DISK (Render: Persistent Disk / Railway: Volume) so WhatsApp session login survives redeploys.`);
   logger.info('Restoring all active Baileys WhatsApp sessions...');
 
   // Start watchdog supervisor
