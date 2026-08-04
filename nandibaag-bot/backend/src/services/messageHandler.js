@@ -83,15 +83,37 @@ function extractBookingDetails(text, today = new Date()) {
 
   // Sub-extraction 1: Dates & Date Ranges
   try {
+    const sameMonthRangeRegex = /\b(\d{1,2})(?:st|nd|rd|th)?\s*(?:\-|to|se|\–)\s*(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\b/i;
     const dateRangeRegex = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\s*(?:\-|to|se|\–)\s*(\d{1,2})(?:st|nd|rd|th)?\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)?\b/i;
     const dayMonthRegex = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\b/i;
     const monthDayRegex = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i;
     const numericDateRegex = /\b(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/;
 
     let targetDate = null;
+    let sameMonthMatch = lower.match(sameMonthRangeRegex);
     let rangeMatch = lower.match(dateRangeRegex);
 
-    if (rangeMatch) {
+    if (sameMonthMatch) {
+      const startDay = parseInt(sameMonthMatch[1], 10);
+      const endDay = parseInt(sameMonthMatch[2], 10);
+      const monthIdx = months[sameMonthMatch[3].toLowerCase()];
+
+      if (startDay >= 1 && startDay <= 31 && endDay >= 1 && endDay <= 31 && monthIdx !== undefined) {
+        let year = today.getFullYear();
+        const startDate = new Date(year, monthIdx, startDay);
+        const endDate = new Date(year, monthIdx, endDay);
+        if (startDate < new Date(today.setHours(0, 0, 0, 0))) {
+          startDate.setFullYear(year + 1);
+          endDate.setFullYear(year + 1);
+        }
+        targetDate = startDate;
+        const diffMs = endDate.getTime() - startDate.getTime();
+        const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+        if (diffDays > 0) {
+          result.nights = diffDays;
+        }
+      }
+    } else if (rangeMatch) {
       const startDay = parseInt(rangeMatch[1], 10);
       const startMonthIdx = months[rangeMatch[2].toLowerCase()];
       const endDay = parseInt(rangeMatch[3], 10);
@@ -177,7 +199,37 @@ function extractBookingDetails(text, today = new Date()) {
     const kidMatch = lower.match(/(\d+)\s*(?:kid|kids|child|children|bache|bhaache)/i);
     if (kidMatch) {
       const numKids = parseInt(kidMatch[1], 10);
-      result.kids = Array.from({ length: numKids }, () => ({ age: 5 }));
+      const allAgeNums = [];
+
+      const ageRegex = /(?:age|ages|year|years|yr|yrs|sal)\s*:?\s*(\d{1,2})(?:\s*(?:and|&|,)\s*(\d{1,2}))?/gi;
+      let m;
+      while ((m = ageRegex.exec(lower)) !== null) {
+        if (m[1]) allAgeNums.push(parseInt(m[1], 10));
+        if (m[2]) allAgeNums.push(parseInt(m[2], 10));
+      }
+
+      if (allAgeNums.length === 0) {
+        const parenthesizedAge = lower.match(/kid[s]?\s*\(\s*(?:age\s*)?(\d{1,2})\s*\)/i) || lower.match(/\(\s*(?:age\s*)?(\d{1,2})\s*\)/i);
+        if (parenthesizedAge) {
+          allAgeNums.push(parseInt(parenthesizedAge[1], 10));
+        }
+      }
+
+      let parsedAges = [];
+      if (allAgeNums.length > 0) {
+        if (allAgeNums.length === 1 && numKids > 1) {
+          parsedAges = Array.from({ length: numKids }, () => allAgeNums[0]);
+        } else {
+          parsedAges = allAgeNums.slice(0, numKids);
+          while (parsedAges.length < numKids) {
+            parsedAges.push(parsedAges[parsedAges.length - 1] || 5);
+          }
+        }
+      } else {
+        parsedAges = Array.from({ length: numKids }, () => 5);
+      }
+
+      result.kids = parsedAges.map(age => ({ age }));
     }
   } catch (kidErr) {
     console.warn('[Extract] Kid parsing failed:', kidErr.message);
@@ -480,11 +532,15 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
 
             const capacityResult = await getCapacityAvailability(checkInDate, checkOutDate, guestCount);
             if (!capacityResult.available) {
+              console.log('[MessageHandler:AVAILABILITY] ❌ NO ROOMS AVAILABLE');
+              console.log('[MessageHandler:AVAILABILITY] Result:', capacityResult);
               addSystemNote('[SYSTEM NOTE: No availability for these dates. Ask customer to try another date.]');
               chat.bookingDraft.availabilityChecked = true;
               chat.bookingDraft.availabilityConfirmed = false;
             } else {
-              const pricingResult = calculatePricing(checkInDate, checkOutDate, guestCount);
+              console.log('[MessageHandler:AVAILABILITY] ✅ ROOMS AVAILABLE');
+              console.log('[MessageHandler:AVAILABILITY] Available count:', capacityResult.availableCount);
+              const pricingResult = calculatePricing(checkInDate, checkOutDate, draft.adults || 2, draft.kids || [], draft.bookingType || 'auto');
               addSystemNote(`[SYSTEM NOTE: Availability confirmed.\nPRICING BREAKDOWN:\n${pricingResult.formatted}]`);
               chat.bookingDraft.availabilityChecked = true;
               chat.bookingDraft.availabilityConfirmed = true;

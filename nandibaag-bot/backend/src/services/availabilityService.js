@@ -77,6 +77,12 @@ async function getActiveRoomStructure() {
  * Also returns breakdown by capacity tier for suggestion logic.
  */
 async function getCapacityAvailability(checkInDate, checkOutDate, minCapacity = 1) {
+  console.log('[Availability:DEBUG] Input params:', {
+    checkInDate,
+    checkOutDate,
+    minCapacity
+  });
+
   const rooms = await getActiveRoomStructure();
   const eligibleRooms = rooms.filter(r => r.capacity >= minCapacity);
 
@@ -104,11 +110,19 @@ async function getCapacityAvailability(checkInDate, checkOutDate, minCapacity = 
     }
   }
 
-  return {
+  const result = {
     available: availableCount > 0,
     availableCount,
     breakdown: capacityBreakdown
   };
+
+  console.log('[Availability:DEBUG] Result:', {
+    available: result.available,
+    availableCount: result.availableCount,
+    breakdown: result.breakdown
+  });
+
+  return result;
 }
 
 /**

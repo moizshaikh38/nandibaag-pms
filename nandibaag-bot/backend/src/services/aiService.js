@@ -1021,6 +1021,11 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
     ? systemPrompt + '\n\n' + systemNotes
     : systemPrompt;
   
+  console.log('[AIService:DEBUG] System notes injected:', {
+    hasAvailabilityNote: systemNotes.includes('[SYSTEM NOTE'),
+    noteContent: systemNotes ? systemNotes.slice(0, 100) : null
+  });
+  
   console.log(`[TIMING] [3/6] System prompt (${languageToUse}) and message history built in ${Date.now() - tPromptStart}ms`);
 
   let result = null;

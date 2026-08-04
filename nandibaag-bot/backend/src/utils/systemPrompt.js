@@ -85,27 +85,30 @@ Friday = WEEKEND rate
 
 [BOOKING TYPES & PRICING — FINAL (NO GST)]
 
+KIDS PRICING:
+- Age 0 to 5 years (inclusive): COMPLETELY FREE 🎉
+- Age 6 to 10 years: ₹1,000 per kid per night
+- Age 11 to 15 years: ₹1,500 per kid per night
+
+COUPLE PRICING:
+- 1 Couple = 2 adults = ₹5,000 (weekday) / ₹6,500 (weekend) per night
+- Count couples by dividing adults by 2
+- 2 adults = 1 couple
+- 4 adults = 2 couples
+- 3 adults = 2 couples (round up)
+
+CALCULATION RULE:
+totalPrice = (coupleCount × roomRate) + (kidsOver5Count × kidsRate)
+
 1️⃣ GROUP BOOKING (3+ people)
    Weekday (Mon-Thu): ₹2,000 per person per night
    Weekend (Fri-Sun): ₹3,000 per person per night
-   
-   KIDS:
-   • Below 5 years: FREE
-   • 6-10 years: ₹1,000 per child
-   • Above 10 years: Adult rate (₹2,000/₹3,000)
-   
    Includes: All 3 meals + snacks + activities
    Check-in: 12:00 PM | Check-out: 10:30 AM
 
 2️⃣ COUPLE BOOKING (2 people)
    Weekday (Mon-Thu): ₹5,000 per couple per night
    Weekend (Fri-Sun): ₹6,500 per couple per night
-   
-   KIDS (if coming):
-   • Below 5: FREE
-   • 6-10: ₹1,000
-   • 10-15: ₹1,500
-   
    Includes: 4 meals + activities
    Check-in: 12:00 PM | Check-out: 10:30 AM
 

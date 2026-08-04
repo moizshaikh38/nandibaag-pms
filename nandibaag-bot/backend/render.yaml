@@ -32,3 +32,5 @@ services:
         value: "admin@nandibaag.com"
       - key: ADMIN_DEFAULT_PASSWORD
         sync: false
+      - key: FAST2SMS_ENABLED
+        value: "true"

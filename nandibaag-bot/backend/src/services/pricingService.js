@@ -75,16 +75,32 @@ function getDayName(dateInput) {
  * @param {string} stayTypeHint - 'couple', 'group', 'picnic', or 'auto'
  * @returns {object} { raw, formatted }
  */
-function calculatePricing(checkInInput, checkOutInput, guestCount = 2, stayTypeHint = 'auto') {
+function calculatePricing(checkInInput, checkOutInput, adultCountOrGuestCount = 2, kidsOrStayType = [], stayTypeHint = 'auto') {
   const checkInDate = new Date(checkInInput);
   let checkOutDate = checkOutInput ? new Date(checkOutInput) : null;
-  
-  const numGuests = Math.max(1, parseInt(guestCount, 10) || 2);
-  
-  // Determine stay type
+
+  let adultCount = 2;
+  let kids = [];
   let stayType = stayTypeHint;
+
+  if (typeof adultCountOrGuestCount === 'object' && adultCountOrGuestCount !== null) {
+    adultCount = adultCountOrGuestCount.adults || adultCountOrGuestCount.guestCount || 2;
+    kids = Array.isArray(adultCountOrGuestCount.kids) ? adultCountOrGuestCount.kids : [];
+    if (adultCountOrGuestCount.stayType) stayType = adultCountOrGuestCount.stayType;
+  } else {
+    adultCount = Math.max(1, parseInt(adultCountOrGuestCount, 10) || 2);
+    if (Array.isArray(kidsOrStayType)) {
+      kids = kidsOrStayType;
+    } else if (typeof kidsOrStayType === 'string' && kidsOrStayType !== 'auto') {
+      stayType = kidsOrStayType;
+    }
+  }
+
+  const numGuests = adultCount + kids.length;
+
+  // Determine stay type
   if (stayType === 'auto' || !stayType) {
-    if (numGuests <= 2) stayType = 'couple';
+    if (adultCount <= 2 && numGuests <= 4) stayType = 'couple';
     else stayType = 'group';
   }
 
@@ -99,6 +115,9 @@ function calculatePricing(checkInInput, checkOutInput, guestCount = 2, stayTypeH
       raw: {
         stayType: 'picnic',
         guestCount: numGuests,
+        adultCount,
+        coupleCount: Math.ceil(adultCount / 2),
+        kids,
         totalNights: 0,
         weekdayNights: 0,
         weekdayRate: 0,
@@ -130,11 +149,24 @@ PRICING BREAKDOWN:
     checkOutDate.setDate(checkOutDate.getDate() + 1);
   }
 
+  const coupleCount = Math.ceil(adultCount / 2);
+
+  function getKidCost(kid, isWknd) {
+    const kidAge = typeof kid === 'object' ? (kid?.age !== undefined ? Number(kid.age) : 5) : Number(kid || 5);
+    if (kidAge <= 5) return 0;
+    if (kidAge >= 6 && kidAge <= 10) return 1000;
+    if (kidAge >= 11 && kidAge <= 15) return 1500;
+    return isWknd ? 3000 : 2000;
+  }
+
   // Count weekday nights vs weekend nights and build per-night breakdown
   let weekdayNights = 0;
   let weekendNights = 0;
   const nightBreakdown = [];
-  
+  let grandTotal = 0;
+  let weekdayTotal = 0;
+  let weekendTotal = 0;
+
   const cur = new Date(checkInDate);
   cur.setHours(0, 0, 0, 0);
   const end = new Date(checkOutDate);
@@ -144,38 +176,49 @@ PRICING BREAKDOWN:
     const dayName = getDayName(cur);
     const dateStr = formatDateShort(cur);
     const weekend = isWeekend(cur);
-    
+
+    let roomRate = 0;
+    let adultNightTotal = 0;
+
+    if (stayType === 'couple') {
+      roomRate = weekend ? 6500 : 5000;
+      adultNightTotal = coupleCount * roomRate;
+    } else {
+      roomRate = weekend ? 3000 : 2000;
+      adultNightTotal = adultCount * roomRate;
+    }
+
+    let kidsNightTotal = 0;
+    for (const kid of kids) {
+      kidsNightTotal += getKidCost(kid, weekend);
+    }
+
+    const nightTotal = adultNightTotal + kidsNightTotal;
+
     if (weekend) {
       weekendNights++;
-      nightBreakdown.push({ dateStr, dayName, type: 'WEEKEND' });
+      weekendTotal += nightTotal;
     } else {
       weekdayNights++;
-      nightBreakdown.push({ dateStr, dayName, type: 'WEEKDAY' });
+      weekdayTotal += nightTotal;
     }
+
+    grandTotal += nightTotal;
+
+    nightBreakdown.push({
+      dateStr,
+      dayName,
+      type: weekend ? 'WEEKEND' : 'WEEKDAY',
+      roomRate,
+      adultNightTotal,
+      kidsNightTotal,
+      nightTotal
+    });
+
     cur.setDate(cur.getDate() + 1);
   }
 
   const totalNights = weekdayNights + weekendNights;
-
-  let weekdayRate = 0;
-  let weekendRate = 0;
-  let weekdayTotal = 0;
-  let weekendTotal = 0;
-
-  if (stayType === 'couple') {
-    weekdayRate = 5000;  // per couple/night
-    weekendRate = 6500;  // per couple/night
-    weekdayTotal = weekdayNights * weekdayRate;
-    weekendTotal = weekendNights * weekendRate;
-  } else {
-    // group
-    weekdayRate = 2000;  // per person/night
-    weekendRate = 3000;  // per person/night
-    weekdayTotal = weekdayNights * numGuests * weekdayRate;
-    weekendTotal = weekendNights * numGuests * weekendRate;
-  }
-
-  const grandTotal = weekdayTotal + weekendTotal;
 
   const inStr = formatDateShort(checkInDate);
   const outStr = formatDateShort(checkOutDate);
@@ -185,22 +228,38 @@ PRICING BREAKDOWN:
   // Build per-night breakdown lines
   const breakdownLines = nightBreakdown.map(n => {
     if (stayType === 'couple') {
-      const rate = n.type === 'WEEKEND' ? weekendRate : weekdayRate;
-      return `- ${n.dayName} (${n.dateStr}) - ${n.type}: ₹${rate.toLocaleString('en-IN')}`;
+      let line = `- ${n.dayName} (${n.dateStr}) - ${n.type}: ${coupleCount} couple${coupleCount > 1 ? 's' : ''} × ₹${n.roomRate.toLocaleString('en-IN')}`;
+      if (kids.length > 0) {
+        if (n.kidsNightTotal > 0) {
+          line += ` + ${kids.length} kid${kids.length > 1 ? 's' : ''} (₹${n.kidsNightTotal.toLocaleString('en-IN')})`;
+        } else {
+          line += ` + ${kids.length} kid${kids.length > 1 ? 's' : ''} (FREE)`;
+        }
+      }
+      line += ` = ₹${n.nightTotal.toLocaleString('en-IN')}`;
+      return line;
     } else {
-      const rate = n.type === 'WEEKEND' ? weekendRate : weekdayRate;
-      const nightTotal = numGuests * rate;
-      return `- ${n.dayName} (${n.dateStr}) - ${n.type}: ${numGuests}×₹${rate.toLocaleString('en-IN')} = ₹${nightTotal.toLocaleString('en-IN')}`;
+      let line = `- ${n.dayName} (${n.dateStr}) - ${n.type}: ${adultCount} adults × ₹${n.roomRate.toLocaleString('en-IN')}`;
+      if (kids.length > 0) {
+        if (n.kidsNightTotal > 0) {
+          line += ` + ${kids.length} kid${kids.length > 1 ? 's' : ''} (₹${n.kidsNightTotal.toLocaleString('en-IN')})`;
+        } else {
+          line += ` + ${kids.length} kid${kids.length > 1 ? 's' : ''} (FREE)`;
+        }
+      }
+      line += ` = ₹${n.nightTotal.toLocaleString('en-IN')}`;
+      return line;
     }
   });
 
   const roomType = stayType === 'couple' ? 'Couple Room' : 'Group Room';
+  const guestStr = `${adultCount} adults${coupleCount > 0 && stayType === 'couple' ? ` (${coupleCount} ${coupleCount === 1 ? 'couple' : 'couples'})` : ''}${kids.length > 0 ? ` + ${kids.length} ${kids.length === 1 ? 'kid' : 'kids'}` : ''}`;
 
   const formatted = `✓ BOOKING SUMMARY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📅 Check-in: ${inStr} (${inDayName})
 📅 Check-out: ${outStr} (${outDayName})
-👥 Guests: ${numGuests} ${numGuests === 1 ? 'person' : 'people'}
+👥 Guests: ${guestStr}
 🛏️ Room Type: ${roomType}
 
 PRICING BREAKDOWN:
@@ -217,12 +276,13 @@ ${breakdownLines.join('\n')}
     raw: {
       stayType,
       guestCount: numGuests,
+      adultCount,
+      coupleCount,
+      kids,
       totalNights,
       weekdayNights,
-      weekdayRate,
-      weekdayTotal,
       weekendNights,
-      weekendRate,
+      weekdayTotal,
       weekendTotal,
       grandTotal
     },
