@@ -140,66 +140,66 @@ router.post('/webhook', async (req, res) => {
     return res.status(200).json({ success: true, status: 'disabled' });
   }
 
-  const payload = req.body || {};
-  console.log(`[Fast2SMS:Webhook] ⬇️ Incoming webhook hit at ${new Date().toISOString()}`);
-  console.log(`[Fast2SMS:Webhook] Full payload: ${JSON.stringify(payload)}`);
-
-  // Extract raw text for bot reply detection
-  const parsedPreview = extractIncomingMessage(payload);
-  const messageTextPreview = parsedPreview?.body || payload.text || payload.message || payload.body || '';
-
-  // Check if content matches known bot reply patterns or recently sent bot fingerprints
-  if (isBotReply(messageTextPreview)) {
-    console.log('[Fast2SMS:Webhook] 🛑 Detected bot reply content, ignoring:', messageTextPreview.slice(0, 50));
-    return res.status(200).json({ status: 'ignored_bot_reply' });
+  console.log('[Fast2SMS:Webhook] Incoming webhook');
+  
+  // STEP 1: FILTER OUT OUTGOING/STATUS UPDATES
+  // ════════════════════════════════════════════════════════
+  
+  const webhookType = req.body.webhook_type;
+  const route = req.body.route;
+  const status = req.body.status;
+  
+  // Ignore status updates (sent, delivered, read)
+  if (webhookType === 'status_update' || route === 'session') {
+    console.log('[Fast2SMS:Webhook] ⏭️  Ignoring status update (webhook_type=status_update)');
+    return res.status(200).json({ status: 'ignored_status' });
+  }
+  
+  // Ignore non-received messages
+  if (status !== 'received') {
+    console.log('[Fast2SMS:Webhook] ⏭️  Ignoring non-received status:', status);
+    return res.status(200).json({ status: 'ignored_status' });
+  }
+  
+  // STEP 2: VALIDATE IT'S A REAL CUSTOMER MESSAGE
+  // ════════════════════════════════════════════════════════
+  
+  if (webhookType !== 'incoming_message' || route !== 'whatsapp') {
+    console.log('[Fast2SMS:Webhook] ⏭️  Not an incoming customer message');
+    return res.status(200).json({ status: 'ignored_non_message' });
+  }
+  
+  // STEP 3: EXTRACT & PROCESS ONLY GENUINE CUSTOMER MESSAGE
+  // ════════════════════════════════════════════════════════
+  
+  const from = req.body.from;
+  const messageText = req.body.body;
+  
+  if (!messageText || !from) {
+    console.log('[Fast2SMS:Webhook] ⏭️  Missing message or sender');
+    return res.status(200).json({ status: 'ignored_empty' });
+  }
+  
+  console.log('[Fast2SMS:Webhook] ✅ Genuine customer message detected');
+  console.log('[Fast2SMS:Webhook] From:', from);
+  console.log('[Fast2SMS:Webhook] Message:', messageText.slice(0, 50));
+  
+  // NOW process as real customer message
+  const chatId = normalizeToChatId(from);
+  if (!chatId) {
+    console.log(`[Fast2SMS:Webhook] ⚠️ Invalid sender number format: "${from}"`);
+    return res.status(200).json({ status: 'invalid_number' });
   }
 
-  // Check if this is an outgoing message (bot's own reply being echoed) or status update
-  if (payload.direction === 'outgoing' || payload.type === 'message_status' || payload.event === 'message_status' || payload.status === 'sent' || payload.status === 'delivered') {
-    console.log('[Fast2SMS:Webhook] Ignoring outgoing/status message update');
-    return res.status(200).json({ status: 'ignored' });
-  }
-
-  // Also check if sender is OUR bot number (not customer)
-  const ourNumbers = (process.env.FAST2SMS_SENDER_NUMBERS || '9257657664,9257657663,9257657665').split(',').map(n => n.replace(/\D/g, ''));
-  const senderNumber = (payload.from || payload.number || payload.phone || '').replace(/\D/g, '');
-  if (senderNumber && ourNumbers.some(n => n && senderNumber.includes(n))) {
-    console.log('[Fast2SMS:Webhook] Ignoring message from OUR number:', senderNumber);
-    return res.status(200).json({ status: 'ignored' });
-  }
-
-  // ALWAYS acknowledge receipt immediately with HTTP 200 OK so Fast2SMS test probes pass!
-  res.status(200).json({
-    success: true,
-    status: 'received',
-    message: 'Webhook acknowledged'
+  const message = { from: chatId, body: messageText };
+  
+  // Route to message handling pipeline
+  channelManager.routeIncomingMessage(message, 'fast2sms').catch((error) => {
+    logger.error(`[Fast2SMS:Webhook] Pipeline error: ${error.message}`);
   });
-
-  // Background processing for actual incoming message payloads
-  try {
-    const parsed = extractIncomingMessage(payload);
-    if (!parsed || !parsed.from || !parsed.body) {
-      console.log('[Fast2SMS:Webhook] ℹ️ Webhook payload processed (test ping / no message payload).');
-      return;
-    }
-
-    const chatId = normalizeToChatId(parsed.from);
-    if (!chatId) {
-      console.log(`[Fast2SMS:Webhook] ⚠️ Invalid sender number format: "${parsed.from}"`);
-      return;
-    }
-
-    const message = { from: chatId, body: parsed.body };
-    console.log(`[Fast2SMS:Webhook] ✅ Routing message from=${chatId} body="${parsed.body.slice(0, 80)}"`);
-
-    // Route to message handling pipeline
-    channelManager.routeIncomingMessage(message, 'fast2sms').catch((error) => {
-      logger.error(`[Fast2SMS:Webhook] Pipeline error: ${error.message}`);
-    });
-
-  } catch (err) {
-    console.error(`[Fast2SMS:Webhook] Background processing error: ${err.message}`);
-  }
+  
+  // Always respond quickly to Fast2SMS
+  res.status(200).json({ status: 'ok' });
 });
 
 /**
