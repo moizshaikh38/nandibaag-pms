@@ -91,14 +91,17 @@ KIDS PRICING:
 - Age 11 to 15 years: ₹1,500 per kid per night
 
 COUPLE PRICING:
-- 1 Couple = 2 adults = ₹5,000 (weekday) / ₹6,500 (weekend) per night
-- Count couples by dividing adults by 2
-- 2 adults = 1 couple
-- 4 adults = 2 couples
+- 1 Couple = 2 adults = ₹5,000 (weekday) / ₹6,500 (weekend) TOTAL per night for BOTH adults combined (NOT per adult!).
+- NEVER multiply ₹6,500 by 2 for 2 adults! 2 adults IS 1 couple = ₹5,000 / ₹6,500 total.
+- 2 adults = 1 couple = ₹5,000 (weekday) / ₹6,500 (weekend) per night
+- 4 adults = 2 couples = 2 × ₹5,000 = ₹10,000 (weekday) / 2 × ₹6,500 = ₹13,000 (weekend) per night
 - 3 adults = 2 couples (round up)
 
 CALCULATION RULE:
 totalPrice = (coupleCount × roomRate) + (kidsOver5Count × kidsRate)
+
+[ASK ABOUT KIDS BEFORE FINAL PRICING]
+- If customer gives dates & adults count but HAS NOT specified whether kids are coming, ALWAYS ask: "Aur kya koi kids aa rahe hain?" BEFORE showing final pricing!
 
 1️⃣ GROUP BOOKING (3+ people)
    Weekday (Mon-Thu): ₹2,000 per person per night

@@ -253,6 +253,25 @@ function extractBookingDetails(text, today = new Date()) {
     console.warn('[Extract] Total guest parsing failed:', guestErr.message);
   }
 
+  // Sub-extraction 5: Explicit Nights / Days
+  try {
+    const nightMatch = lower.match(/(\d+)\s*(?:night|nights|raat|rrat|day|days|din)\b/i) || lower.match(/for\s+(\d+)\s*(?:day|days|night|nights|din)/i);
+    if (nightMatch) {
+      result.nights = parseInt(nightMatch[1], 10);
+    }
+  } catch (nErr) {
+    console.warn('[Extract] Nights parsing failed:', nErr.message);
+  }
+
+  // Sub-extraction 6: Kids Specified Detection
+  const noKidsPattern = /\b(no\s*kids?|without\s*kids?|0\s*kids?|kids?\s*nahi|bache?\s*nahi|lahan\s*mule?\s*nahi|no\s*children|koi\s*bhi\s*bacha\s*nahi)\b/i;
+  if (noKidsPattern.test(lower)) {
+    result.kids = [];
+    result.kidsSpecified = true;
+  } else if (result.kids && result.kids.length > 0) {
+    result.kidsSpecified = true;
+  }
+
   return result;
 }
 
@@ -499,6 +518,9 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
       if (extracted.kids) {
         chat.bookingDraft.kids = extracted.kids;
       }
+      if (extracted.kidsSpecified) {
+        chat.bookingDraft.kidsSpecified = true;
+      }
       if (extracted.nights) {
         chat.bookingDraft.nights = extracted.nights;
       }
@@ -541,7 +563,14 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
               console.log('[MessageHandler:AVAILABILITY] ✅ ROOMS AVAILABLE');
               console.log('[MessageHandler:AVAILABILITY] Available count:', capacityResult.availableCount);
               const pricingResult = calculatePricing(checkInDate, checkOutDate, draft.adults || 2, draft.kids || [], draft.bookingType || 'auto');
-              addSystemNote(`[SYSTEM NOTE: Availability confirmed.\nPRICING BREAKDOWN:\n${pricingResult.formatted}]`);
+
+              const isKidsSpecified = extracted.kidsSpecified || chat.bookingDraft.kidsSpecified || (draft.kids && draft.kids.length > 0);
+              if (!isKidsSpecified) {
+                addSystemNote(`[SYSTEM NOTE: Availability confirmed for these dates. IMPORTANT INSTRUCTION: Customer HAS NOT specified if kids are coming yet. Confirm availability to the customer and ASK: "Aur kya koi kids aa rahe hain?" BEFORE displaying the final calculated pricing breakdown block.\nPRELIMINARY CALCULATED PRICING (only send after customer confirms kids status):\n${pricingResult.formatted}]`);
+              } else {
+                addSystemNote(`[SYSTEM NOTE: Availability confirmed.\nPRICING BREAKDOWN:\n${pricingResult.formatted}]`);
+              }
+
               chat.bookingDraft.availabilityChecked = true;
               chat.bookingDraft.availabilityConfirmed = true;
             }
