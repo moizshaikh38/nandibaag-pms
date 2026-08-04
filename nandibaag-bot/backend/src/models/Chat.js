@@ -59,6 +59,22 @@ const bookingDraftSchema = new mongoose.Schema({
     enum: ['single_room_tight_fit', 'multiple_rooms', 'not_applicable'],
     default: 'not_applicable'
   },
+  kidsSpecified: {
+    type: Boolean,
+    default: false
+  },
+  customerName: {
+    type: String,
+    default: null
+  },
+  nameRequested: {
+    type: Boolean,
+    default: false
+  },
+  bookingStep: {
+    type: Number,
+    default: 1
+  },
   suggestedCombination: {
     type: String,
     default: null

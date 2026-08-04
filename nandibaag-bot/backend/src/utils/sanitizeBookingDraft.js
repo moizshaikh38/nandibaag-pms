@@ -67,6 +67,12 @@ function sanitizeBookingDraft(draft) {
     safe.bookingType = null;
   }
 
+  // 6. State Machine & Name fields
+  safe.kidsSpecified = Boolean(safe.kidsSpecified || (Array.isArray(safe.kids) && safe.kids.length > 0));
+  safe.customerName = typeof safe.customerName === 'string' ? safe.customerName.trim() : null;
+  safe.nameRequested = Boolean(safe.nameRequested);
+  safe.bookingStep = typeof safe.bookingStep === 'number' ? safe.bookingStep : 1;
+
   return safe;
 }
 

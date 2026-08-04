@@ -470,6 +470,11 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
 
 
     
+    console.log('[ChatHistory:DEBUG] Loaded messages count:', chat.messages?.length || 0);
+    console.log('[ChatHistory:DEBUG] Last 3 messages:',
+      chat.messages?.slice(-3).map(m => ({ sender: m.sender, text: (m.text || '').slice(0, 50) }))
+    );
+
     const mode = chat.mode;
     if (mode === 'human') {
       try { await chat.save(); } catch (_) {}
@@ -527,6 +532,7 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
 
       // Sanitize booking draft defensively
       chat.bookingDraft = sanitizeBookingDraft(chat.bookingDraft);
+      try { await chat.save(); } catch (_) {}
 
       if (chat.bookingDraft.date && chat.bookingDraft.adults && chat.bookingStage !== 'price_quoted' && chat.bookingStage !== 'completed') {
         chat.bookingStage = 'guests_given';
@@ -574,10 +580,47 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
               chat.bookingDraft.availabilityChecked = true;
               chat.bookingDraft.availabilityConfirmed = true;
             }
+            try { await chat.save(); } catch (_) {}
           }
         } catch (availErr) {
           logger.error(`Availability check error: ${availErr.message}`);
         }
+      }
+
+      // ── CONVERSATION STATE MACHINE & NAME COLLECTION (Steps 5 & 6) ──
+      const confirmIntentPattern = /\b(confirm|book|booking|ready|haan|yes|hoga|kardo|kar do|karo|bhej do|done|fix|ha)\b/i;
+      const isConfirmIntent = confirmIntentPattern.test(msgLower);
+
+      if (chat.bookingDraft.nameRequested && !chat.bookingDraft.customerName) {
+        const candidateName = (messageText || '').trim().replace(/^(my name is|naam|name|im|i am|me|main)\s+/i, '');
+        if (candidateName.length > 0) {
+          chat.customerName = candidateName;
+          chat.bookingDraft.customerName = candidateName;
+          chat.bookingDraft.nameRequested = false;
+          chat.bookingDraft.bookingStep = 6;
+          chat.bookingStage = 'completed';
+          console.log('[BookingFlow] Name collected:', candidateName);
+          try { await chat.save(); } catch (_) {}
+
+          let priceStr = '₹5,000';
+          try {
+            const checkInDate = new Date(chat.bookingDraft.date);
+            const nights = chat.bookingDraft.nights || 1;
+            const checkOutDate = new Date(checkInDate);
+            checkOutDate.setDate(checkOutDate.getDate() + nights);
+            const pricingResult = calculatePricing(checkInDate, checkOutDate, chat.bookingDraft.adults || 2, chat.bookingDraft.kids || [], chat.bookingDraft.bookingType || 'auto');
+            priceStr = `₹${pricingResult.raw.grandTotal.toLocaleString('en-IN')}`;
+          } catch (_) {}
+
+          addSystemNote(`[SYSTEM NOTE: Customer provided their name: "${candidateName}". Output the FINAL CONFIRMATION SUMMARY:\n✓ FINAL BOOKING CONFIRMATION\n👤 Name: ${candidateName}\n📅 Dates: ${chat.bookingDraft.date}\n👥 Guests: ${chat.bookingDraft.adults} adults + ${chat.bookingDraft.kids?.length || 0} kids\n💰 Price: ${priceStr}\n\nAsk customer to call staff at 9257657665 to finalize!]`);
+        }
+      } else if (isConfirmIntent && chat.bookingDraft.date && chat.bookingDraft.adults && chat.bookingDraft.availabilityConfirmed && !chat.bookingDraft.customerName) {
+        console.log('[BookingFlow] Customer name not collected yet. Requesting name.');
+        chat.bookingDraft.nameRequested = true;
+        chat.bookingDraft.bookingStep = 5;
+        chat.bookingStage = 'guests_given';
+        try { await chat.save(); } catch (_) {}
+        addSystemNote('[SYSTEM NOTE: Customer wants to confirm booking. Ask customer name: "Booking confirm karne ke liye aapka naam bata dijiye?"]');
       }
 
       const systemNotes = systemNotesList.join('\n\n');
