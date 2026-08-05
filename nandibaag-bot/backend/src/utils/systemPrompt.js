@@ -28,17 +28,21 @@ function buildSystemPrompt(arg1, arg2, arg3, arg4) {
     dayOfWeek = typeof arg2 === 'string' ? arg2 : '';
   }
 
-  if (!todayDateString) {
-    const today = new Date();
-    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    dayOfWeek = days[today.getDay()];
-    todayDateString = today.toLocaleDateString('en-GB', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    });
-  }
+  const now = new Date();
+  const currentDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+  const currentDayName = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', weekday: 'long' }).format(now);
+
+  const tomorrowDate = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const tomorrowDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(tomorrowDate);
+
+  const nextWeekDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const nextWeekDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(nextWeekDate);
+
+  console.log('[SystemPrompt:DEBUG] Current date injected:', {
+    date: currentDateStr,
+    day: currentDayName,
+    timezone: 'Asia/Kolkata'
+  });
 
   const RESORT_NAME = 'Nandibaag Resort';
   const PRIMARY_PHONE = '9257657665';
@@ -48,13 +52,35 @@ function buildSystemPrompt(arg1, arg2, arg3, arg4) {
   const MAPS = 'https://maps.app.goo.gl/h6PB4y4G4oSWyFxdA';
 
   const hinglishPrompt = `
+TODAY'S DATE: ${currentDateStr} (${currentDayName})
+
+IMPORTANT DATE RULES:
+- Use today's date (${currentDateStr}, ${currentDayName}) for all calculations.
+- If customer says "tomorrow", check-in is: ${tomorrowDateStr}
+- If customer says "next week", check-in is: ${nextWeekDateStr}
+
+WEEKDAY vs WEEKEND RATES:
+- Weekday (Mon-Thu): ₹5,000 per couple / ₹2,000 per person per night
+- Weekend (Fri-Sun): ₹6,500 per couple / ₹3,000 per person per night (Friday IS a weekend)
+
+August 2026 Calendar Reference:
+- 5 Aug (Wed) = WEEKDAY (₹5,000)
+- 6 Aug (Thu) = WEEKDAY (₹5,000)
+- 7 Aug (Fri) = WEEKEND (₹6,500)
+- 8 Aug (Sat) = WEEKEND (₹6,500)
+- 9 Aug (Sun) = WEEKEND (₹6,500)
+- 10 Aug (Mon) = WEEKDAY (₹5,000)
+- 12 Aug (Wed) = WEEKDAY (₹5,000)
+- 15 Aug (Sat) = WEEKEND (₹6,500)
+- 16 Aug (Sun) = WEEKEND (₹6,500)
+- 17 Aug (Mon) = WEEKDAY (₹5,000)
+
 [IDENTITY]
 Tum Nandibaag Resort ke ek warm, helpful receptionist ho.
 Hinglish bolte ho naturally.
 Never reveal ki tum AI ho.
 Tone: warm, professional, helpful.
 Max 3-4 lines, 1-2 emojis.
-Today is ${todayDateString} (${dayOfWeek}).
 
 [CONVERSATION STYLE — CRITICAL]
 - "Namaste" sirf first welcome ya long gap ke baad use karo. Har reply Namaste se start mat karo.

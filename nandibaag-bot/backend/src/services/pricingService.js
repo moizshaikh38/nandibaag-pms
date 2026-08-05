@@ -14,6 +14,24 @@
  */
 
 /**
+ * Parses a date input into a local Date object without timezone shift.
+ */
+function parseLocalDate(dateInput) {
+  if (dateInput instanceof Date) {
+    return new Date(dateInput.getFullYear(), dateInput.getMonth(), dateInput.getDate());
+  }
+  if (typeof dateInput === 'string') {
+    const cleanStr = dateInput.split('T')[0];
+    const parts = cleanStr.split('-');
+    if (parts.length === 3) {
+      return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    }
+  }
+  const d = new Date(dateInput);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+/**
  * Checks if a given date is a Weekend.
  * Weekend = Friday (5), Saturday (6), Sunday (0).
  * 
@@ -21,7 +39,7 @@
  * @returns {boolean}
  */
 function isWeekend(dateInput) {
-  const date = new Date(dateInput);
+  const date = parseLocalDate(dateInput);
   const day = date.getDay();
   // Sunday = 0, Friday = 5, Saturday = 6
   return day === 0 || day === 5 || day === 6;
@@ -31,7 +49,7 @@ function isWeekend(dateInput) {
  * Format a Date object or string to ordinal format e.g. "1st Aug", "15th Dec"
  */
 function formatDateShort(dateInput) {
-  const d = new Date(dateInput);
+  const d = parseLocalDate(dateInput);
   if (isNaN(d.getTime())) return '';
   const day = d.getDate();
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -50,7 +68,7 @@ function formatDateShort(dateInput) {
  */
 function getDayName(dateInput) {
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const d = new Date(dateInput);
+  const d = parseLocalDate(dateInput);
   return dayNames[d.getDay()];
 }
 
@@ -76,8 +94,8 @@ function getDayName(dateInput) {
  * @returns {object} { raw, formatted }
  */
 function calculatePricing(checkInInput, checkOutInput, adultCountOrGuestCount = 2, kidsOrStayType = [], stayTypeHint = 'auto') {
-  const checkInDate = new Date(checkInInput);
-  let checkOutDate = checkOutInput ? new Date(checkOutInput) : null;
+  const checkInDate = parseLocalDate(checkInInput);
+  let checkOutDate = checkOutInput ? parseLocalDate(checkOutInput) : null;
 
   let adultCount = 2;
   let kids = [];
@@ -292,6 +310,8 @@ ${breakdownLines.join('\n')}
 
 module.exports = {
   isWeekend,
+  getDayName,
+  parseLocalDate,
   calculatePricing,
   formatDateShort
 };

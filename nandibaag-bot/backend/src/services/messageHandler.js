@@ -1,6 +1,6 @@
 const { Chat, Settings } = require('../models');
 const { getAIResponse, detectLanguage } = require('./aiService');
-const { calculatePricing } = require('./pricingService');
+const { calculatePricing, getDayName, isWeekend } = require('./pricingService');
 const { scoreMessage } = require('./leadScoring');
 const { scheduleFollowUps, cancelPendingFollowUps, containsOptOutPhrases, markChatAsOptedOut } = require('./followUpService');
 const whatsappService = require('./whatsappService');
@@ -83,6 +83,12 @@ function extractBookingDetails(text, today = new Date()) {
 
   // Sub-extraction 1: Dates & Date Ranges
   try {
+    // Current date calibrated to IST (Asia/Kolkata)
+    const now = new Date();
+    const istDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+    const parts = istDateStr.split('-');
+    const today = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+
     const sameMonthRangeRegex = /\b(\d{1,2})(?:st|nd|rd|th)?\s*(?:\-|to|se|\–)\s*(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\b/i;
     const dateRangeRegex = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\s*(?:\-|to|se|\–)\s*(\d{1,2})(?:st|nd|rd|th)?\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)?\b/i;
     const dayMonthRegex = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\b/i;
@@ -90,95 +96,134 @@ function extractBookingDetails(text, today = new Date()) {
     const numericDateRegex = /\b(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/;
 
     let targetDate = null;
-    let sameMonthMatch = lower.match(sameMonthRangeRegex);
-    let rangeMatch = lower.match(dateRangeRegex);
 
-    if (sameMonthMatch) {
-      const startDay = parseInt(sameMonthMatch[1], 10);
-      const endDay = parseInt(sameMonthMatch[2], 10);
-      const monthIdx = months[sameMonthMatch[3].toLowerCase()];
-
-      if (startDay >= 1 && startDay <= 31 && endDay >= 1 && endDay <= 31 && monthIdx !== undefined) {
-        let year = today.getFullYear();
-        const startDate = new Date(year, monthIdx, startDay);
-        const endDate = new Date(year, monthIdx, endDay);
-        if (startDate < new Date(today.setHours(0, 0, 0, 0))) {
-          startDate.setFullYear(year + 1);
-          endDate.setFullYear(year + 1);
-        }
-        targetDate = startDate;
-        const diffMs = endDate.getTime() - startDate.getTime();
-        const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
-        if (diffDays > 0) {
-          result.nights = diffDays;
-        }
-      }
-    } else if (rangeMatch) {
-      const startDay = parseInt(rangeMatch[1], 10);
-      const startMonthIdx = months[rangeMatch[2].toLowerCase()];
-      const endDay = parseInt(rangeMatch[3], 10);
-      const endMonthIdx = rangeMatch[4] ? months[rangeMatch[4].toLowerCase()] : startMonthIdx;
-
-      if (startDay >= 1 && startDay <= 31 && startMonthIdx !== undefined && endDay >= 1 && endDay <= 31 && endMonthIdx !== undefined) {
-        let year = today.getFullYear();
-        const startDate = new Date(year, startMonthIdx, startDay);
-        const endDate = new Date(year, endMonthIdx, endDay);
-        if (startDate < new Date(today.setHours(0, 0, 0, 0))) {
-          startDate.setFullYear(year + 1);
-          endDate.setFullYear(year + 1);
-        }
-        targetDate = startDate;
-        const diffMs = endDate.getTime() - startDate.getTime();
-        const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
-        if (diffDays > 0) {
-          result.nights = diffDays;
-        }
-      }
+    // STEP 1: Handle relative dates first (tomorrow, next week, today)
+    if (lower.includes('tomorrow') || lower.includes('kal') || lower.includes('udya')) {
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      targetDate = tomorrow;
+      console.log('[DateParsing] "Tomorrow" detected →', targetDate.toISOString().split('T')[0]);
+    } else if (lower.includes('next week')) {
+      const nextWeek = new Date(today);
+      nextWeek.setDate(nextWeek.getDate() + 7);
+      targetDate = nextWeek;
+      console.log('[DateParsing] "Next week" detected →', targetDate.toISOString().split('T')[0]);
+    } else if (lower.includes('today') || lower.includes('aaj')) {
+      targetDate = new Date(today);
+      console.log('[DateParsing] "Today" detected →', targetDate.toISOString().split('T')[0]);
+    } else if (lower.includes('this weekend') || lower.includes('next weekend') || lower.includes('weekend')) {
+      targetDate = new Date(today);
+      const currentDay = targetDate.getDay(); // 0 is Sun, 5 is Fri, 6 is Sat
+      const daysUntilFriday = (5 - currentDay + 7) % 7 || 7;
+      targetDate.setDate(targetDate.getDate() + daysUntilFriday);
+      console.log('[DateParsing] "Weekend" detected →', targetDate.toISOString().split('T')[0]);
     }
 
+    // STEP 2: Handle explicit date patterns if relative date not found
     if (!targetDate) {
-      let match = lower.match(dayMonthRegex);
-      if (match) {
-        const day = parseInt(match[1], 10);
-        const monthIdx = months[match[2].toLowerCase()];
-        if (day >= 1 && day <= 31 && monthIdx !== undefined) {
+      let sameMonthMatch = lower.match(sameMonthRangeRegex);
+      let rangeMatch = lower.match(dateRangeRegex);
+
+      if (sameMonthMatch) {
+        const startDay = parseInt(sameMonthMatch[1], 10);
+        const endDay = parseInt(sameMonthMatch[2], 10);
+        const monthIdx = months[sameMonthMatch[3].toLowerCase()];
+
+        if (startDay >= 1 && startDay <= 31 && endDay >= 1 && endDay <= 31 && monthIdx !== undefined) {
           let year = today.getFullYear();
-          targetDate = new Date(year, monthIdx, day);
-          if (targetDate < new Date(today.setHours(0, 0, 0, 0))) {
-            targetDate.setFullYear(year + 1);
+          const startDate = new Date(year, monthIdx, startDay);
+          const endDate = new Date(year, monthIdx, endDay);
+          if (startDate < new Date(today.getFullYear(), today.getMonth(), today.getDate())) {
+            startDate.setFullYear(year + 1);
+            endDate.setFullYear(year + 1);
+          }
+          targetDate = startDate;
+          const diffMs = endDate.getTime() - startDate.getTime();
+          const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+          if (diffDays > 0) {
+            result.nights = diffDays;
           }
         }
-      } else if ((match = lower.match(monthDayRegex))) {
-        const monthIdx = months[match[1].toLowerCase()];
-        const day = parseInt(match[2], 10);
-        if (day >= 1 && day <= 31 && monthIdx !== undefined) {
+      } else if (rangeMatch) {
+        const startDay = parseInt(rangeMatch[1], 10);
+        const startMonthIdx = months[rangeMatch[2].toLowerCase()];
+        const endDay = parseInt(rangeMatch[3], 10);
+        const endMonthIdx = rangeMatch[4] ? months[rangeMatch[4].toLowerCase()] : startMonthIdx;
+
+        if (startDay >= 1 && startDay <= 31 && startMonthIdx !== undefined && endDay >= 1 && endDay <= 31 && endMonthIdx !== undefined) {
           let year = today.getFullYear();
-          targetDate = new Date(year, monthIdx, day);
-          if (targetDate < new Date(today.setHours(0, 0, 0, 0))) {
-            targetDate.setFullYear(year + 1);
+          const startDate = new Date(year, startMonthIdx, startDay);
+          const endDate = new Date(year, endMonthIdx, endDay);
+          if (startDate < new Date(today.getFullYear(), today.getMonth(), today.getDate())) {
+            startDate.setFullYear(year + 1);
+            endDate.setFullYear(year + 1);
+          }
+          targetDate = startDate;
+          const diffMs = endDate.getTime() - startDate.getTime();
+          const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+          if (diffDays > 0) {
+            result.nights = diffDays;
           }
         }
-      } else if ((match = lower.match(numericDateRegex))) {
-        const day = parseInt(match[1], 10);
-        const month = parseInt(match[2], 10) - 1;
-        let year = match[3] ? parseInt(match[3], 10) : today.getFullYear();
-        if (year < 100) year += 2000;
-        if (day >= 1 && day <= 31 && month >= 0 && month <= 11) {
-          targetDate = new Date(year, month, day);
+      }
+
+      if (!targetDate) {
+        let match = lower.match(dayMonthRegex);
+        if (match) {
+          const day = parseInt(match[1], 10);
+          const monthIdx = months[match[2].toLowerCase()];
+          if (day >= 1 && day <= 31 && monthIdx !== undefined) {
+            let year = today.getFullYear();
+            targetDate = new Date(year, monthIdx, day);
+            if (targetDate < new Date(today.getFullYear(), today.getMonth(), today.getDate())) {
+              targetDate.setFullYear(year + 1);
+            }
+          }
+        } else if ((match = lower.match(monthDayRegex))) {
+          const monthIdx = months[match[1].toLowerCase()];
+          const day = parseInt(match[2], 10);
+          if (day >= 1 && day <= 31 && monthIdx !== undefined) {
+            let year = today.getFullYear();
+            targetDate = new Date(year, monthIdx, day);
+            if (targetDate < new Date(today.getFullYear(), today.getMonth(), today.getDate())) {
+              targetDate.setFullYear(year + 1);
+            }
+          }
+        } else if ((match = lower.match(numericDateRegex))) {
+          const day = parseInt(match[1], 10);
+          const month = parseInt(match[2], 10) - 1;
+          let year = match[3] ? parseInt(match[3], 10) : today.getFullYear();
+          if (year < 100) year += 2000;
+          if (day >= 1 && day <= 31 && month >= 0 && month <= 11) {
+            targetDate = new Date(year, month, day);
+          }
         }
-      } else if (lower.includes('tomorrow') || lower.includes('kal') || lower.includes('udya')) {
-        targetDate = new Date(today);
-        targetDate.setDate(targetDate.getDate() + 1);
-      } else if (lower.includes('this weekend') || lower.includes('next weekend') || lower.includes('weekend')) {
-        targetDate = new Date(today);
-        const currentDay = targetDate.getDay();
-        const daysUntilSaturday = (6 - currentDay + 7) % 7 || 7;
-        targetDate.setDate(targetDate.getDate() + daysUntilSaturday);
       }
     }
 
     if (targetDate && !isNaN(targetDate.getTime())) {
-      result.date = targetDate.toISOString().split('T')[0];
+      const year = targetDate.getFullYear();
+      const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+      const day = String(targetDate.getDate()).padStart(2, '0');
+      result.date = `${year}-${month}-${day}`;
+
+      const checkInD = targetDate;
+      const n = result.nights || 1;
+      const checkOutD = new Date(checkInD);
+      checkOutD.setDate(checkOutD.getDate() + n);
+
+      const checkOutStr = `${checkOutD.getFullYear()}-${String(checkOutD.getMonth() + 1).padStart(2, '0')}-${String(checkOutD.getDate()).padStart(2, '0')}`;
+
+      console.log('[DateValidation:DEBUG]', {
+        systemNow: new Date().toISOString(),
+        currentDateExpected: '2026-08-05',
+        customerInput: text,
+        extractedDates: { checkInDate: result.date, checkOutDate: checkOutStr },
+        calculatedDays: n,
+        dayOfWeekCheckIn: getDayName(result.date),
+        dayOfWeekCheckOut: getDayName(checkOutStr),
+        weekendDetected: isWeekend(result.date)
+      });
     }
   } catch (dateErr) {
     console.warn('[Extract] Date parsing failed:', dateErr.message);
