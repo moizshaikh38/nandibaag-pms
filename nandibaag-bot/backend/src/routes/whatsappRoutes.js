@@ -152,6 +152,8 @@ router.get('/failed-messages', verifyToken, async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+});
 /**
  * GET /api/restart-baileys & POST /api/whatsapp/restart
  * Restart Baileys WhatsApp session cleanly on demand.
