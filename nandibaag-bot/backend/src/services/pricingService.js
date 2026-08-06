@@ -42,7 +42,26 @@ function isWeekend(dateInput) {
   const date = parseLocalDate(dateInput);
   const day = date.getDay();
   // Sunday = 0, Friday = 5, Saturday = 6
-  return day === 0 || day === 5 || day === 6;
+  const result = day === 0 || day === 5 || day === 6;
+  const dayName = getDayName(dateInput);
+  console.log(`[WeekendCheck] ${dateInput} (${dayName}) = ${result}`);
+  return result;
+}
+
+/**
+ * Checks if a given date is a Weekday.
+ * Weekday = Monday (1), Tuesday (2), Wednesday (3), Thursday (4).
+ * 
+ * @param {Date|string|number} dateInput 
+ * @returns {boolean}
+ */
+function isWeekday(dateInput) {
+  const date = parseLocalDate(dateInput);
+  const day = date.getDay();
+  const result = day >= 1 && day <= 4;
+  const dayName = getDayName(dateInput);
+  console.log(`[WeekdayCheck] ${dateInput} (${dayName}) = ${result}`);
+  return result;
 }
 
 /**
@@ -93,18 +112,22 @@ function getDayName(dateInput) {
  * @param {string} stayTypeHint - 'couple', 'group', 'picnic', or 'auto'
  * @returns {object} { raw, formatted }
  */
-function calculatePricing(checkInInput, checkOutInput, adultCountOrGuestCount = 2, kidsOrStayType = [], stayTypeHint = 'auto') {
+function calculatePricing(checkInInput, checkOutInput, adultCountOrGuestCount = 2, kidsOrStayType = [], stayTypeHint = 'auto', options = {}) {
   const checkInDate = parseLocalDate(checkInInput);
   let checkOutDate = checkOutInput ? parseLocalDate(checkOutInput) : null;
 
   let adultCount = 2;
   let kids = [];
   let stayType = stayTypeHint;
+  let mealOption = options?.mealOption || 'breakfast_dinner';
+  let mealRate = options?.mealRate;
 
   if (typeof adultCountOrGuestCount === 'object' && adultCountOrGuestCount !== null) {
     adultCount = adultCountOrGuestCount.adults || adultCountOrGuestCount.guestCount || 2;
     kids = Array.isArray(adultCountOrGuestCount.kids) ? adultCountOrGuestCount.kids : [];
     if (adultCountOrGuestCount.stayType) stayType = adultCountOrGuestCount.stayType;
+    if (adultCountOrGuestCount.mealOption) mealOption = adultCountOrGuestCount.mealOption;
+    if (adultCountOrGuestCount.mealRate) mealRate = adultCountOrGuestCount.mealRate;
   } else {
     adultCount = Math.max(1, parseInt(adultCountOrGuestCount, 10) || 2);
     if (Array.isArray(kidsOrStayType)) {
@@ -124,7 +147,8 @@ function calculatePricing(checkInInput, checkOutInput, adultCountOrGuestCount = 
 
   // Handle Picnic
   if (stayType === 'picnic') {
-    const ratePerPerson = 1200;
+    const ratePerPerson = mealRate || ((mealOption === 'breakfast_tea' || mealOption === '1000') ? 1000 : 1200);
+    const mealLabel = ratePerPerson === 1000 ? 'Breakfast to High Tea (10 AM - 5 PM)' : 'Breakfast to Dinner (12 PM - 8 PM)';
     const grandTotal = numGuests * ratePerPerson;
     const dateStr = formatDateShort(checkInDate) || 'Selected Date';
     const dayName = getDayName(checkInDate);
@@ -132,6 +156,8 @@ function calculatePricing(checkInInput, checkOutInput, adultCountOrGuestCount = 
     return {
       raw: {
         stayType: 'picnic',
+        mealOption,
+        mealRate: ratePerPerson,
         guestCount: numGuests,
         adultCount,
         coupleCount: Math.ceil(adultCount / 2),
@@ -147,8 +173,9 @@ function calculatePricing(checkInInput, checkOutInput, adultCountOrGuestCount = 
       },
       formatted: `✓ BOOKING SUMMARY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📅 Date: ${dateStr} (${dayName}) — Day Picnic (12 PM - 8 PM)
+📅 Date: ${dateStr} (${dayName}) — Day Picnic
 👥 Guests: ${numGuests} ${numGuests === 1 ? 'person' : 'people'}
+🍽️ Package: ${mealLabel}
 
 PRICING BREAKDOWN:
 - Day Picnic: ${numGuests} × ₹${ratePerPerson.toLocaleString('en-IN')}/person = ₹${grandTotal.toLocaleString('en-IN')}
@@ -157,7 +184,7 @@ PRICING BREAKDOWN:
 💰 TOTAL: ₹${grandTotal.toLocaleString('en-IN')}
 (Final price, NO extra charges)
 
-✅ Includes: All meals + activities`
+✅ Includes: ${ratePerPerson === 1000 ? 'Breakfast + Lunch + High Tea + Activities' : 'Breakfast + Lunch + High Tea + Dinner + Activities'}`
     };
   }
 
@@ -310,6 +337,7 @@ ${breakdownLines.join('\n')}
 
 module.exports = {
   isWeekend,
+  isWeekday,
   getDayName,
   parseLocalDate,
   calculatePricing,

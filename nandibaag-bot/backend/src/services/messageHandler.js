@@ -617,10 +617,22 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
             } else {
               console.log('[MessageHandler:AVAILABILITY] ✅ ROOMS AVAILABLE');
               console.log('[MessageHandler:AVAILABILITY] Available count:', capacityResult.availableCount);
-              const pricingResult = calculatePricing(checkInDate, checkOutDate, draft.adults || 2, draft.kids || [], draft.bookingType || 'auto');
+              
+              // Pass mealOption and mealRate for Day Picnic if set
+              const options = {
+                mealOption: draft.mealOption,
+                mealRate: draft.mealRate
+              };
+              const pricingResult = calculatePricing(checkInDate, checkOutDate, draft.adults || 2, draft.kids || [], draft.bookingType || 'auto', options);
 
               const isKidsSpecified = extracted.kidsSpecified || chat.bookingDraft.kidsSpecified || (draft.kids && draft.kids.length > 0);
-              if (!isKidsSpecified) {
+              if (draft.bookingType === 'picnic') {
+                if (!draft.mealOption) {
+                  addSystemNote(`[SYSTEM NOTE: Customer interested in DAY PICNIC. Offer two meal options:\n1. Breakfast to Dinner: ₹1,200 per person (12 PM - 8 PM)\n2. Breakfast to High Tea: ₹1,000 per person (10 AM - 5 PM)\nAsk which option they prefer!]`);
+                } else {
+                  addSystemNote(`[SYSTEM NOTE: Day Picnic pricing calculated.\n${pricingResult.formatted}]`);
+                }
+              } else if (!isKidsSpecified) {
                 addSystemNote(`[SYSTEM NOTE: Availability confirmed for these dates. IMPORTANT INSTRUCTION: Customer HAS NOT specified if kids are coming yet. Confirm availability to the customer and ASK: "Aur kya koi kids aa rahe hain?" BEFORE displaying the final calculated pricing breakdown block.\nPRELIMINARY CALCULATED PRICING (only send after customer confirms kids status):\n${pricingResult.formatted}]`);
               } else {
                 addSystemNote(`[SYSTEM NOTE: Availability confirmed.\nPRICING BREAKDOWN:\n${pricingResult.formatted}]`);
