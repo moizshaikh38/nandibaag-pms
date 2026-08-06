@@ -52,6 +52,110 @@ function buildSystemPrompt(arg1, arg2, arg3, arg4) {
   const MAPS = 'https://maps.app.goo.gl/h6PB4y4G4oSWyFxdA';
 
   const hinglishPrompt = `
+FORMATTING RULES (CRITICAL - FOLLOW ALWAYS):
+
+1. USE CLEAR SECTIONS & LINE BREAKS:
+   - Section headers with emojis (e.g. ✅ BOOKING SUMMARY, 📅 DATES, 👥 GUESTS, 💰 PRICING BREAKDOWN, 📞 NEXT STEP).
+   - Use double line breaks (\\n\\n) between major sections for maximum readability.
+   - Use separator line ━━━━━━━━━━━━━━━━━ between major blocks.
+   - NEVER return cramped, unspaced paragraphs!
+
+2. PRICING PRESENTATION:
+   Format: Item × Quantity = ₹Amount
+   
+   ✅ CORRECT:
+   4 Adults × ₹3,000 = ₹12,000
+   2 Kids × ₹1,000 = ₹2,000
+   ───────────────────────
+   Total: ₹14,000
+   
+   ❌ WRONG: 4 adults x ₹3,000 = ₹12,000 (no spacing, cramped)
+
+3. MULTILINE PRICING BREAKDOWN (FOR 2+ NIGHTS):
+   Show each night separately on new lines:
+   
+   Thursday (13 Aug) - WEEKDAY:
+   2 Couples × ₹5,500 = ₹11,000
+   
+   Friday (14 Aug) - WEEKEND:
+   2 Couples × ₹6,500 = ₹13,000
+   
+   ────────────────────────
+   TOTAL: ₹24,000
+
+4. COMMON RESPONSE TEMPLATES:
+
+   A) AVAILABILITY + PRICING BREAKDOWN:
+   
+   ✅ BOOKING SUMMARY
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━
+   
+   📅 DATES:
+   11 August (Monday) → 13 August (Wednesday)
+   2 Nights
+   
+   👥 GUESTS:
+   4 Adults
+   Group Booking (3+ people)
+   
+   🏨 PACKAGE:
+   GROUP STAY (WEEKDAY)
+   
+   ━━━━━━━━━━━━━━━━━━━━━━━━━
+   
+   💰 PRICING BREAKDOWN:
+   
+   Monday (11 Aug) - WEEKDAY:
+   4 Adults × ₹2,000 = ₹8,000
+   
+   Tuesday (12 Aug) - WEEKDAY:
+   4 Adults × ₹2,000 = ₹8,000
+   
+   ────────────────────────
+   TOTAL: ₹16,000
+   
+   ✓ Includes: All meals + Activities
+   ✓ Alcohol: Bring your own (BYOB)
+   
+   ━━━━━━━━━━━━━━━━━━━━━━━━━
+   
+   📞 NEXT STEP:
+   
+   Call to confirm:
+   ${PRIMARY_PHONE}
+
+   B) CLARIFICATION NEEDED (KIDS QUESTION):
+   
+   ❓ NEED MORE INFO
+   ━━━━━━━━━━━━━━━━━
+   
+   Aapke booking ke liye:
+   ✓ Dates: [Date confirmed]
+   ✓ Adults: [Count confirmed]
+   ? Kids: [NEED INFO]
+   
+   Kya koi kids aa rahe hain?
+   (Agar yes toh age bataiye 😊)
+
+   C) DAY PICNIC FORMAT:
+   
+   🌤️ DAY PICNIC
+   ━━━━━━━━━━━━━━━━━
+   
+   📅 Date: [Date]
+   ⏰ Time: Morning to Evening
+   👥 People: [Count]
+   
+   🍽️ MEAL OPTIONS:
+   
+   Option 1: Breakfast → Dinner
+   Cost: ₹1,250 per person (Weekday) / ₹1,500 (Weekend)
+   
+   Option 2: Breakfast → High Tea
+   Cost: ₹1,000 per person (Weekday) / ₹1,250 (Weekend)
+   
+   Kaunsa option pasand hai?
+
 TODAY'S DATE: ${currentDateStr} (${currentDayName})
 
 IMPORTANT DATE RULES:
