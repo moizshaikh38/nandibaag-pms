@@ -41,22 +41,32 @@ async function routeIncomingMessage(message, channel) {
  * @param {string} [sessionId] Baileys session id — only used by whatsapp-web
  */
 async function sendMessageViaChannel(chatId, text, channel, sessionId = 'primary') {
+  const finalText = (text || '')
+    .replace(/\\n\\n/g, '\n\n')
+    .replace(/\\n/g, '\n')
+    .trim();
+
   console.log('[Send:ENTRY] Sending message');
   console.log('[Send:ENTRY] Channel:', channel);
   console.log('[Send:ENTRY] To:', chatId);
-  console.log('[Send:ENTRY] Text length:', text?.length);
+  console.log('[Send:ENTRY] Text length:', finalText.length);
+
+  console.log('[Send:DEBUG] Character breakdown:');
+  console.log('Text length:', finalText.length);
+  console.log('Newline count:', (finalText.match(/\n/g) || []).length);
+  console.log('First 200 chars:\n' + finalText.substring(0, 200));
 
   try {
     let success = false;
     if (channel === 'fast2sms') {
-      success = await fast2smsService.sendMessage(chatId, text);
+      success = await fast2smsService.sendMessage(chatId, finalText);
       if (success) {
         console.log('[Send:SUCCESS] Fast2SMS message sent');
         return true;
       }
       console.log(`[ChannelManager] Fast2SMS send failed or not configured for ${chatId}. Attempting WhatsApp Web (Baileys) fallback...`);
     }
-    success = await whatsappService.sendMessage(sessionId, chatId, text);
+    success = await whatsappService.sendMessage(sessionId, chatId, finalText);
     if (success) {
       console.log('[Send:SUCCESS] WhatsApp Web (Baileys) message sent');
     } else {

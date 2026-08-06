@@ -97,9 +97,13 @@ class Fast2SmsService {
       return false;
     }
 
-    const truncatedText = text && text.length > MAX_MESSAGE_LENGTH
-      ? `${text.slice(0, MAX_MESSAGE_LENGTH)}…`
-      : (text || '');
+    const cleanedText = (text || '')
+      .replace(/\\n\\n/g, '\n\n')
+      .replace(/\\n/g, '\n');
+
+    const truncatedText = cleanedText.length > MAX_MESSAGE_LENGTH
+      ? `${cleanedText.slice(0, MAX_MESSAGE_LENGTH)}…`
+      : cleanedText;
 
     // Fast2SMS requires phone_number_id (the sender's Meta phone number ID).
     // Prefer the explicit FAST2SMS_PHONE_NUMBER_ID; otherwise fall back to the

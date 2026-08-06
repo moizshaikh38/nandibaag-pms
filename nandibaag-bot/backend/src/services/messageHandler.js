@@ -710,10 +710,19 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
     if (!replyToSend || replyToSend.trim() === '') {
       replyToSend = "Samajh nahi aaya, phir se try karo 😊 Ya call karein: 9257657665";
     }
+
+    const formattedMessage = replyToSend
+      .replace(/\\n\\n/g, '\n\n')
+      .replace(/\\n/g, '\n');
+
+    console.log('[MessageHandler:Format] Message after formatting:');
+    console.log(formattedMessage.substring(0, 200));
+    console.log('[MessageHandler:Format] Newline count:', (formattedMessage.match(/\n/g) || []).length);
+
     // Register fingerprint of outgoing bot reply to catch webhook echoes instantly
-    registerBotReplyFingerprint(replyToSend);
+    registerBotReplyFingerprint(formattedMessage);
     
-    sendResult = await channelManager.sendMessageViaChannel(rawJid, replyToSend, channel, sessionId);
+    sendResult = await channelManager.sendMessageViaChannel(rawJid, formattedMessage, channel, sessionId);
     console.log(`[MessageHandler] Reply sent via ${channel}: ${sendResult ? 'SUCCESS ✓' : 'FAILED (queued)'}`);
   } catch (sendError) {
     logger.error(`[MessageHandler] ✗✗✗ CRITICAL: Even fallback send failed: ${sendError.message}`);

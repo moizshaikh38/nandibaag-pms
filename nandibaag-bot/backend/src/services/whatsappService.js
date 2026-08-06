@@ -796,10 +796,19 @@ async function sendMessage(sessionId, toPhone, text) {
 
   logger.info(`Sending message via Baileys to ${jid}`);
 
+  // Ensure newlines are preserved and converted from literal \\n strings
+  const textWithBreaks = (text || '')
+    .replace(/\\n\\n/g, '\n\n')
+    .replace(/\\n/g, '\n');
+
+  console.log('[Baileys:Send] Message with breaks:');
+  console.log(textWithBreaks.substring(0, 200));
+  console.log('[Baileys:Send] Newline count:', (textWithBreaks.match(/\n/g) || []).length);
+
   let lastError = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      await sock.sendMessage(jid, { text });
+      await sock.sendMessage(jid, { text: textWithBreaks });
       logger.info(`Message sent successfully to ${jid}`);
       // Clear pending queue items for this recipient
       try {

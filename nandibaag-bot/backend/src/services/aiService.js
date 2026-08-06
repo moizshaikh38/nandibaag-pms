@@ -271,16 +271,19 @@ function sanitizeReply(text) {
     return primaryClean;
   });
 
-  // Trim whitespace & clean double spaces
-  sanitized = sanitized.replace(/\s+/g, ' ').trim();
+  // Clean horizontal spaces per line while preserving newlines
+  sanitized = sanitized
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
   
   return sanitized;
 }
 
 /**
- * Trims response to max 700 chars at nearest sentence boundary if needed
+ * Trims response to max 1800 chars at nearest sentence boundary if needed
  */
-function trimToSentenceBoundary(text, maxLength = 700) {
+function trimToSentenceBoundary(text, maxLength = 1800) {
   if (text.length <= maxLength) return text;
   
   const trimmed = text.substring(0, maxLength);
@@ -305,21 +308,13 @@ function trimToSentenceBoundary(text, maxLength = 700) {
 }
 
 /**
- * Enforces max 4 lines and ~500 characters
+ * Enforces upper safe length limits without stripping newlines
  */
 function enforceLengthLimits(text) {
-  const lines = text.split('\n').filter(line => line.trim());
-  
-  if (lines.length > 4) {
-    logger.warn(`Response exceeded 4 lines (${lines.length} lines), truncating`);
-    return lines.slice(0, 4).join('\n');
+  if (!text) return '';
+  if (text.length > 2000) {
+    return trimToSentenceBoundary(text, 1800);
   }
-  
-  if (text.length > 500) {
-    logger.warn(`Response exceeded 500 characters (${text.length} chars), will trim at sentence boundary`);
-    return trimToSentenceBoundary(text, 700);
-  }
-  
   return text;
 }
 
@@ -783,7 +778,7 @@ async function tryOpenAICompatibleCall(client, modelName, providerKey, tierLabel
         ...messages
       ],
       temperature: 0.7,
-      max_tokens: 200
+      max_tokens: 1000
     };
     console.log(`[DIAGNOSTIC] [${tierLabel}] Raw Request Payload:\n`, JSON.stringify(payload, null, 2));
   }
@@ -799,7 +794,7 @@ async function tryOpenAICompatibleCall(client, modelName, providerKey, tierLabel
         ...messages
       ],
       temperature: 0.7,
-      max_tokens: 200
+      max_tokens: 1000
     }, { signal: controller.signal });
 
     clearTimeout(timeoutId);
