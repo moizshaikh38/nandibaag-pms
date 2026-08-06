@@ -187,13 +187,21 @@ async function runFollowUpJob() {
       return;
     }
     
-    logger.debug('Running follow-up cron job...');
+    console.log('[FollowUp:Cron] Checking for pending follow-ups...');
     
     // Find all pending follow-ups that are due
     const now = new Date();
     const pendingFollowUps = await FollowUp.find({
       status: 'pending',
       scheduledFor: { $lte: now }
+    });
+    
+    console.log('[FollowUp:Cron] Found pending:', {
+      count: pendingFollowUps.length,
+      items: pendingFollowUps.map(p => ({ 
+        stage: p.stage, 
+        chatId: p.chatId 
+      }))
     });
     
     if (pendingFollowUps.length === 0) {

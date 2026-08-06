@@ -762,6 +762,33 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
         const { scoreMessage } = require('./leadScoring');
         await scoreMessage(chat, messageText, replyToSend);
       } catch (_) {}
+
+      // ── FOLLOW-UP TRIGGER & RESCHEDULING (FIX #1 & FIX #2) ──
+      const draft = chat.bookingDraft || {};
+      if (chat.bookingStage !== 'none' || draft.date || draft.adults) {
+        console.log('[FollowUp:Trigger] Scheduling follow-ups for:', {
+          chatId: chat._id,
+          customerPhone: chat.customerPhone,
+          bookingStage: chat.bookingStage
+        });
+
+        // Delete old pending follow-ups for this chat so fresh ones start
+        try {
+          const { FollowUp } = require('../models');
+          await FollowUp.deleteMany({
+            chatId: chat._id,
+            status: 'pending'
+          });
+        } catch (_) {}
+
+        // Schedule fresh follow-ups
+        try {
+          await scheduleFollowUps(chat._id, chat.customerPhone);
+          console.log('[FollowUp:Reschedule] Follow-ups scheduled successfully');
+        } catch (fErr) {
+          logger.error(`[FollowUp:Error] Failed to schedule follow-ups: ${fErr.message}`);
+        }
+      }
     }
   } catch (saveError) {
     logger.error(`[MessageHandler] DB save failed (reply was still sent): ${saveError.message}`);

@@ -58,6 +58,16 @@ async function scheduleFollowUps(chatId, customerPhone) {
   
   await FollowUp.insertMany(followUps);
   logger.info(`Scheduled 4 follow-ups for chat ${chatId} (${customerPhone})`);
+
+  const createdFollowUps = await FollowUp.find({ chatId });
+  console.log('[FollowUp:Created] Follow-ups created:', {
+    chatId,
+    count: createdFollowUps.length,
+    stages: createdFollowUps.map(f => ({ 
+      stage: f.stage, 
+      scheduledFor: f.scheduledFor 
+    }))
+  });
 }
 
 /**
