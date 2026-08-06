@@ -202,8 +202,8 @@ TOTAL: ₹${grandTotal.toLocaleString('en-IN')}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📞 TO CONFIRM:
-Call: 9257657665`
+All details taken ✅
+Hamari team aapse jald hi connect karegi for booking 😊`
     };
   }
 
@@ -346,8 +346,8 @@ TOTAL: ₹${grandTotal.toLocaleString('en-IN')}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📞 TO CONFIRM:
-Call: 9257657665`;
+All details taken ✅
+Hamari team aapse jald hi connect karegi for booking 😊`;
 
   return {
     raw: {

@@ -677,7 +677,19 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
             priceStr = `₹${pricingResult.raw.grandTotal.toLocaleString('en-IN')}`;
           } catch (_) {}
 
-          addSystemNote(`[SYSTEM NOTE: Customer provided their name: "${candidateName}". Output the FINAL CONFIRMATION SUMMARY:\n✓ FINAL BOOKING CONFIRMATION\n👤 Name: ${candidateName}\n📅 Dates: ${chat.bookingDraft.date}\n👥 Guests: ${chat.bookingDraft.adults} adults + ${chat.bookingDraft.kids?.length || 0} kids\n💰 Price: ${priceStr}\n\nAsk customer to call staff at 9257657665 to finalize!]`);
+          addSystemNote(`[SYSTEM NOTE: Customer provided their name: "${candidateName}". Output the exact FINAL CONFIRMATION SUMMARY below (do NOT ask customer to call):
+✓ FINAL BOOKING CONFIRMATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+👤 Name: ${candidateName}
+📅 Dates: ${chat.bookingDraft.date}
+👥 Guests: ${chat.bookingDraft.adults} adults + ${chat.bookingDraft.kids?.length || 0} kids
+💰 Price: ${priceStr}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+All details taken ✅
+Hamari team aapse jald hi connect karegi for booking 😊]`);
         }
       } else if (isConfirmIntent && chat.bookingDraft.date && chat.bookingDraft.adults && chat.bookingDraft.availabilityConfirmed && !chat.bookingDraft.customerName) {
         console.log('[BookingFlow] Customer name not collected yet. Requesting name.');

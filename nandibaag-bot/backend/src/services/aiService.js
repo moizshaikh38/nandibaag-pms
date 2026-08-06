@@ -1134,13 +1134,13 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
       }
     } else if (isConfirming) {
       if (languageToUse === 'roman_marathi') {
-        result = `Ho ji 👍 Booking confirm karayla staff sobat bolava lagel 👇 ${primaryNumber}`;
+        result = `All details taken ✅ Hamari team aapse jald hi connect karegi for booking 😊`;
       } else if (languageToUse === 'marathi') {
-        result = `हो जी 👍 बुकिंग कन्फर्म करण्यासाठी स्टाफ सोबत बोलून घ्या 👇 ${primaryNumber}`;
+        result = `सर्व माहिती मिळाली ✅ आमची टीम बुकिंगसाठी तुमच्याशी लवकरच संपर्क साधेल 😊`;
       } else if (languageToUse === 'english') {
-        result = `To confirm your booking, please connect with our staff 👇 ${primaryNumber}`;
+        result = `All details taken ✅ Our team will connect with you shortly for booking 😊`;
       } else {
-        result = `Booking confirm karne ke liye staff se baat karein 👇 ${primaryNumber}`;
+        result = `All details taken ✅ Hamari team aapse jald hi connect karegi for booking 😊`;
       }
     } else if (msgLower.includes('contact') || msgLower.includes('phone') || msgLower.includes('number') || msgLower.includes('call')) {
       result = `Resort contact number: ${primaryNumber} 📞`;
