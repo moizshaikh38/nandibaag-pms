@@ -147,8 +147,14 @@ function calculatePricing(checkInInput, checkOutInput, adultCountOrGuestCount = 
 
   // Handle Picnic
   if (stayType === 'picnic') {
-    const ratePerPerson = mealRate || ((mealOption === 'breakfast_tea' || mealOption === '1000') ? 1000 : 1200);
-    const mealLabel = ratePerPerson === 1000 ? 'Breakfast to High Tea (10 AM - 5 PM)' : 'Breakfast to Dinner (12 PM - 8 PM)';
+    const isWknd = isWeekend(checkInDate);
+    let ratePerPerson = 1250;
+    if (isWknd) {
+      ratePerPerson = (mealOption === 'breakfast_tea' || mealOption === '1000' || mealOption === '1250_tea') ? 1250 : 1500;
+    } else {
+      ratePerPerson = (mealOption === 'breakfast_tea' || mealOption === '1000') ? 1000 : 1250;
+    }
+    const mealLabel = (ratePerPerson === 1000 || ratePerPerson === 1250 && (mealOption === 'breakfast_tea' || mealOption === '1000')) ? 'Breakfast to High Tea' : 'Breakfast to Dinner';
     const grandTotal = numGuests * ratePerPerson;
     const dateStr = formatDateShort(checkInDate) || 'Selected Date';
     const dayName = getDayName(checkInDate);
@@ -171,20 +177,33 @@ function calculatePricing(checkInInput, checkOutInput, adultCountOrGuestCount = 
         weekendTotal: 0,
         grandTotal
       },
-      formatted: `✓ BOOKING SUMMARY
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📅 Date: ${dateStr} (${dayName}) — Day Picnic
-👥 Guests: ${numGuests} ${numGuests === 1 ? 'person' : 'people'}
-🍽️ Package: ${mealLabel}
+      formatted: `✅ BOOKING QUOTE / SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-PRICING BREAKDOWN:
-- Day Picnic: ${numGuests} × ₹${ratePerPerson.toLocaleString('en-IN')}/person = ₹${grandTotal.toLocaleString('en-IN')}
+📅 DATE:
+${dateStr} (${dayName}) — Day Picnic
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💰 TOTAL: ₹${grandTotal.toLocaleString('en-IN')}
-(Final price, NO extra charges)
+👥 GUESTS:
+${numGuests} ${numGuests === 1 ? 'Person' : 'People'}
 
-✅ Includes: ${ratePerPerson === 1000 ? 'Breakfast + Lunch + High Tea + Activities' : 'Breakfast + Lunch + High Tea + Dinner + Activities'}`
+🏨 PACKAGE:
+DAY PICNIC (${mealLabel})
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💰 PRICING BREAKDOWN:
+- Day Picnic (${mealLabel}): ${numGuests} × ₹${ratePerPerson.toLocaleString('en-IN')} = ₹${grandTotal.toLocaleString('en-IN')}
+
+────────────────────────────
+TOTAL: ₹${grandTotal.toLocaleString('en-IN')}
+
+✓ Includes: ${ratePerPerson === 1000 || (ratePerPerson === 1250 && mealOption === 'breakfast_tea') ? 'Breakfast + Lunch + High Tea + Activities' : 'Breakfast + Lunch + High Tea + Dinner + Activities'}
+✓ Vegetarian only
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📞 TO CONFIRM:
+Call: 9257657665`
     };
   }
 
@@ -226,7 +245,7 @@ PRICING BREAKDOWN:
     let adultNightTotal = 0;
 
     if (stayType === 'couple') {
-      roomRate = weekend ? 6500 : 5000;
+      roomRate = weekend ? 6500 : 5500;
       adultNightTotal = coupleCount * roomRate;
     } else {
       roomRate = weekend ? 3000 : 2000;
@@ -273,23 +292,23 @@ PRICING BREAKDOWN:
   // Build per-night breakdown lines
   const breakdownLines = nightBreakdown.map(n => {
     if (stayType === 'couple') {
-      let line = `- ${n.dayName} (${n.dateStr}) - ${n.type}: ${coupleCount} couple${coupleCount > 1 ? 's' : ''} × ₹${n.roomRate.toLocaleString('en-IN')}`;
+      let line = `${n.dayName} (${n.dateStr}) - ${n.type}:\n${coupleCount} Couple${coupleCount > 1 ? 's' : ''} × ₹${n.roomRate.toLocaleString('en-IN')}`;
       if (kids.length > 0) {
         if (n.kidsNightTotal > 0) {
-          line += ` + ${kids.length} kid${kids.length > 1 ? 's' : ''} (₹${n.kidsNightTotal.toLocaleString('en-IN')})`;
+          line += ` + ${kids.length} Kid${kids.length > 1 ? 's' : ''} (₹${n.kidsNightTotal.toLocaleString('en-IN')})`;
         } else {
-          line += ` + ${kids.length} kid${kids.length > 1 ? 's' : ''} (FREE)`;
+          line += ` + ${kids.length} Kid${kids.length > 1 ? 's' : ''} (FREE)`;
         }
       }
       line += ` = ₹${n.nightTotal.toLocaleString('en-IN')}`;
       return line;
     } else {
-      let line = `- ${n.dayName} (${n.dateStr}) - ${n.type}: ${adultCount} adults × ₹${n.roomRate.toLocaleString('en-IN')}`;
+      let line = `${n.dayName} (${n.dateStr}) - ${n.type}:\n${adultCount} Adults × ₹${n.roomRate.toLocaleString('en-IN')}`;
       if (kids.length > 0) {
         if (n.kidsNightTotal > 0) {
-          line += ` + ${kids.length} kid${kids.length > 1 ? 's' : ''} (₹${n.kidsNightTotal.toLocaleString('en-IN')})`;
+          line += ` + ${kids.length} Kid${kids.length > 1 ? 's' : ''} (₹${n.kidsNightTotal.toLocaleString('en-IN')})`;
         } else {
-          line += ` + ${kids.length} kid${kids.length > 1 ? 's' : ''} (FREE)`;
+          line += ` + ${kids.length} Kid${kids.length > 1 ? 's' : ''} (FREE)`;
         }
       }
       line += ` = ₹${n.nightTotal.toLocaleString('en-IN')}`;
@@ -297,25 +316,38 @@ PRICING BREAKDOWN:
     }
   });
 
-  const roomType = stayType === 'couple' ? 'Couple Room' : 'Group Room';
-  const guestStr = `${adultCount} adults${coupleCount > 0 && stayType === 'couple' ? ` (${coupleCount} ${coupleCount === 1 ? 'couple' : 'couples'})` : ''}${kids.length > 0 ? ` + ${kids.length} ${kids.length === 1 ? 'kid' : 'kids'}` : ''}`;
+  const roomType = stayType === 'couple' ? 'COUPLE STAY' : 'GROUP STAY';
+  const guestStr = `${adultCount} Adults${coupleCount > 0 && stayType === 'couple' ? ` (${coupleCount} ${coupleCount === 1 ? 'Couple' : 'Couples'})` : ''}${kids.length > 0 ? ` + ${kids.length} ${kids.length === 1 ? 'Kid' : 'Kids'}` : ''}`;
 
-  const formatted = `✓ BOOKING SUMMARY
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📅 Check-in: ${inStr} (${inDayName})
-📅 Check-out: ${outStr} (${outDayName})
-👥 Guests: ${guestStr}
-🛏️ Room Type: ${roomType}
+  const formatted = `✅ BOOKING QUOTE / SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-PRICING BREAKDOWN:
-${breakdownLines.join('\n')}
+📅 DATES:
+${inStr} (${inDayName}) → ${outStr} (${outDayName})
+${totalNights} Night${totalNights > 1 ? 's' : ''}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💰 TOTAL: ₹${grandTotal.toLocaleString('en-IN')}
-(Final price, NO extra charges)
+👥 GUESTS:
+${guestStr}
 
-✅ Includes: All meals + activities
-✅ Alcohol: Bring your own`;
+🏨 PACKAGE:
+${roomType}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💰 PRICING BREAKDOWN:
+
+${breakdownLines.join('\n\n')}
+
+────────────────────────────
+TOTAL: ₹${grandTotal.toLocaleString('en-IN')}
+
+✓ Includes: All Meals + Activities
+✓ Vegetarian only
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📞 TO CONFIRM:
+Call: 9257657665`;
 
   return {
     raw: {

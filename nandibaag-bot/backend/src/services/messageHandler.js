@@ -628,14 +628,18 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
               const isKidsSpecified = extracted.kidsSpecified || chat.bookingDraft.kidsSpecified || (draft.kids && draft.kids.length > 0);
               if (draft.bookingType === 'picnic') {
                 if (!draft.mealOption) {
-                  addSystemNote(`[SYSTEM NOTE: Customer interested in DAY PICNIC. Offer two meal options:\n1. Breakfast to Dinner: ₹1,200 per person (12 PM - 8 PM)\n2. Breakfast to High Tea: ₹1,000 per person (10 AM - 5 PM)\nAsk which option they prefer!]`);
+                  addSystemNote(`[SYSTEM NOTE: Customer interested in DAY PICNIC. Offer two meal options:\n1. Breakfast to Dinner (₹1,250 weekday / ₹1,500 weekend)\n2. Breakfast to High Tea (₹1,000 weekday / ₹1,250 weekend)\nAsk which option they prefer!]`);
                 } else {
                   addSystemNote(`[SYSTEM NOTE: Day Picnic pricing calculated.\n${pricingResult.formatted}]`);
                 }
               } else if (!isKidsSpecified) {
-                addSystemNote(`[SYSTEM NOTE: Availability confirmed for these dates. IMPORTANT INSTRUCTION: Customer HAS NOT specified if kids are coming yet. Confirm availability to the customer and ASK: "Aur kya koi kids aa rahe hain?" BEFORE displaying the final calculated pricing breakdown block.\nPRELIMINARY CALCULATED PRICING (only send after customer confirms kids status):\n${pricingResult.formatted}]`);
+                console.log('[BookingFlow] Kids status NOT specified yet. Asking customer about kids FIRST before displaying pricing breakdown.');
+                chat.bookingDraft.askingAboutKids = true;
+                addSystemNote(`[SYSTEM NOTE: Dates & adults count confirmed (${draft.date}, ${draft.adults} adults). CRITICAL INSTRUCTION: Ask the customer about kids FIRST before showing pricing breakdown:\n"Kya koi kids aa rahe hain? Agar yes, age bataiye 😊"\nDO NOT display the pricing breakdown until customer responds to kids question!]`);
               } else {
-                addSystemNote(`[SYSTEM NOTE: Availability confirmed.\nPRICING BREAKDOWN:\n${pricingResult.formatted}]`);
+                console.log('[BookingFlow] Kids status confirmed. Showing final pricing breakdown.');
+                chat.bookingDraft.askingAboutKids = false;
+                addSystemNote(`[SYSTEM NOTE: Availability & kids status confirmed (${draft.kids?.length || 0} kids).\nPRICING BREAKDOWN:\n${pricingResult.formatted}]`);
               }
 
               chat.bookingDraft.availabilityChecked = true;

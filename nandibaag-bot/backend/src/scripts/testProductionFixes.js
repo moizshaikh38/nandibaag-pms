@@ -39,7 +39,7 @@ function runTests() {
   assert(pricing.raw.weekendNights === 3, 'TEST 2b: Fri-Mon pricing has 3 weekend nights', `weekendNights = ${pricing.raw.weekendNights}`);
   assert(pricing.raw.weekendTotal === 45000, 'TEST 2c: Weekend total = 3 nights * 5 guests * 3000 = 45,000', `weekendTotal = ${pricing.raw.weekendTotal}`);
   assert(pricing.raw.grandTotal === 45000, 'TEST 2d: Grand total = 45,000', `grandTotal = ${pricing.raw.grandTotal}`);
-  assert(pricing.formatted.includes('BOOKING SUMMARY'), 'TEST 2e: Formatted string contains BOOKING SUMMARY', pricing.formatted);
+  assert(pricing.formatted.includes('BOOKING QUOTE') || pricing.formatted.includes('BOOKING SUMMARY'), 'TEST 2e: Formatted string contains BOOKING QUOTE / SUMMARY', pricing.formatted);
 
   // ── TEST 3: Language Detection ──
   assert(detectLanguage('room available aahe ka?') === 'roman_marathi', 'TEST 3a: "room available aahe ka?" -> roman_marathi');

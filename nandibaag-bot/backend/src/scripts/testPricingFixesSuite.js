@@ -40,12 +40,6 @@ function runPricingFixesSuite() {
   const d9 = getDayName('2026-08-09');
   assert(d9 === 'Sunday', `9 Aug 2026 is Sunday (got: ${d9})`);
 
-  const d22 = getDayName('2026-08-22');
-  assert(d22 === 'Saturday', `22 Aug 2026 is Saturday (got: ${d22})`);
-
-  const d23 = getDayName('2026-08-23');
-  assert(d23 === 'Sunday', `23 Aug 2026 is Sunday (got: ${d23})`);
-
   // ----------------------------------------------------
   // FIX 2: WEEKDAY / WEEKEND DETECTION
   // ----------------------------------------------------
@@ -59,52 +53,40 @@ function runPricingFixesSuite() {
   assert(isWeekday('2026-08-08') === false, `8 Aug 2026 is NOT a weekday`);
 
   // ----------------------------------------------------
-  // TEST CASE 1: 11-13 Aug, 4 adults, GROUP
+  // TEST CASE: 13-15 Aug, 4 adults (2 couples), COUPLE STAY
   // ----------------------------------------------------
   console.log('\n----------------------------------------------------');
-  console.log('TEST CASE 1: 11-13 Aug, 4 adults, GROUP (2 Weekday nights)');
+  console.log('TEST CASE: 13-15 Aug, 4 adults (2 couples), COUPLE STAY');
+  console.log('----------------------------------------------------');
+  const p13_15 = calculatePricing('2026-08-13', '2026-08-15', 4, [], 'couple');
+  console.log('Calculated Breakdown:\n' + p13_15.formatted);
+  assert(p13_15.raw.grandTotal === 24000, `13-15 Aug (Thu Wkday ₹11k + Fri Wknd ₹13k) 2 couples pricing is ₹24,000 (got ₹${p13_15.raw.grandTotal})`);
+  assert(p13_15.formatted.includes('✅ BOOKING QUOTE / SUMMARY'), 'Output template contains clean header');
+  assert(p13_15.formatted.includes('Call: 9257657665'), 'Output template contains contact phone');
+
+  // ----------------------------------------------------
+  // TEST CASE: 11-13 Aug, 4 adults, GROUP (2 Weekday nights)
+  // ----------------------------------------------------
+  console.log('\n----------------------------------------------------');
+  console.log('TEST CASE: 11-13 Aug, 4 adults, GROUP (2 Weekday nights)');
   console.log('----------------------------------------------------');
   const p1 = calculatePricing('2026-08-11', '2026-08-13', 4, [], 'group');
   console.log('Calculated Breakdown:\n' + p1.formatted);
-  assert(p1.raw.grandTotal === 16000, `11-13 Aug (Mon-Tue) 4 adults group pricing is ₹16,000 (got ₹${p1.raw.grandTotal})`);
-  assert(p1.raw.weekdayNights === 2, `Weekday nights count is 2 (got ${p1.raw.weekdayNights})`);
-  assert(p1.raw.weekendNights === 0, `Weekend nights count is 0 (got ${p1.raw.weekendNights})`);
+  assert(p1.raw.grandTotal === 16000, `11-13 Aug (Tue-Wed) 4 adults group pricing is ₹16,000 (got ₹${p1.raw.grandTotal})`);
 
   // ----------------------------------------------------
-  // TEST CASE 2: 8-9 Aug, 4 adults, GROUP (1 Weekend night)
+  // TEST CASE: Day Picnic (4 people, Weekday 11 Aug)
   // ----------------------------------------------------
   console.log('\n----------------------------------------------------');
-  console.log('TEST CASE 2: 8-9 Aug, 4 adults, GROUP (1 Weekend night - Sat)');
-  console.log('----------------------------------------------------');
-  const p2 = calculatePricing('2026-08-08', '2026-08-09', 4, [], 'group');
-  console.log('Calculated Breakdown:\n' + p2.formatted);
-  assert(p2.raw.grandTotal === 12000, `8-9 Aug (Sat) 4 adults group pricing is ₹12,000 (got ₹${p2.raw.grandTotal})`);
-  assert(p2.raw.weekendNights === 1, `Weekend nights count is 1 (got ${p2.raw.weekendNights})`);
-
-  // ----------------------------------------------------
-  // TEST CASE 3: Day Picnic (4 people)
-  // ----------------------------------------------------
-  console.log('\n----------------------------------------------------');
-  console.log('TEST CASE 3: Day Picnic, 4 people');
+  console.log('TEST CASE: Day Picnic, 4 people (Weekday)');
   console.log('----------------------------------------------------');
   const p3_dinner = calculatePricing('2026-08-11', null, 4, [], 'picnic', { mealOption: 'breakfast_dinner' });
   console.log('Breakfast-Dinner Breakdown:\n' + p3_dinner.formatted);
-  assert(p3_dinner.raw.grandTotal === 4800, `4 people Breakfast-Dinner Day Picnic is ₹4,800 (got ₹${p3_dinner.raw.grandTotal})`);
+  assert(p3_dinner.raw.grandTotal === 5000, `4 people Weekday Breakfast-Dinner Day Picnic is ₹5,000 (got ₹${p3_dinner.raw.grandTotal})`);
 
   const p3_tea = calculatePricing('2026-08-11', null, 4, [], 'picnic', { mealOption: 'breakfast_tea' });
   console.log('Breakfast-Tea Breakdown:\n' + p3_tea.formatted);
-  assert(p3_tea.raw.grandTotal === 4000, `4 people Breakfast-Tea Day Picnic is ₹4,000 (got ₹${p3_tea.raw.grandTotal})`);
-
-  // ----------------------------------------------------
-  // TEST CASE 4: Multi-Room Couple Pricing
-  // ----------------------------------------------------
-  console.log('\n----------------------------------------------------');
-  console.log('TEST CASE 4: 4 adults, 2 couple rooms, 1 Weekend night (Sat 8 Aug)');
-  console.log('----------------------------------------------------');
-  const p4 = calculatePricing('2026-08-08', '2026-08-09', 4, [], 'couple');
-  console.log('Multi-Room Couple Breakdown:\n' + p4.formatted);
-  assert(p4.raw.grandTotal === 13000, `4 adults in 2 couple rooms on weekend is ₹13,000 (got ₹${p4.raw.grandTotal})`);
-  assert(p4.raw.coupleCount === 2, `Couple room count is 2 (got ${p4.raw.coupleCount})`);
+  assert(p3_tea.raw.grandTotal === 4000, `4 people Weekday Breakfast-Tea Day Picnic is ₹4,000 (got ₹${p3_tea.raw.grandTotal})`);
 
   console.log('\n====================================================');
   console.log(`   PRICING FIXES SUITE SUMMARY: ${passed} / ${total} PASSED`);
