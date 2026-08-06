@@ -983,6 +983,10 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
     }
   }
   
+  console.log('[AIService:ENTRY] Getting AI response');
+  console.log('[AIService:ENTRY] Chat ID:', chat?.customerPhone || chat?._id);
+  console.log('[AIService:ENTRY] Message count:', Array.isArray(chat?.messages) ? chat.messages.length : 0);
+
   const tPromptStart = Date.now();
  
   // Trim message history (last 10 messages max to optimize token speed)
@@ -1242,6 +1246,9 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
       timestamp: Date.now()
     });
   }
+
+  console.log('[AIService:EXIT] AI response generated');
+  console.log('[AIService:EXIT] Response length:', result?.length);
 
   return result;
 }

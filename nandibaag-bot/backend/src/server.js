@@ -111,6 +111,18 @@ app.get('/', handleHealthCheck);
 app.get('/health', handleHealthCheck);
 app.get('/api/health', handleHealthCheck);
 
+app.get('/api/restart-baileys', async (req, res) => {
+  console.log('[API] Restart Baileys requested via /api/restart-baileys');
+  try {
+    const whatsappService = require('./services/whatsappService');
+    await whatsappService.safeEndOldSocket('resort_primary');
+    await whatsappService.initSession('resort_primary');
+    res.json({ success: true, status: 'restarting' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Rate limiting
 app.use('/api', generalLimiter);
 app.use('/api/auth/login', authLimiter);

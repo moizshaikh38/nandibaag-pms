@@ -417,6 +417,10 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
       customerPhone = rawJid.split('@')[0].replace(/\D/g, '');
     }
     
+    console.log('[MessageHandler:ENTRY] Processing message');
+    console.log('[MessageHandler:ENTRY] From:', customerPhone);
+    console.log('[MessageHandler:ENTRY] Text:', messageText?.slice(0, 50));
+
     const hasMedia = !!(msg.message?.imageMessage || msg.message?.videoMessage || msg.message?.audioMessage || msg.message?.documentMessage || msg.message?.stickerMessage);
     const messageType = hasMedia ? 'image' : 'text';
     
@@ -677,6 +681,8 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
     }
 
   } catch (outerErr) {
+    console.error('[MessageHandler:CRASH] Error:', outerErr.message);
+    console.error('[MessageHandler:CRASH] Stack:', outerErr.stack);
     logger.error(`[MessageHandler] Outer error: ${outerErr.message}`);
     logger.error(`OUTER STACK: ${outerErr.stack}`);
     replyToSend = "Samajh nahi aaya, phir se try karo 😊 Ya call karein: 9257657665";
@@ -735,6 +741,8 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
   } catch (saveError) {
     logger.error(`[MessageHandler] DB save failed (reply was still sent): ${saveError.message}`);
   }
+
+  console.log('[MessageHandler:EXIT] Message processed successfully');
 }
 
 /**

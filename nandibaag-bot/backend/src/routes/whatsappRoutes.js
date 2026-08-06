@@ -152,6 +152,32 @@ router.get('/failed-messages', verifyToken, async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+/**
+ * GET /api/restart-baileys & POST /api/whatsapp/restart
+ * Restart Baileys WhatsApp session cleanly on demand.
+ */
+router.get('/restart-baileys', async (req, res) => {
+  try {
+    console.log('[API] Restart Baileys requested via /api/restart-baileys');
+    const whatsappService = require('../services/whatsappService');
+    await whatsappService.safeEndOldSocket('resort_primary');
+    await whatsappService.initSession('resort_primary');
+    res.json({ success: true, status: 'restarting' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/restart', verifyToken, async (req, res) => {
+  try {
+    const { sessionId = 'resort_primary' } = req.body || {};
+    console.log(`[API] Restart Baileys requested for session ${sessionId}`);
+    const whatsappService = require('../services/whatsappService');
+    await whatsappService.safeEndOldSocket(sessionId);
+    await whatsappService.initSession(sessionId);
+    res.json({ success: true, status: 'restarting', sessionId });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

@@ -205,13 +205,23 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
       }, 3000);
     }
 
+    console.log('[Baileys:Status] Service started for session:', sessionId);
+
     // ── Credential Updates ──────────────────────────────────────────
     sock.ev.on('creds.update', saveCreds);
 
     // ── Connection Lifecycle ────────────────────────────────────────
     sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
-      console.log(`[Baileys:Debug] connection.update for ${sessionId}:`, JSON.stringify({ connection, hasQr: !!qr, lastDisconnect: lastDisconnect ? String(lastDisconnect) : undefined }));
+      console.log('[Baileys:Connection]', JSON.stringify({ sessionId, connection, hasQr: !!qr }));
+
+      if (connection === 'open') {
+        console.log('[Baileys] ✅ CONNECTED');
+      } else if (connection === 'close') {
+        console.log('[Baileys] ❌ DISCONNECTED');
+      } else if (connection === 'connecting') {
+        console.log('[Baileys] ⏳ CONNECTING');
+      }
 
       // ─── ZOMBIE CHECK ───────────────────────────────────────────
       // If this socket is NOT the current active socket for this sessionId,
@@ -380,7 +390,8 @@ async function initSession(sessionId, { cleanStart = false, pairingPhoneNumber =
 
     // ── Message Handler ─────────────────────────────────────────────
     sock.ev.on('messages.upsert', async (m) => {
-      console.log('[Baileys:RAW] FIRED. Count:', m.messages?.length, 'Type:', m.type);
+      console.log('[Baileys:Incoming] ✅ Message received');
+      console.log('[Baileys:Incoming] Count:', m.messages?.length);
       const { messages, type } = m;
       if (type !== 'notify' && type !== 'append') return;
 
