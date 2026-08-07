@@ -394,10 +394,18 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
   try {
     if (!rawJid) return;
 
-    messageText = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
+    const rawMessageText = msg.message?.conversation || 
+                           msg.message?.extendedTextMessage?.text || 
+                           msg.message?.imageMessage?.caption || 
+                           msg.message?.videoMessage?.caption || 
+                           msg.message?.documentMessage?.caption || '';
+    messageText = rawMessageText;
+
+    const hasMedia = !!(msg.message?.imageMessage || msg.message?.videoMessage || msg.message?.audioMessage || msg.message?.documentMessage || msg.message?.stickerMessage);
+    const messageType = hasMedia ? 'image' : 'text';
     
     // Robust deduplication using sender + message content hash + 10s time window
-    const msgHash = getMessageHash(rawJid, messageText, channel);
+    const msgHash = getMessageHash(rawJid, messageText || (hasMedia ? 'media_' + (msg.key?.id || msg.messageTimestamp || Date.now()) : ''), channel);
     const lastSeen = webhookMessageCache.get(msgHash);
     if (lastSeen && Date.now() - lastSeen < 10000) {
       console.log('[MessageHandler] ⚠️  Duplicate webhook message, skipping hash:', msgHash);
@@ -419,10 +427,49 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
     
     console.log('[MessageHandler:ENTRY] Processing message');
     console.log('[MessageHandler:ENTRY] From:', customerPhone);
-    console.log('[MessageHandler:ENTRY] Text:', messageText?.slice(0, 50));
+    let isMediaAck = false;
+    let mediaAckText = '';
 
-    const hasMedia = !!(msg.message?.imageMessage || msg.message?.videoMessage || msg.message?.audioMessage || msg.message?.documentMessage || msg.message?.stickerMessage);
-    const messageType = hasMedia ? 'image' : 'text';
+    // MEDIA ACKNOWLEDGMENT: If media sent without caption text
+    if (hasMedia && !rawMessageText) {
+      console.log('[Media:Acknowledgment] Media received without caption');
+      isMediaAck = true;
+      
+      if (msg.message?.imageMessage) {
+        mediaAckText = '📸 Photo mil gayi! Kya ye room/property ke baare mein hai? ' +
+                      'Ya booking details poochni hain? Text mein likho toh mein help kar dunga.';
+      } 
+      else if (msg.message?.documentMessage) {
+        mediaAckText = '📄 Document mil gayi! Mujhe PDF read nahi kar sakta. ' +
+                      'Kripya booking details, dates, aur guest count text mein likho.';
+      } 
+      else if (msg.message?.audioMessage) {
+        mediaAckText = '🎙️ Voice note mil gayi! Mujhe audio samajhne mein mushkili hoti hai. ' +
+                      'Kripya apne booking details text mein likho - ' +
+                      'dates, guests, package type (Couple/Group/Day Picnic).';
+      } 
+      else if (msg.message?.videoMessage) {
+        mediaAckText = '🎥 Video mil gayi! Mujhe video dekh nahi sakta, lekin ' +
+                      'text mein bataao kya poochna hai. Dates, guests, aur package type likho.';
+      }
+      else if (msg.message?.stickerMessage) {
+        mediaAckText = '😊 Sticker mil gayi! Lekin mujhe booking mein help karne ke liye ' +
+                      'dates aur guest details text mein chahiye. Likho na! 😊';
+      }
+      
+      messageText = mediaAckText;
+      console.log('[Media:Acknowledgment] Generated response:', mediaAckText.slice(0, 50));
+    }
+
+    // Log for debugging
+    if (hasMedia) {
+      console.log('[Media:Log]', {
+        mediaType: Object.keys(msg.message || {}).find(k => k.includes('Message')),
+        hasCaption: !isMediaAck,
+        messageLength: messageText.length,
+        acknowledged: messageText.includes('mil gayi')
+      });
+    }
     
     if (!messageText && !hasMedia) {
       logger.debug(`Ignoring non-text/non-media message from ${customerPhone}`);
@@ -700,8 +747,12 @@ Hamari team aapse jald hi connect karegi for booking 😊]`);
         addSystemNote('[SYSTEM NOTE: Customer wants to confirm booking. Ask customer name: "Booking confirm karne ke liye aapka naam bata dijiye?"]');
       }
 
-      const systemNotes = systemNotesList.join('\n\n');
-      replyToSend = await getAIResponse(chat, messageText, settings, systemNotes);
+      if (isMediaAck) {
+        replyToSend = mediaAckText;
+      } else {
+        const systemNotes = systemNotesList.join('\n\n');
+        replyToSend = await getAIResponse(chat, messageText, settings, systemNotes);
+      }
     } catch (aiError) {
       logger.error(`[MessageHandler] Error in AI/computation flow: ${aiError.message}`);
       logger.error(`STACK: ${aiError.stack}`);
