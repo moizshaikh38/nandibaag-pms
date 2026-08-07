@@ -20,8 +20,40 @@ const bookingSchema = new mongoose.Schema({
   },
   bookingType: {
     type: String,
-    enum: ['couple', 'group', 'picnic'],
+    enum: ['couple', 'group', 'picnic', 'oneDay'],
     required: true
+  },
+  packageType: {
+    type: String,
+    enum: ['couple', 'group', 'oneDay', 'picnic'],
+    required: false
+  },
+  guestComposition: {
+    adults: {
+      type: Number,
+      default: 2
+    },
+    children: {
+      type: Number,
+      default: 0
+    }
+  },
+  bookedBy: {
+    name: {
+      type: String
+    },
+    staffId: {
+      type: String
+    }
+  },
+  staffNames: [{
+    name: String,
+    id: { type: String }
+  }],
+  notes: {
+    type: String,
+    maxlength: 500,
+    default: ''
   },
   date: {
     type: String,

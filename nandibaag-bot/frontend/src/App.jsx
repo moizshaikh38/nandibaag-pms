@@ -14,6 +14,7 @@ import CalendarPage from './pages/CalendarPage';
 import AvailabilityPage from './pages/AvailabilityPage';
 import PublicWidgetPage from './pages/PublicWidgetPage';
 import TeamSecurityPage from './pages/TeamSecurityPage';
+import ManualBookingForm from './components/ManualBookingForm';
 import Sidebar from './components/Sidebar';
 import BottomNav from './components/BottomNav';
 
@@ -119,6 +120,14 @@ function App() {
           element={
             <ProtectedLayout>
               <BookingsPage />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/pms/manual-booking"
+          element={
+            <ProtectedLayout>
+              <ManualBookingForm />
             </ProtectedLayout>
           }
         />
