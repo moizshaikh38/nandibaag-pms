@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../utils/api';
 import '../styles/DashboardStats.css';
 
 const DashboardStats = () => {
@@ -17,7 +17,7 @@ const DashboardStats = () => {
   const fetchStats = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/api/dashboard/last-2-days-stats');
+      const response = await api.get('/dashboard/last-2-days-stats');
       setStats(response.data);
       console.log('[Dashboard] Stats loaded:', response.data);
     } catch (error) {
@@ -30,12 +30,12 @@ const DashboardStats = () => {
   const fetchDetailedData = async (section) => {
     try {
       let endpoint = '';
-      if (section === 'chats') endpoint = '/api/dashboard/last-2-days-chats';
-      else if (section === 'hotLeads') endpoint = '/api/dashboard/last-2-days-hot-leads';
-      else if (section === 'bookings') endpoint = '/api/dashboard/last-2-days-bookings';
+      if (section === 'chats') endpoint = '/dashboard/last-2-days-chats';
+      else if (section === 'hotLeads') endpoint = '/dashboard/last-2-days-hot-leads';
+      else if (section === 'bookings') endpoint = '/dashboard/last-2-days-bookings';
 
-      const response = await axios.get(endpoint);
-      setDetailedData(response.data[Object.keys(response.data)[1]] || response.data.chats || response.data.hotLeads || response.data.bookings || []);
+      const response = await api.get(endpoint);
+      setDetailedData(response.data.chats || response.data.hotLeads || response.data.bookings || []);
       setExpandedSection(section);
     } catch (error) {
       console.error('[Dashboard] Error fetching detailed data:', error);
@@ -44,7 +44,7 @@ const DashboardStats = () => {
 
   const handleRefresh = async () => {
     try {
-      await axios.post('/api/dashboard/refresh-stats');
+      await api.post('/dashboard/refresh-stats');
       fetchStats();
       console.log('[Dashboard] Manually refreshed');
     } catch (error) {
