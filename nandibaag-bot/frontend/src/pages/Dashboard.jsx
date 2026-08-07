@@ -5,6 +5,7 @@ import { useSocket } from '../hooks/useSocket';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 import DashboardStats from '../components/DashboardStats';
+import ManualBookingForm from '../components/ManualBookingForm';
 import {
   MessageSquare, 
   Calendar, 
@@ -54,6 +55,7 @@ export default function Dashboard() {
   const [globalMode, setGlobalMode] = useState('ai');
   const [pendingModeChange, setPendingModeChange] = useState(null);
   const [followUpEnabled, setFollowUpEnabled] = useState(true);
+  const [showManualBookingForm, setShowManualBookingForm] = useState(false);
   const [alerts, setAlerts] = useState([]);
   
   // Phase D & F state
@@ -182,35 +184,51 @@ export default function Dashboard() {
           </p>
         </div>
 
-        {isAdmin && (
-          <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-xl border border-slate-200">
-            <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 pl-2">
-              <Bot size={15} className="text-emerald-600" />
-              <span>Global Bot Mode:</span>
-            </span>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowManualBookingForm(prev => !prev)}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5"
+          >
+            <span>{showManualBookingForm ? '✕ Close Form' : '📝 New Manual Booking'}</span>
+          </button>
 
-            <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-xs">
-              <button
-                onClick={() => setPendingModeChange('ai')}
-                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
-                  globalMode === 'ai' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Auto AI
-              </button>
+          {isAdmin && (
+            <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-xl border border-slate-200">
+              <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 pl-2">
+                <Bot size={15} className="text-emerald-600" />
+                <span>Global Bot Mode:</span>
+              </span>
 
-              <button
-                onClick={() => setPendingModeChange('human')}
-                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
-                  globalMode === 'human' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Human Only
-              </button>
+              <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-xs">
+                <button
+                  onClick={() => setPendingModeChange('ai')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                    globalMode === 'ai' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Auto AI
+                </button>
+
+                <button
+                  onClick={() => setPendingModeChange('human')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                    globalMode === 'human' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Human Only
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
+
+      {/* Manual Booking Form Container */}
+      {showManualBookingForm && (
+        <div className="animate-fade-in">
+          <ManualBookingForm />
+        </div>
+      )}
 
       {/* Mode Toggle Confirmation Modal */}
       {pendingModeChange && (
