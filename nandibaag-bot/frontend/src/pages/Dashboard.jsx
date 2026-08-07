@@ -186,7 +186,18 @@ export default function Dashboard() {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setShowManualBookingForm(prev => !prev)}
+            onClick={() => {
+              setShowManualBookingForm(prev => {
+                const nextState = !prev;
+                if (nextState) {
+                  setTimeout(() => {
+                    const el = document.getElementById('manual-booking-section');
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }, 100);
+                }
+                return nextState;
+              });
+            }}
             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5"
           >
             <span>{showManualBookingForm ? '✕ Close Form' : '📝 New Manual Booking'}</span>
@@ -225,7 +236,7 @@ export default function Dashboard() {
 
       {/* Manual Booking Form Container */}
       {showManualBookingForm && (
-        <div className="animate-fade-in">
+        <div className="animate-fade-in" id="manual-booking-section">
           <ManualBookingForm />
         </div>
       )}

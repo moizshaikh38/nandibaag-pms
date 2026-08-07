@@ -372,6 +372,7 @@ export default function BookingsPage() {
 
   useEffect(() => {
     if (manualModal) {
+      window.scrollTo({ top: 0, behavior: 'instant' });
       const ci = manualForm.checkInDate || new Date().toISOString().split('T')[0];
       const co = manualForm.checkOutDate || new Date(Date.now() + 86400000).toISOString().split('T')[0];
       if (!manualForm.checkInDate || !manualForm.checkOutDate) {

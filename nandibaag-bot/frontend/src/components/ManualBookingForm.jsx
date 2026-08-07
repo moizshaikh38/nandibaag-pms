@@ -233,7 +233,7 @@ const ManualBookingForm = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto my-6 bg-white rounded-3xl shadow-xl border border-slate-200/80 overflow-hidden animate-fade-in">
+    <div className="max-w-4xl mx-auto my-1 sm:my-3 bg-white rounded-3xl shadow-xl border border-slate-200/80 overflow-hidden animate-fade-in">
       {/* Header Banner */}
       <div className="bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 p-6 md:p-8 text-white relative overflow-hidden">
         <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-white/10 rounded-full blur-xl pointer-events-none" />
