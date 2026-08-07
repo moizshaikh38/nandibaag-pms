@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { LayoutDashboard, QrCode, MessageSquare, Settings, MoreVertical, Home, Clock, BookOpen, Mail, CalendarDays, Grid3x3, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, QrCode, MessageSquare, Settings, MoreVertical, Home, Clock, BookOpen, Mail, CalendarDays, Grid3x3, ShieldCheck, FileText } from 'lucide-react';
 import api from '../utils/api';
 import { useSocket } from '../hooks/useSocket';
 import { useAuth } from '../context/AuthContext';
