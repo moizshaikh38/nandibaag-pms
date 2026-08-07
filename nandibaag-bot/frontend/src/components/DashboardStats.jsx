@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import '../styles/DashboardStats.css';
 
 const DashboardStats = () => {
+  const navigate = useNavigate();
   const [stats, setStats] = useState({
     chatsCount: 0,
     hotLeadsCount: 0,
@@ -13,6 +15,14 @@ const DashboardStats = () => {
   const [loading, setLoading] = useState(true);
   const [expandedSection, setExpandedSection] = useState(null);
   const [detailedData, setDetailedData] = useState([]);
+
+  const handleOpenChat = (chatId) => {
+    if (!chatId) return;
+    console.log('[Dashboard] Opening chat:', chatId);
+    navigate(`/chats/${chatId}`, { 
+      state: { chatId, openChat: true }
+    });
+  };
 
   const fetchStats = async () => {
     try {
@@ -142,8 +152,19 @@ const DashboardStats = () => {
                 <div key={idx} className="list-item">
                   {expandedSection === 'chats' && (
                     <>
-                      <div className="item-name">{item.customerName || item.customerPhone}</div>
-                      <div className="item-detail">{item.bookingStage}</div>
+                      <div 
+                        className="item-phone"
+                        onClick={() => handleOpenChat(item._id)}
+                        title="Click to open chat"
+                      >
+                        📱 {item.customerPhone}
+                      </div>
+                      <div className="item-name">
+                        {item.customerName || 'Unknown'}
+                      </div>
+                      <div className="item-detail">
+                        {item.bookingStage || 'N/A'}
+                      </div>
                       <div className="item-time">
                         {new Date(item.createdAt).toLocaleString()}
                       </div>

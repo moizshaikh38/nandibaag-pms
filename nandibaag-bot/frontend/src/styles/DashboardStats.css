@@ -147,15 +147,32 @@
   border-bottom: none;
 }
 
-.item-name {
+.item-phone {
   font-weight: bold;
+  color: #007bff;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 5px;
+  background: #f0f8ff;
+  transition: all 0.2s;
+}
+
+.item-phone:hover {
+  background: #007bff;
+  color: white;
+  transform: scale(1.05);
+}
+
+.item-name {
   flex: 1;
+  margin-left: 15px;
+  color: #333;
 }
 
 .item-detail {
   color: #666;
   font-size: 14px;
-  margin: 0 20px;
+  margin: 0 15px;
 }
 
 .item-time {

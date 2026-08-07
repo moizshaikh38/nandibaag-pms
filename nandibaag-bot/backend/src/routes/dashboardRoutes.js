@@ -174,7 +174,7 @@ router.get('/last-2-days-chats', async (req, res) => {
     const chats = await Chat.find({
       createdAt: { $gte: twoDaysAgo, $lte: now }
     })
-    .select('customerName customerPhone bookingStage createdAt lastMessageAt messages')
+    .select('_id customerName customerPhone bookingStage createdAt lastMessageAt messages')
     .sort({ lastMessageAt: -1 })
     .limit(100)
     .lean();
