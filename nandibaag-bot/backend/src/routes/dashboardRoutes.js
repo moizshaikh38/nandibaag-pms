@@ -144,16 +144,33 @@ router.get('/last-2-days-hot-leads', async (req, res) => {
       createdAt: { $gte: twoDaysAgo, $lte: now },
       status: 'hot'
     })
+    .select('_id chatId score status createdAt')
     .sort({ createdAt: -1 })
     .limit(100)
     .lean();
     
-    console.log('[Dashboard:HotLeads] Found:', hotLeads.length);
+    // Enrich with chat/phone details
+    const enrichedLeads = await Promise.all(
+      hotLeads.map(async (lead) => {
+        const chat = await Chat.findById(lead.chatId)
+          .select('customerName customerPhone')
+          .lean();
+        
+        return {
+          ...lead,
+          customerName: chat?.customerName || 'Unknown',
+          customerPhone: chat?.customerPhone || 'N/A',
+          chatId: lead.chatId
+        };
+      })
+    );
+    
+    console.log('[Dashboard:HotLeads] Enriched with phone numbers:', enrichedLeads.length);
     
     res.json({
       success: true,
-      hotLeads,
-      count: hotLeads.length
+      hotLeads: enrichedLeads,
+      count: enrichedLeads.length
     });
     
   } catch (error) {

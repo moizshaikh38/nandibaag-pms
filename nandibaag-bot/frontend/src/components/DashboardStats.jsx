@@ -172,8 +172,19 @@ const DashboardStats = () => {
                   )}
                   {expandedSection === 'hotLeads' && (
                     <>
-                      <div className="item-name">Score: {item.score}</div>
-                      <div className="item-detail">{item.status}</div>
+                      <div 
+                        className="item-phone"
+                        onClick={() => handleOpenChat(item.chatId)}
+                        title="Click to open chat"
+                      >
+                        📱 {item.customerPhone}
+                      </div>
+                      <div className="item-name">
+                        {item.customerName || 'Unknown Customer'}
+                      </div>
+                      <div className="item-detail">
+                        🔥 Score: {item.score} | Status: {item.status}
+                      </div>
                       <div className="item-time">
                         {new Date(item.createdAt).toLocaleString()}
                       </div>

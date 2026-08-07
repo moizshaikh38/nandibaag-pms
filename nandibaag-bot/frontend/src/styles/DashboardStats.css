@@ -155,12 +155,14 @@
   border-radius: 5px;
   background: #f0f8ff;
   transition: all 0.2s;
+  display: inline-block;
 }
 
 .item-phone:hover {
   background: #007bff;
   color: white;
   transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(0,123,255,0.3);
 }
 
 .item-name {
