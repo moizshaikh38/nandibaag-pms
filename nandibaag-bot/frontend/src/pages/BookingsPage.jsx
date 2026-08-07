@@ -71,6 +71,68 @@ export default function BookingsPage() {
   const [manualRooms, setManualRooms] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
+  // New manual reservation form enhancement fields
+  const [packageType, setPackageType] = useState('couple');
+  const [guestComposition, setGuestComposition] = useState({
+    adults: 2,
+    children: 0
+  });
+  const [staffNames, setStaffNames] = useState([
+    { name: 'Kadambari', id: 'staff_1' },
+    { name: 'Ravi', id: 'staff_2' },
+    { name: 'Priti', id: 'staff_3' },
+    { name: 'Mansi', id: 'staff_4' }
+  ]);
+  const [bookedBy, setBookedBy] = useState('');
+  const [notes, setNotes] = useState('');
+  const [newStaffName, setNewStaffName] = useState('');
+  const [showAddStaff, setShowAddStaff] = useState(false);
+
+  const fetchStaffNames = async () => {
+    try {
+      const response = await api.get('/bookings/staff-names');
+      if (response.data?.staffNames) {
+        setStaffNames(response.data.staffNames);
+      }
+    } catch (error) {
+      console.error('Error fetching staff:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchStaffNames();
+  }, []);
+
+  const handleAddStaff = async () => {
+    if (!newStaffName.trim()) return;
+    try {
+      const response = await api.post('/bookings/staff-names', {
+        name: newStaffName.trim()
+      });
+      if (response.data?.staff) {
+        setStaffNames(prev => [...prev, response.data.staff]);
+      }
+      setNewStaffName('');
+      setShowAddStaff(false);
+      toast.success('Staff added successfully');
+    } catch (error) {
+      console.error('Error adding staff:', error);
+      toast.error('Failed to add staff');
+    }
+  };
+
+  const handleDeleteStaff = async (staffId) => {
+    try {
+      await api.delete(`/bookings/staff-names/${staffId}`);
+      setStaffNames(prev => prev.filter(s => s.id !== staffId));
+      if (bookedBy === staffId) setBookedBy('');
+      toast.success('Staff removed');
+    } catch (error) {
+      console.error('Error deleting staff:', error);
+      toast.error('Failed to remove staff');
+    }
+  };
+
   const fetchBookings = async () => {
     try {
       setLoading(true);
@@ -332,7 +394,15 @@ export default function BookingsPage() {
       const roomIds = manualForm.roomId ? [manualForm.roomId] : [];
       const res = await api.post('/pms/bookings/manual', {
         ...manualForm,
-        adults: parseInt(manualForm.adults) || 1,
+        packageType,
+        guestComposition: {
+          adults: parseInt(guestComposition.adults) || 1,
+          children: parseInt(guestComposition.children) || 0
+        },
+        bookedBy: { name: bookedBy },
+        staffNames,
+        notes,
+        adults: parseInt(guestComposition.adults) || 1,
         totalAmount: parseFloat(manualForm.totalAmount) || 0,
         advancePayment: parseFloat(manualForm.advancePayment) || 0,
         remainingPayment: parseFloat(manualForm.remainingPayment) || 0,
@@ -756,6 +826,107 @@ export default function BookingsPage() {
                 />
               </div>
 
+              {/* ===== SECTION: PACKAGE TYPE & GUEST COMPOSITION ===== */}
+              <div style={{ marginTop: '25px', paddingBottom: '20px', borderBottom: '1px solid #eee' }}>
+                <h4 style={{ marginBottom: '15px', color: '#333', fontWeight: 'bold' }}>
+                  🎁 Package Type & Guests
+                </h4>
+                
+                {/* Package Type */}
+                <div style={{ marginBottom: '15px' }}>
+                  <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>
+                    Package Type:
+                  </label>
+                  <div style={{ display: 'flex', gap: '20px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input
+                        type="radio"
+                        name="packageType"
+                        value="couple"
+                        checked={packageType === 'couple'}
+                        onChange={(e) => setPackageType(e.target.value)}
+                      />
+                      Couple Stay
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input
+                        type="radio"
+                        name="packageType"
+                        value="group"
+                        checked={packageType === 'group'}
+                        onChange={(e) => setPackageType(e.target.value)}
+                      />
+                      Group Stay
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input
+                        type="radio"
+                        name="packageType"
+                        value="oneDay"
+                        checked={packageType === 'oneDay'}
+                        onChange={(e) => setPackageType(e.target.value)}
+                      />
+                      One Day Picnic
+                    </label>
+                  </div>
+                </div>
+
+                {/* Guest Composition */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                      Adults:
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={guestComposition.adults}
+                      onChange={(e) => setGuestComposition({
+                        ...guestComposition,
+                        adults: parseInt(e.target.value) || 1
+                      })}
+                      style={{
+                        width: '100%',
+                        padding: '8px',
+                        border: '1px solid #ddd',
+                        borderRadius: '5px'
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                      Children:
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={guestComposition.children}
+                      onChange={(e) => setGuestComposition({
+                        ...guestComposition,
+                        children: parseInt(e.target.value) || 0
+                      })}
+                      style={{
+                        width: '100%',
+                        padding: '8px',
+                        border: '1px solid #ddd',
+                        borderRadius: '5px'
+                      }}
+                    />
+                  </div>
+                </div>
+                
+                <p style={{ 
+                  marginTop: '10px', 
+                  padding: '10px', 
+                  background: '#f8f9fa', 
+                  borderLeft: '3px solid #007bff',
+                  color: '#333',
+                  fontWeight: 'bold'
+                }}>
+                  Total: {guestComposition.adults} Adults + {guestComposition.children} Children
+                </p>
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Select Available Cottage Room</label>
                 <select
@@ -770,6 +941,170 @@ export default function BookingsPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* ===== SECTION: BOOKED BY STAFF & NOTES ===== */}
+              <div style={{ marginTop: '25px', paddingBottom: '20px', borderBottom: '1px solid #eee' }}>
+                <h4 style={{ marginBottom: '15px', color: '#333', fontWeight: 'bold' }}>
+                  👥 Booked By & Notes
+                </h4>
+                
+                {/* Staff Selection */}
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>
+                    Booked By (Staff):
+                  </label>
+                  <select
+                    value={bookedBy}
+                    onChange={(e) => setBookedBy(e.target.value)}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #ddd',
+                      borderRadius: '5px',
+                      marginBottom: '15px',
+                      fontFamily: 'inherit'
+                    }}
+                  >
+                    <option value="">-- Select Staff Member --</option>
+                    {staffNames.map(staff => (
+                      <option key={staff.id} value={staff.name}>
+                        {staff.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Staff List with Delete */}
+                <div style={{ marginBottom: '20px' }}>
+                  <h5 style={{ marginBottom: '10px', color: '#555' }}>📋 Staff Members:</h5>
+                  {staffNames.map(staff => (
+                    <div
+                      key={staff.id}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '12px',
+                        background: '#f8f9fa',
+                        borderRadius: '5px',
+                        marginBottom: '8px'
+                      }}
+                    >
+                      <span style={{ fontWeight: '500' }}>
+                        {bookedBy === staff.name && '✓ '}
+                        {staff.name}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteStaff(staff.id)}
+                        style={{
+                          background: '#dc3545',
+                          color: 'white',
+                          border: 'none',
+                          padding: '5px 10px',
+                          borderRadius: '3px',
+                          cursor: 'pointer',
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Add New Staff */}
+                {!showAddStaff ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddStaff(true)}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      background: '#28a745',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '5px',
+                      cursor: 'pointer',
+                      fontWeight: 'bold',
+                      marginBottom: '20px'
+                    }}
+                  >
+                    + Add New Staff
+                  </button>
+                ) : (
+                  <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+                    <input
+                      type="text"
+                      placeholder="New staff name"
+                      value={newStaffName}
+                      onChange={(e) => setNewStaffName(e.target.value)}
+                      style={{
+                        flex: 1,
+                        padding: '10px',
+                        border: '1px solid #ddd',
+                        borderRadius: '5px'
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddStaff}
+                      style={{
+                        padding: '10px 15px',
+                        background: '#007bff',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '5px',
+                        cursor: 'pointer',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddStaff(false)}
+                      style={{
+                        padding: '10px 15px',
+                        background: '#6c757d',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '5px',
+                        cursor: 'pointer',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+
+                {/* Notes */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>
+                    Notes (Optional):
+                  </label>
+                  <textarea
+                    placeholder="Any special requests? Extra mattress? Birthday celebration? Write here..."
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    maxLength="500"
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #ddd',
+                      borderRadius: '5px',
+                      fontFamily: 'inherit',
+                      resize: 'vertical',
+                      minHeight: '80px'
+                    }}
+                  />
+                  <small style={{ display: 'block', textAlign: 'right', color: '#999', marginTop: '5px' }}>
+                    {notes.length}/500
+                  </small>
+                </div>
               </div>
 
               {/* FEATURE #3: ID Proof Attachment Input */}
