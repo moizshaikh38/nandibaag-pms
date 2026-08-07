@@ -371,6 +371,12 @@ export default function BookingsPage() {
   };
 
   useEffect(() => {
+    if (invoiceModal || idPhotoPreviewModal || cancelModal) {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+  }, [invoiceModal, idPhotoPreviewModal, cancelModal]);
+
+  useEffect(() => {
     if (manualModal) {
       window.scrollTo({ top: 0, behavior: 'instant' });
       const ci = manualForm.checkInDate || new Date().toISOString().split('T')[0];
@@ -641,8 +647,8 @@ export default function BookingsPage() {
 
       {/* FEATURE #2: PRINTABLE / WHATSAPP PDF INVOICE RECEIPT MODAL */}
       {invoiceModal && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-4 sm:pt-8 bg-slate-950/75 backdrop-blur-xs overflow-y-auto">
-          <div className="glass-card rounded-2xl max-w-xl w-full p-6 space-y-5 bg-white animate-fade-in shadow-2xl overflow-y-auto max-h-[88vh] my-0">
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-2 sm:p-4 pt-2 sm:pt-6 bg-slate-950/80 backdrop-blur-xs overflow-y-auto">
+          <div className="glass-card rounded-2xl max-w-xl w-full p-4 sm:p-6 space-y-4 bg-white animate-fade-in shadow-2xl overflow-y-auto max-h-[92vh] mt-0 mb-auto">
             
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
