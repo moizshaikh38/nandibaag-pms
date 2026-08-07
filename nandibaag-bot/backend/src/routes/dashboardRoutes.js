@@ -78,4 +78,169 @@ router.get('/stats', verifyToken, async (req, res, next) => {
   }
 });
 
+// GET dashboard stats for last 2 days
+router.get('/last-2-days-stats', async (req, res) => {
+  try {
+    console.log('[Dashboard:Stats] Fetching last 2 days data...');
+    
+    // Calculate date range
+    const now = new Date();
+    const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+    
+    console.log('[Dashboard:Stats] Period:', {
+      from: twoDaysAgo.toISOString(),
+      to: now.toISOString()
+    });
+    
+    // Query 1: Total chats in last 2 days
+    const chatsCount = await Chat.countDocuments({
+      createdAt: { $gte: twoDaysAgo, $lte: now }
+    });
+    
+    console.log('[Dashboard:Stats] Chats count:', chatsCount);
+    
+    // Query 2: Hot leads in last 2 days
+    const hotLeadsCount = await Lead.countDocuments({
+      createdAt: { $gte: twoDaysAgo, $lte: now },
+      status: 'hot'
+    });
+    
+    console.log('[Dashboard:Stats] Hot leads count:', hotLeadsCount);
+    
+    // Query 3: Bookings in last 2 days
+    const bookingsCount = await Booking.countDocuments({
+      createdAt: { $gte: twoDaysAgo, $lte: now },
+      status: { $in: ['pending_payment', 'confirmed', 'checked_in'] }
+    });
+    
+    console.log('[Dashboard:Stats] Bookings count:', bookingsCount);
+    
+    res.json({
+      success: true,
+      chatsCount,
+      hotLeadsCount,
+      bookingsCount,
+      periodStart: twoDaysAgo.toISOString(),
+      periodEnd: now.toISOString(),
+      lastUpdated: now.toISOString()
+    });
+    
+  } catch (error) {
+    console.error('[Dashboard:Stats] Error:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// GET detailed list of hot leads (last 2 days)
+router.get('/last-2-days-hot-leads', async (req, res) => {
+  try {
+    const now = new Date();
+    const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+    
+    const hotLeads = await Lead.find({
+      createdAt: { $gte: twoDaysAgo, $lte: now },
+      status: 'hot'
+    })
+    .sort({ createdAt: -1 })
+    .limit(100)
+    .lean();
+    
+    console.log('[Dashboard:HotLeads] Found:', hotLeads.length);
+    
+    res.json({
+      success: true,
+      hotLeads,
+      count: hotLeads.length
+    });
+    
+  } catch (error) {
+    console.error('[Dashboard:HotLeads] Error:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// GET detailed list of chats (last 2 days)
+router.get('/last-2-days-chats', async (req, res) => {
+  try {
+    const now = new Date();
+    const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+    
+    const chats = await Chat.find({
+      createdAt: { $gte: twoDaysAgo, $lte: now }
+    })
+    .select('customerName customerPhone bookingStage createdAt lastMessageAt messages')
+    .sort({ lastMessageAt: -1 })
+    .limit(100)
+    .lean();
+    
+    res.json({
+      success: true,
+      chats,
+      count: chats.length
+    });
+    
+  } catch (error) {
+    console.error('[Dashboard:Chats] Error:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// GET detailed list of bookings (last 2 days)
+router.get('/last-2-days-bookings', async (req, res) => {
+  try {
+    const now = new Date();
+    const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+    
+    const bookings = await Booking.find({
+      createdAt: { $gte: twoDaysAgo, $lte: now },
+      status: { $in: ['pending_payment', 'confirmed', 'checked_in'] }
+    })
+    .select('customerName customerPhone dates totalAmount status createdAt')
+    .sort({ createdAt: -1 })
+    .limit(100)
+    .lean();
+    
+    res.json({
+      success: true,
+      bookings,
+      count: bookings.length
+    });
+    
+  } catch (error) {
+    console.error('[Dashboard:Bookings] Error:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// POST manual reset (clear cache if any)
+router.post('/refresh-stats', async (req, res) => {
+  try {
+    console.log('[Dashboard:Refresh] Manual refresh triggered');
+    // Since we're using real-time queries, just return fresh data
+    res.json({
+      success: true,
+      message: 'Stats refreshed',
+      refreshedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[Dashboard:Refresh] Error:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
 module.exports = router;

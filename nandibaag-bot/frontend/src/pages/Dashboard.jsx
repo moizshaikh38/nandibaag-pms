@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../hooks/useSocket';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
+import DashboardStats from '../components/DashboardStats';
 import {
   MessageSquare, 
   Calendar, 
@@ -163,6 +164,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      <DashboardStats />
       
       {/* Top Banner & Quick Controls */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 glass-card p-6 rounded-2xl bg-white shadow-xs border border-slate-200">
