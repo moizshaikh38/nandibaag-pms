@@ -13,6 +13,7 @@ const navItems = [
 ];
 
 const baseMoreMenuItems = [
+  { path: '/pms/manual-booking', label: 'Manual Booking', icon: FileText },
   { path: '/availability', label: 'Availability', icon: Grid3x3 },
   { path: '/inventory', label: 'Inventory', icon: Home },
   { path: '/pms/pending', label: 'Pending Bookings', icon: Clock },
