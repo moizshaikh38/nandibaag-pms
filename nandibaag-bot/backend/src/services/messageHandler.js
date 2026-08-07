@@ -430,6 +430,12 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
     let isMediaAck = false;
     let mediaAckText = '';
 
+    console.log('[Media:Check]', {
+      hasMedia,
+      messageType: msg.message?.imageMessage ? 'image' : messageType,
+      messageKeys: Object.keys(msg.message || {})
+    });
+
     // MEDIA ACKNOWLEDGMENT: If media sent without caption text
     if (hasMedia && !rawMessageText) {
       console.log('[Media:Acknowledgment] Media received without caption');
@@ -461,15 +467,11 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
       console.log('[Media:Acknowledgment] Generated response:', mediaAckText.slice(0, 50));
     }
 
-    // Log for debugging
-    if (hasMedia) {
-      console.log('[Media:Log]', {
-        mediaType: Object.keys(msg.message || {}).find(k => k.includes('Message')),
-        hasCaption: !isMediaAck,
-        messageLength: messageText.length,
-        acknowledged: messageText.includes('mil gayi')
-      });
-    }
+    console.log('[Media:Result]', {
+      hasMedia,
+      messageText: (messageText || '').slice(0, 50),
+      messageLength: (messageText || '').length
+    });
     
     if (!messageText && !hasMedia) {
       logger.debug(`Ignoring non-text/non-media message from ${customerPhone}`);
@@ -553,11 +555,15 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
     
     const senderRole = msg.key?.fromMe ? 'agent' : (isBotReplyText(messageText) ? 'bot' : 'customer');
     
+    const customerText = isMediaAck ? (rawMessageText || '📷 Photo') : (messageText || '[Media]');
+    const mediaUrl = msg.message?.imageMessage?.url || msg.message?.videoMessage?.url || msg.message?.documentMessage?.url || null;
+
     chat.messages.push({
       sender: senderRole,
-      text: messageText || '[Media]',
+      text: customerText,
       timestamp: new Date(),
       messageType,
+      mediaUrl,
       deliveryStatus: 'sent'
     });
     

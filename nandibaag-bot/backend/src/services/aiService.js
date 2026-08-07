@@ -981,6 +981,11 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
   console.log('[AIService:ENTRY] Getting AI response');
   console.log('[AIService:ENTRY] Chat ID:', chat?.customerPhone || chat?._id);
   console.log('[AIService:ENTRY] Message count:', Array.isArray(chat?.messages) ? chat.messages.length : 0);
+  console.log('[AIService:Input]', {
+    chatId: chat?.customerPhone || chat?._id,
+    messageText: (incomingMessage || '').slice(0, 50),
+    isMediaMessage: (incomingMessage || '').includes('mil gayi')
+  });
 
   const tPromptStart = Date.now();
  

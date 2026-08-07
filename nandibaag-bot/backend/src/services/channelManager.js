@@ -46,10 +46,11 @@ async function sendMessageViaChannel(chatId, text, channel, sessionId = 'primary
     .replace(/\\n/g, '\n')
     .trim();
 
-  console.log('[Send:ENTRY] Sending message');
-  console.log('[Send:ENTRY] Channel:', channel);
-  console.log('[Send:ENTRY] To:', chatId);
-  console.log('[Send:ENTRY] Text length:', finalText.length);
+  console.log('[Send:Attempt]', {
+    to: chatId,
+    channel,
+    text: finalText.slice(0, 50)
+  });
 
   console.log('[Send:DEBUG] Character breakdown:');
   console.log('Text length:', finalText.length);

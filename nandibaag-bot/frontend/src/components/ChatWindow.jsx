@@ -394,7 +394,20 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
                     )}
                   </div>
                 </div>
-                <p className="text-xs leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                {msg.messageType === 'image' || msg.mediaUrl || (msg.text && msg.text.includes('📷')) ? (
+                  <div className="space-y-1.5">
+                    {msg.mediaUrl ? (
+                      <img src={msg.mediaUrl} alt="Received photo" className="max-w-full rounded-lg max-h-60 object-cover shadow-xs" />
+                    ) : (
+                      <div className="flex items-center gap-1.5 font-semibold text-emerald-800 bg-emerald-50/80 p-2 rounded-lg text-xs border border-emerald-100">
+                        📸 Photo Received
+                      </div>
+                    )}
+                    {msg.text && msg.text !== '[Media]' && <p className="text-xs leading-relaxed whitespace-pre-wrap">{msg.text}</p>}
+                  </div>
+                ) : (
+                  <p className="text-xs leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                )}
               </div>
             </div>
           );
