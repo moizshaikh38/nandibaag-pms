@@ -97,6 +97,7 @@ export default function Sidebar() {
       title: 'CORE PMS',
       items: [
         { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+        { path: '/pms/manual-booking', label: 'Manual Booking', icon: FileText },
         { path: '/chats', label: 'WhatsApp Inbox', icon: MessageSquare },
         { path: '/availability', label: 'Availability Grid', icon: Grid3x3 },
         { path: '/pms/bookings', label: 'Guest Bookings', icon: BookOpen },
