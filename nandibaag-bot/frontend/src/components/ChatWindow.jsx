@@ -34,11 +34,76 @@ import {
 } from 'lucide-react';
 
 const QUICK_REPLIES = [
-  { label: '💰 Cottage Rates', text: 'Namaste! Our luxury cottages start at ₹3,500/night for couples including swimming pool access and delicious breakfast. Would you like to check date availability?' },
-  { label: '🏊 Pool Rules', text: 'Our clean resort swimming pool is open from 7:00 AM to 8:00 PM daily. Standard nylon/lycra swimwear is required for all guests.' },
-  { label: '⏰ Check-in/Out', text: 'Check-in time is 12:00 PM (Noon) and Check-out time is 10:00 AM. Early check-in is subject to cottage availability.' },
+  { 
+    label: '💰 Cottage Rates', 
+    text: `Booking Details
+
+Group Booking
+
+✅ Weekday (Mon – Thurs): ₹2000 per person
+✅ Weekend (Fri – Sun): ₹3000 per person
+✅ Kids Pricing:
+Below 5 years: Free
+6 to 10 years: ₹1000 per child
+Above 10 years: Charged as an adult
+⏳ Check-in: 12:00 PM
+⏳ Check-out: 10:30 AM
+
+Couple Booking
+✅ Weekday (Mon – Thurs): ₹5500 per couple
+✅ Weekend (Fri – Sun): ₹6500 per couple
+✅ KIDS CHARGES
+Below 5 yrs : Free
+6 to 10 yrs: ₹ 1000 per child
+10 to 15 yrs :1500 per child
+
+Includes: 4 meals + activities
+
+⏳ Check-in: 12:00 PM
+⏳ Check-out: 10:30 AM
+
+One-Day Package
+
+Weekday
+✅ Breakfast to Dinner: ₹1250 pp
+✅️Breakfast to Hiitea 1000 pp
+
+Weekend
+✅ Breakfast to Dinner 1500 pp
+✅️Breakfast to Hiiitea 1250 pp
+
+✅ ONE DAY PICNIC ROOM CHARGES 2000
+ROOM STRICTLY ALLOTTED AT 12 PM
+
+NOTE : GST CHARGE 5% IN WHOLE AMOUNT. IT IS COMPULSORY ANY MODE OF PAYMENT
+
+✅ INCLUDING ACTIVITIES
+KAYAKING
+BARMABRIDGE
+ROPE CYCLING
+INDOOR OUTDOOR GAMES
+POOL
+BABY POOL
+RAINDANCE
+
+Activities timing
+Kayaking and rope cycling
+9:00 am to 1:30 pm
+3:00 pm to 6:00 pm
+
+DOLLERS CAFE TIMING
+12:00 PM TO 12:00 AM
+
+OUR POLICY : -
+ONE DAY PICNIC STRICTLY ROOM ALLOTTED AT 12:00 PM
+NONVEG NOT ALLOWED IN PROPERTY
+REFUND POLICY:
+NON REFUNDABLE` 
+  },
+  { label: '🏊 Pool & Activities', text: 'Namaste! Outdoor & Swimming pool is included in all packages. Activities timing: Kayaking & Rope Cycling from 9:00 AM to 1:30 PM & 3:00 PM to 6:00 PM.' },
+  { label: '⏰ Check-in/Out', text: 'Check-in time is 12:00 PM (Noon) and Check-out time is 10:30 AM.' },
   { label: '📍 Location', text: 'Nandibaag Resort is located in Karjat, Maharashtra. We provide free parking on premises for all guests.' },
-  { label: '💳 Payment Details', text: 'You can pay advance via Google Pay / PhonePe / Paytm / UPI to confirm your cottage reservation.' }
+  { label: '💳 Payment & GST', text: 'Note: 5% GST charge is applicable on the whole amount across any mode of payment. Advance payment via Google Pay / PhonePe / Paytm / UPI.' }
 ];
 
 export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated }) {
