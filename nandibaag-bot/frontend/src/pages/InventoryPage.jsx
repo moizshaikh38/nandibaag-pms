@@ -346,8 +346,8 @@ export default function InventoryPage() {
 
       {/* Add Series Modal */}
       {showAddSeries && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="glass-card rounded-2xl max-w-sm w-full p-6 space-y-4 bg-white animate-fade-in shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-3 sm:p-6 pt-6 sm:pt-12 bg-slate-950/80 backdrop-blur-xs overflow-y-auto">
+          <div className="glass-card rounded-2xl max-w-sm w-full p-5 sm:p-6 space-y-4 bg-white animate-fade-in shadow-2xl mt-0 mb-auto border border-slate-200">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="font-display font-bold text-base text-slate-800">Add Room Series</h3>
               <button onClick={() => setShowAddSeries(false)} className="text-slate-400 hover:text-slate-700">
@@ -387,8 +387,8 @@ export default function InventoryPage() {
 
       {/* Add Room Modal */}
       {showAddRoom && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="glass-card rounded-2xl max-w-sm w-full p-6 space-y-4 bg-white animate-fade-in shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-3 sm:p-6 pt-6 sm:pt-12 bg-slate-950/80 backdrop-blur-xs overflow-y-auto">
+          <div className="glass-card rounded-2xl max-w-sm w-full p-5 sm:p-6 space-y-4 bg-white animate-fade-in shadow-2xl mt-0 mb-auto border border-slate-200">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="font-display font-bold text-base text-slate-800">Add Cottage Room</h3>
               <button onClick={() => setShowAddRoom(null)} className="text-slate-400 hover:text-slate-700">
@@ -441,8 +441,8 @@ export default function InventoryPage() {
 
       {/* Edit Room Capacity Modal */}
       {editingRoom && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="glass-card rounded-2xl max-w-sm w-full p-6 space-y-4 bg-white animate-fade-in shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-3 sm:p-6 pt-4 sm:pt-10 bg-slate-950/80 backdrop-blur-xs overflow-y-auto">
+          <div className="glass-card rounded-2xl max-w-sm w-full p-5 sm:p-6 space-y-4 bg-white animate-fade-in shadow-2xl mt-0 mb-auto border border-slate-200">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="font-display font-bold text-base text-slate-800">
                 Edit Room {editingRoom.roomNumber} Capacity
