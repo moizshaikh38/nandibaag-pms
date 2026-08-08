@@ -8,16 +8,13 @@ import {
   Calendar,
   Package,
   Users,
-  UserCheck,
-  Plus,
   Check,
   CreditCard,
   Building,
   Upload,
   Sparkles,
   CheckCircle2,
-  ChevronRight,
-  ChevronLeft
+  Image as ImageIcon
 } from 'lucide-react';
 import '../styles/ManualBookingForm.css';
 
@@ -42,9 +39,7 @@ const ManualBookingForm = () => {
     notes: ''
   });
 
-  const [activeTab, setActiveTab] = useState('step1'); // 'step1' | 'step2' for mobile view
   const [staffOptions, setStaffOptions] = useState([]);
-  const [availableRooms, setAvailableRooms] = useState([]);
   const [selectedRooms, setSelectedRooms] = useState([]);
   const [roomsList, setRoomsList] = useState([]);
   const [totalCapacity, setTotalCapacity] = useState(0);
@@ -78,11 +73,9 @@ const ManualBookingForm = () => {
     try {
       const res = await api.get('/rooms/availability', { params: { checkInDate: checkIn, checkOutDate: checkOut } });
       const rooms = res.data.rooms || [];
-      setAvailableRooms(rooms);
       setRoomsList(rooms);
     } catch (err) {
       console.error('[Form:Rooms] Error:', err);
-      setAvailableRooms([]);
       setRoomsList([]);
     }
   };
@@ -103,7 +96,6 @@ const ManualBookingForm = () => {
 
     setSelectedRooms(newSelection);
 
-    // Calculate capacity
     const cap = newSelection.reduce((sum, num) => {
       const roomObj = roomsList.find(r => (r.number || r.roomNumber || String(r._id)) === num);
       return sum + (roomObj?.capacity || 4);
@@ -198,13 +190,12 @@ const ManualBookingForm = () => {
   const handleDeleteStaff = async (staffId) => {
     try {
       const response = await api.delete(`/bookings/staff-names/${staffId}`);
-      const updated = response.data.staffNames || formData.staffNames.filter(s => s.id !== staffId);
+      const updatedNames = response.data.staffNames || formData.staffNames.filter(s => s.id !== staffId);
       setFormData(prev => ({
         ...prev,
-        staffNames: updated,
-        bookedBy: prev.bookedBy.staffId === staffId ? { name: '', staffId: '' } : prev.bookedBy
+        staffNames: updatedNames
       }));
-      setStaffOptions(updated);
+      setStaffOptions(updatedNames);
       toast.success('Staff removed');
     } catch (error) {
       toast.error('Failed to delete staff');
@@ -214,17 +205,16 @@ const ManualBookingForm = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setMessage('');
 
-    if (!formData.customerName.trim() || !formData.customerPhone.trim()) {
-      toast.error('Customer name and phone number are required');
-      setActiveTab('step1');
+    if (!formData.customerName || !formData.customerPhone) {
+      toast.error('Customer Name and Phone are required!');
       setLoading(false);
       return;
     }
 
     if (!formData.bookedBy.name) {
       toast.error('Please select staff member who took the booking');
-      setActiveTab('step2');
       setLoading(false);
       return;
     }
@@ -264,8 +254,7 @@ const ManualBookingForm = () => {
           notes: ''
         });
         setMessage('');
-        setActiveTab('step1');
-      }, 1500);
+      }, 1200);
     } catch (error) {
       toast.error(error.response?.data?.error || 'Error creating booking');
       setMessage(error.response?.data?.error || 'Error creating booking');
@@ -275,109 +264,80 @@ const ManualBookingForm = () => {
   };
 
   return (
-    <div className="max-w-5xl mx-auto my-1 sm:my-2 bg-white rounded-2xl sm:rounded-3xl shadow-xl border border-slate-200/80 overflow-hidden animate-fade-in">
-      {/* Compact Header Banner */}
-      <div className="bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 px-4 py-3 sm:px-6 sm:py-4 text-white flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center border border-white/20">
-            <FileEdit size={18} className="text-emerald-200" />
+    <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-lg border border-slate-200/90 overflow-hidden animate-fade-in text-slate-800">
+      
+      {/* Top Banner Header */}
+      <div className="bg-gradient-to-r from-emerald-900 via-emerald-800 to-teal-900 px-3.5 py-2.5 sm:px-5 sm:py-3 text-white flex items-center justify-between gap-2 border-b border-emerald-700/50">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-white/15 backdrop-blur-md flex items-center justify-center border border-white/20">
+            <FileEdit size={16} className="text-emerald-200" />
           </div>
           <div>
-            <h2 className="text-base sm:text-lg font-display font-extrabold leading-tight">
+            <h2 className="text-sm sm:text-base font-display font-extrabold leading-none tracking-tight">
               Add Manual Reservation
             </h2>
-            <p className="text-[11px] text-emerald-100/90 font-medium hidden sm:block">
-              Front Desk Entry • Direct PMS Sync
+            <p className="text-[10px] text-emerald-200/90 font-medium mt-0.5">
+              Front Desk Entry • Single Page PMS Direct Sync
             </p>
           </div>
         </div>
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-100 text-[10px] sm:text-xs font-bold border border-emerald-400/30">
-          <Sparkles size={11} className="text-emerald-300" /> Live Sync
+        
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-100 text-[10px] font-bold border border-emerald-400/30">
+          <Sparkles size={10} className="text-emerald-300" /> Live Sync
         </span>
       </div>
 
       {message && (
-        <div className="m-3 mb-0 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold text-xs flex items-center gap-2">
-          <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+        <div className="mx-3 mt-2 p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold text-xs flex items-center gap-2">
+          <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
           <span>{message}</span>
         </div>
       )}
 
-      {/* Mobile Step Switcher Tabs (Visible on screens < 1024px) */}
-      <div className="lg:hidden flex border-b border-slate-200 bg-slate-50 p-1">
-        <button
-          type="button"
-          onClick={() => setActiveTab('step1')}
-          className={`flex-1 py-2 px-3 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 ${
-            activeTab === 'step1'
-              ? 'bg-white text-emerald-800 shadow-xs border border-slate-200'
-              : 'text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <span>1. Dates & Package</span>
-          {formData.customerName && formData.customerPhone !== '+91' && (
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('step2')}
-          className={`flex-1 py-2 px-3 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 ${
-            activeTab === 'step2'
-              ? 'bg-white text-emerald-800 shadow-xs border border-slate-200'
-              : 'text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <span>2. Room & Payment</span>
-          {formData.bookedBy.name && (
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-          )}
-        </button>
-      </div>
-
-      <form onSubmit={handleSubmit} className="p-4 sm:p-5">
-        {/* 2-Column Responsive Grid on Desktop (lg:grid-cols-2) */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      {/* SINGLE-PAGE COMPACT FORM GRID */}
+      <form onSubmit={handleSubmit} className="p-2.5 sm:p-4">
+        
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 sm:gap-3">
           
-          {/* LEFT COLUMN: STEP 1 (Dates, Guest Info, Package & Composition) */}
-          <div className={`space-y-4 ${activeTab === 'step2' ? 'hidden lg:block' : 'block'}`}>
+          {/* LEFT SECTION (Col 1-7): Guest Info, Package & Rooms */}
+          <div className="md:col-span-7 space-y-2.5">
             
-            {/* 1. DATES & GUEST INFO */}
-            <div className="p-3.5 rounded-2xl bg-slate-50/70 border border-slate-200/80 space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
-                <Calendar size={15} /> Dates & Guest Info
+            {/* 1. DATES & GUEST CONTACT */}
+            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/90 space-y-2">
+              <h3 className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1">
+                <Calendar size={13} /> Dates & Guest Contact
               </h3>
 
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Check-in *</label>
+                  <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">Check-in *</label>
                   <input
                     type="date"
                     name="checkInDate"
                     value={formData.checkInDate}
                     onChange={(e) => handleDateChange('checkInDate', e.target.value)}
                     required
-                    className="w-full px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-xl bg-white"
+                    className="w-full px-2 py-1 text-xs font-semibold border border-slate-300 rounded-lg bg-white focus:ring-1 focus:ring-emerald-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Check-out *</label>
+                  <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">Check-out *</label>
                   <input
                     type="date"
                     name="checkOutDate"
                     value={formData.checkOutDate}
                     onChange={(e) => handleDateChange('checkOutDate', e.target.value)}
                     required
-                    className="w-full px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-xl bg-white"
+                    className="w-full px-2 py-1 text-xs font-semibold border border-slate-300 rounded-lg bg-white focus:ring-1 focus:ring-emerald-500"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Guest Name *</label>
+                  <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">Guest Name *</label>
                   <div className="relative">
-                    <User size={13} className="absolute left-2.5 top-2.5 text-slate-400" />
+                    <User size={12} className="absolute left-2 top-2 text-slate-400" />
                     <input
                       type="text"
                       name="customerName"
@@ -385,14 +345,14 @@ const ManualBookingForm = () => {
                       value={formData.customerName}
                       onChange={handleInputChange}
                       required
-                      className="w-full pl-8 pr-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-xl bg-white"
+                      className="w-full pl-7 pr-2 py-1 text-xs font-semibold border border-slate-300 rounded-lg bg-white focus:ring-1 focus:ring-emerald-500"
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Guest Phone *</label>
+                  <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">Guest Phone *</label>
                   <div className="relative">
-                    <Phone size={13} className="absolute left-2.5 top-2.5 text-slate-400" />
+                    <Phone size={12} className="absolute left-2 top-2 text-slate-400" />
                     <input
                       type="text"
                       name="customerPhone"
@@ -400,20 +360,20 @@ const ManualBookingForm = () => {
                       value={formData.customerPhone}
                       onChange={handleInputChange}
                       required
-                      className="w-full pl-8 pr-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-xl bg-white"
+                      className="w-full pl-7 pr-2 py-1 text-xs font-semibold border border-slate-300 rounded-lg bg-white focus:ring-1 focus:ring-emerald-500"
                     />
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* 2. PACKAGE TYPE & GUESTS */}
-            <div className="p-3.5 rounded-2xl bg-slate-50/70 border border-slate-200/80 space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
-                <Package size={15} /> Package Type & Guests
+            {/* 2. PACKAGE TYPE & GUEST COUNT */}
+            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/90 space-y-2">
+              <h3 className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1">
+                <Package size={13} /> Package Type & Guest Count
               </h3>
 
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-1.5">
                 {[
                   { id: 'couple', label: 'Couple Stay', sub: '2 Adults' },
                   { id: 'group', label: 'Group Stay', sub: 'Family/Group' },
@@ -423,56 +383,54 @@ const ManualBookingForm = () => {
                     type="button"
                     key={pkg.id}
                     onClick={() => setFormData(prev => ({ ...prev, packageType: pkg.id }))}
-                    className={`p-2 text-left rounded-xl border transition-all ${
+                    className={`p-1.5 text-left rounded-lg border transition-all ${
                       formData.packageType === pkg.id
-                        ? 'border-emerald-600 bg-emerald-600 text-white font-bold shadow-xs'
-                        : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400'
+                        ? 'border-emerald-600 bg-emerald-600 text-white font-bold shadow-2xs'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] block leading-tight">{pkg.label}</span>
-                      {formData.packageType === pkg.id && <Check size={11} />}
+                      <span className="text-[11px] leading-none font-bold">{pkg.label}</span>
+                      {formData.packageType === pkg.id && <Check size={10} />}
                     </div>
-                    <span className={`text-[9px] block ${formData.packageType === pkg.id ? 'text-emerald-100' : 'text-slate-400'}`}>
+                    <span className={`text-[9px] block mt-0.5 ${formData.packageType === pkg.id ? 'text-emerald-100' : 'text-slate-400'}`}>
                       {pkg.sub}
                     </span>
                   </button>
                 ))}
               </div>
 
-              {/* Show meal option only for One Day Picnic */}
+              {/* Meal Options for One Day Picnic */}
               {formData.packageType === 'oneDay' && (
-                <div className="mt-2.5 p-3 rounded-xl bg-sky-50/80 border border-sky-200/80 space-y-2">
-                  <label className="block text-[11px] font-bold text-sky-900">
-                    One Day Meal Option:
+                <div className="p-2 rounded-lg bg-sky-50 border border-sky-200 space-y-1">
+                  <label className="block text-[10px] font-bold text-sky-900">
+                    Meal Option:
                   </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-1.5">
                     {[
-                      { value: 'B->D', label: 'Breakfast to Dinner', time: '9 AM - 9:30 PM' },
-                      { value: 'B->T', label: 'Breakfast to Hi-tea', time: '9 AM - 6:30 PM' },
-                      { value: 'B->L', label: 'Breakfast to Lunch', time: '9 AM - 2:30 PM' }
+                      { value: 'B->D', label: 'B → D', time: '9am - 9:30pm' },
+                      { value: 'B->T', label: 'B → Tea', time: '9am - 6:30pm' },
+                      { value: 'B->L', label: 'B → Lunch', time: '9am - 2:30pm' }
                     ].map(opt => (
                       <label
                         key={opt.value}
-                        className={`p-2 rounded-lg border text-left cursor-pointer transition-all flex flex-col justify-between ${
+                        className={`p-1.5 rounded-md border text-center cursor-pointer transition-all ${
                           formData.mealOption === opt.value
-                            ? 'bg-sky-600 text-white border-sky-600 font-bold shadow-xs'
-                            : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                            ? 'bg-sky-600 text-white border-sky-600 font-bold shadow-2xs'
+                            : 'bg-white text-slate-700 border-slate-200'
                         }`}
                       >
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            type="radio"
-                            name="mealOption"
-                            value={opt.value}
-                            checked={formData.mealOption === opt.value}
-                            onChange={(e) => setFormData(prev => ({ ...prev, mealOption: e.target.value }))}
-                            className="sr-only"
-                          />
-                          <span className="text-[11px] leading-tight block">{opt.label}</span>
-                        </div>
-                        <span className={`text-[9px] block mt-1 ${formData.mealOption === opt.value ? 'text-sky-100' : 'text-slate-400'}`}>
-                          ({opt.time})
+                        <input
+                          type="radio"
+                          name="mealOption"
+                          value={opt.value}
+                          checked={formData.mealOption === opt.value}
+                          onChange={(e) => setFormData(prev => ({ ...prev, mealOption: e.target.value }))}
+                          className="sr-only"
+                        />
+                        <span className="text-[10px] font-bold block">{opt.label}</span>
+                        <span className={`text-[8px] block ${formData.mealOption === opt.value ? 'text-sky-100' : 'text-slate-400'}`}>
+                          {opt.time}
                         </span>
                       </label>
                     ))}
@@ -480,153 +438,127 @@ const ManualBookingForm = () => {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-2.5">
+              {/* Guest Counts */}
+              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Adults (12+ Yrs)</label>
+                  <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">Adults (12+ Yrs)</label>
                   <input
                     type="number"
                     min="1"
                     name="guestComposition.adults"
                     value={formData.guestComposition.adults}
                     onChange={handleInputChange}
-                    className="w-full px-2.5 py-1.5 text-xs font-bold border border-slate-300 rounded-xl bg-white"
+                    className="w-full px-2 py-1 text-xs font-bold border border-slate-300 rounded-lg bg-white text-center"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Children (&lt;12 Yrs)</label>
+                  <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">Children (&lt;12 Yrs)</label>
                   <input
                     type="number"
                     min="0"
                     name="guestComposition.children"
                     value={formData.guestComposition.children}
                     onChange={handleInputChange}
-                    className="w-full px-2.5 py-1.5 text-xs font-bold border border-slate-300 rounded-xl bg-white"
+                    className="w-full px-2 py-1 text-xs font-bold border border-slate-300 rounded-lg bg-white text-center"
                   />
                 </div>
               </div>
+            </div>
 
-              <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] font-bold flex items-center justify-between">
-                <span className="flex items-center gap-1">
-                  <Users size={13} className="text-emerald-700" /> Summary:
-                </span>
-                <span>{formData.guestComposition.adults} Adults + {formData.guestComposition.children} Children</span>
+            {/* 3. MULTI-ROOM SELECTION GRID */}
+            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/90 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <h3 className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1">
+                  <Building size={13} /> Select Cottage Rooms
+                </h3>
+                {selectedRooms.length > 0 && (
+                  <span className="text-[9px] text-emerald-800 bg-emerald-100 px-2 py-0.2 rounded-full font-bold border border-emerald-300">
+                    Cap: {totalCapacity} ({selectedRooms.length} {selectedRooms.length === 1 ? 'room' : 'rooms'})
+                  </span>
+                )}
               </div>
-            </div>
 
-            {/* Mobile Next Step Button */}
-            <div className="lg:hidden pt-1">
-              <button
-                type="button"
-                onClick={() => setActiveTab('step2')}
-                className="w-full py-2.5 px-4 bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1"
-              >
-                <span>Continue to Room & Payment</span>
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          </div>
+              {roomsList.length > 0 ? (
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 max-h-32 overflow-y-auto p-1 bg-white border border-slate-200 rounded-lg">
+                  {roomsList.map((room) => {
+                    const num = room.number || room.roomNumber || String(room._id);
+                    const isChecked = selectedRooms.includes(num);
+                    return (
+                      <label
+                        key={num}
+                        onClick={() => handleRoomToggle(num)}
+                        className={`p-1.5 rounded-md border text-left cursor-pointer transition-all flex items-center justify-between select-none ${
+                          isChecked
+                            ? 'bg-emerald-600 text-white border-emerald-600 font-bold shadow-2xs'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <span className="text-[11px]">Room {num}</span>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          readOnly
+                          className="w-3 h-3 accent-emerald-600 rounded"
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-[10px] text-slate-500 bg-slate-100 p-1.5 rounded-lg border border-slate-200">
+                  No available rooms for selected dates.
+                </p>
+              )}
 
-          {/* RIGHT COLUMN: STEP 2 (Room, Staff, ID Proof, Notes & Payment) */}
-          <div className={`space-y-4 ${activeTab === 'step1' ? 'hidden lg:block' : 'block'}`}>
-            
-            {/* 3. ROOM & STAFF SELECTION */}
-            <div className="p-3.5 rounded-2xl bg-slate-50/70 border border-slate-200/80 space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
-                <Building size={15} /> Room & Staff Handover
-              </h3>
-
-              {/* ===== MULTI-ROOM SELECTION SECTION ===== */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="block text-[11px] font-bold text-slate-700">
-                    🏨 Select Cottage Rooms (Multi-Select):
-                  </label>
-                  {selectedRooms.length > 0 && (
-                    <span className="text-[10px] text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full font-bold border border-emerald-300">
-                      Cap: {totalCapacity} Guests ({selectedRooms.length} {selectedRooms.length === 1 ? 'room' : 'rooms'})
-                    </span>
+              {selectedRooms.length > 0 && (
+                <div className="p-1.5 rounded-lg bg-sky-50 border border-sky-200 text-sky-900 text-[10px] flex items-center justify-between">
+                  <span>Selected: <strong>{selectedRooms.join(', ')}</strong></span>
+                  {formData.guestComposition.adults + formData.guestComposition.children > totalCapacity && (
+                    <span className="text-rose-700 font-bold">⚠️ Exceeds capacity!</span>
                   )}
                 </div>
+              )}
+            </div>
 
-                {roomsList.length > 0 ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 max-h-44 overflow-y-auto p-1.5 bg-white border border-slate-300 rounded-xl">
-                    {roomsList.map((room) => {
-                      const num = room.number || room.roomNumber || String(room._id);
-                      const isChecked = selectedRooms.includes(num);
-                      return (
-                        <label
-                          key={num}
-                          onClick={() => handleRoomToggle(num)}
-                          className={`p-2 rounded-lg border text-left cursor-pointer transition-all flex flex-col justify-between select-none ${
-                            isChecked
-                              ? 'bg-emerald-600 text-white border-emerald-600 font-bold shadow-xs'
-                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs">Room {num}</span>
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              readOnly
-                              className="w-3.5 h-3.5 accent-emerald-600 rounded"
-                            />
-                          </div>
-                          <span className={`text-[9px] block mt-0.5 ${isChecked ? 'text-emerald-100' : 'text-slate-400'}`}>
-                            Cap: {room.capacity || 4} guests
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-[11px] text-slate-500 bg-slate-100 p-2 rounded-xl border border-slate-200 font-medium">
-                    No available rooms for selected dates. Choose different dates.
-                  </p>
-                )}
+          </div>
 
-                {selectedRooms.length > 0 && (
-                  <div className="p-2 rounded-xl bg-sky-50 border border-sky-200 text-sky-900 text-[11px] space-y-1">
-                    <p className="font-semibold">
-                      Selected Rooms: <strong className="font-bold text-sky-950">{selectedRooms.join(', ')}</strong>
-                    </p>
-                    {formData.guestComposition.adults + formData.guestComposition.children > totalCapacity && (
-                      <p className="text-rose-700 font-bold flex items-center gap-1">
-                        ⚠️ Total guests ({formData.guestComposition.adults + formData.guestComposition.children}) exceeds total capacity ({totalCapacity}). Please add more rooms!
-                      </p>
-                    )}
-                  </div>
-                )}
+          {/* RIGHT SECTION (Col 8-12): Staff Handover, ID Proof & Payment */}
+          <div className="md:col-span-5 space-y-2.5">
+            
+            {/* 4. STAFF HANDOVER */}
+            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/90 space-y-2">
+              <h3 className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1">
+                <Users size={13} /> Staff Handover
+              </h3>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">Booked By (Staff) *</label>
+                <select
+                  name="bookedByName"
+                  value={formData.bookedBy.name}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full px-2 py-1 text-xs font-semibold border border-slate-300 rounded-lg bg-white focus:ring-1 focus:ring-emerald-500"
+                >
+                  <option value="">-- Select Staff Member --</option>
+                  {formData.staffNames.map(staff => (
+                    <option key={staff.id} value={staff.name}>
+                      {staff.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Booked By (Staff) *</label>
-                  <select
-                    name="bookedByName"
-                    value={formData.bookedBy.name}
-                    onChange={handleInputChange}
-                    required
-                    className="w-full px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-xl bg-white"
-                  >
-                    <option value="">-- Select Staff --</option>
-                    {formData.staffNames.map(staff => (
-                      <option key={staff.id} value={staff.name}>
-                        {staff.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-              {/* Compact Staff Pills */}
-              <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                <span className="text-[10px] font-bold text-slate-500 mr-1">Roster:</span>
+              {/* Roster Badges */}
+              <div className="flex flex-wrap items-center gap-1">
+                <span className="text-[9px] font-bold text-slate-400">Roster:</span>
                 {formData.staffNames.map(staff => (
                   <span
                     key={staff.id}
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold ${
+                    className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-semibold ${
                       formData.bookedBy.name === staff.name
                         ? 'bg-emerald-600 text-white'
-                        : 'bg-white text-slate-700 border border-slate-200'
+                        : 'bg-white text-slate-600 border border-slate-200'
                     }`}
                   >
                     {staff.name}
@@ -637,7 +569,7 @@ const ManualBookingForm = () => {
                   <button
                     type="button"
                     onClick={() => setShowAddStaff(true)}
-                    className="text-[10px] font-bold text-emerald-700 hover:text-emerald-800 px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200"
+                    className="text-[9px] font-bold text-emerald-700 px-1 py-0.2 rounded bg-emerald-50 border border-emerald-200"
                   >
                     + Add
                   </button>
@@ -648,25 +580,25 @@ const ManualBookingForm = () => {
                       placeholder="Name..."
                       value={newStaffName}
                       onChange={(e) => setNewStaffName(e.target.value)}
-                      className="px-1.5 py-0.5 text-[10px] border border-slate-300 rounded bg-white w-20"
+                      className="px-1 py-0.2 text-[9px] border border-slate-300 rounded bg-white w-16"
                     />
-                    <button type="button" onClick={handleAddStaff} className="px-1.5 py-0.5 bg-emerald-600 text-white text-[10px] font-bold rounded">Save</button>
-                    <button type="button" onClick={() => setShowAddStaff(false)} className="px-1.5 py-0.5 bg-slate-200 text-slate-700 text-[10px] font-bold rounded">✕</button>
+                    <button type="button" onClick={handleAddStaff} className="px-1 py-0.2 bg-emerald-600 text-white text-[9px] font-bold rounded">Save</button>
+                    <button type="button" onClick={() => setShowAddStaff(false)} className="px-1 py-0.2 bg-slate-200 text-slate-700 text-[9px] font-bold rounded">✕</button>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* 4. ID PROOF & NOTES */}
-            <div className="p-3.5 rounded-2xl bg-slate-50/70 border border-slate-200/80 space-y-2.5">
-              <div className="grid grid-cols-2 gap-2.5">
+            {/* 5. ID PROOF & NOTES */}
+            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/90 space-y-2">
+              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">ID Proof Type</label>
+                  <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">ID Type</label>
                   <select
                     name="guestIdProofType"
                     value={formData.guestIdProofType}
                     onChange={handleInputChange}
-                    className="w-full px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-xl bg-white"
+                    className="w-full px-2 py-1 text-xs font-semibold border border-slate-300 rounded-lg bg-white"
                   >
                     <option value="aadhaar">Aadhaar Card</option>
                     <option value="pan">PAN Card</option>
@@ -674,93 +606,84 @@ const ManualBookingForm = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Upload ID Photo</label>
+                  <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">Upload ID</label>
                   <input
                     type="file"
                     accept="image/*"
                     onChange={handleFileUpload}
-                    className="w-full text-[10px] text-slate-500 file:mr-1 file:py-0.5 file:px-1.5 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-emerald-100 file:text-emerald-800 cursor-pointer"
+                    className="w-full text-[9px] text-slate-500 file:mr-1 file:py-0.5 file:px-1 file:rounded file:border-0 file:text-[9px] file:font-semibold file:bg-emerald-100 file:text-emerald-800 cursor-pointer"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Notes / Special Requests (Optional)</label>
+                <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">Notes / Special Requests (Optional)</label>
                 <textarea
                   name="notes"
-                  placeholder="Extra mattress? Birthday setup? Jain meal request..."
+                  placeholder="Extra mattress, Jain meal..."
                   value={formData.notes}
                   onChange={handleInputChange}
                   rows={2}
                   maxLength={500}
-                  className="w-full p-2 text-xs font-medium border border-slate-300 rounded-xl bg-white"
+                  className="w-full p-1.5 text-xs font-medium border border-slate-300 rounded-lg bg-white resize-none"
                 />
               </div>
             </div>
 
-            {/* 5. PAYMENT & SUBMIT */}
-            <div className="p-3.5 rounded-2xl bg-emerald-950 text-white space-y-3 shadow-md">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-300 flex items-center gap-1.5">
-                <CreditCard size={15} /> Payment Details & Submit
+            {/* 6. PAYMENT SUMMARY & SUBMIT BUTTON */}
+            <div className="p-3 rounded-xl bg-slate-900 text-white space-y-2.5 shadow-md">
+              <h3 className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1">
+                <CreditCard size={13} /> Payment Breakdown
               </h3>
 
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-1.5">
                 <div>
-                  <label className="block text-[10px] font-bold text-emerald-200 mb-0.5">Total (₹) *</label>
+                  <label className="block text-[9px] font-bold text-slate-300 mb-0.5">Total (₹) *</label>
                   <input
                     type="number"
                     name="totalAmount"
                     value={formData.totalAmount}
                     onChange={handleInputChange}
                     required
-                    className="w-full px-2 py-1.5 text-xs font-bold border border-emerald-700 rounded-lg bg-emerald-900/50 text-white"
+                    className="w-full px-2 py-1 text-xs font-bold border border-slate-700 rounded-lg bg-slate-800 text-white text-center"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-emerald-200 mb-0.5">Advance (₹)</label>
+                  <label className="block text-[9px] font-bold text-emerald-300 mb-0.5">Advance (₹)</label>
                   <input
                     type="number"
                     name="advancePayment"
                     value={formData.advancePayment}
                     onChange={handleInputChange}
-                    className="w-full px-2 py-1.5 text-xs font-bold border border-emerald-700 rounded-lg bg-emerald-900/50 text-emerald-300"
+                    className="w-full px-2 py-1 text-xs font-bold border border-emerald-700/60 rounded-lg bg-emerald-950/80 text-emerald-300 text-center"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-amber-300 mb-0.5">Balance (₹)</label>
+                  <label className="block text-[9px] font-bold text-amber-300 mb-0.5">Balance (₹)</label>
                   <input
                     type="number"
                     readOnly
                     value={formData.remainingPayment}
-                    className="w-full px-2 py-1.5 text-xs font-bold border border-amber-500/50 bg-amber-950/60 text-amber-300 rounded-lg"
+                    className="w-full px-2 py-1 text-xs font-bold border border-amber-500/50 bg-amber-950/80 text-amber-300 rounded-lg text-center"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-2 pt-1">
-                {/* Mobile Back Button */}
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('step1')}
-                  className="lg:hidden px-3 py-2.5 bg-emerald-900 hover:bg-emerald-800 text-emerald-200 font-bold text-xs rounded-xl flex items-center gap-1"
-                >
-                  <ChevronLeft size={15} /> Back
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-display font-bold text-xs sm:text-sm shadow-md transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
-                >
-                  {loading ? 'Creating Booking...' : '✓ Create & Confirm Booking'}
-                </button>
-              </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-[0.99] text-white font-display font-extrabold text-xs sm:text-sm shadow-md transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                {loading ? 'Creating Reservation...' : '✓ Create & Confirm Reservation'}
+              </button>
             </div>
+
           </div>
 
         </div>
+
       </form>
     </div>
   );
