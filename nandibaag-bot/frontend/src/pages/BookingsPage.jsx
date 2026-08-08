@@ -3,6 +3,7 @@ import api from '../utils/api';
 import { formatDMY } from '../utils/formatters';
 import toast from 'react-hot-toast';
 import ManualBookingForm from '../components/ManualBookingForm';
+import { groupBookingsByDate } from '../utils/bookingGrouper';
 import {
   Plus,
   Search,
@@ -57,6 +58,7 @@ export default function BookingsPage() {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ status: '', search: '', date: '' });
+  const [sortOrder, setSortOrder] = useState('asc');
 
   // Modals
   const [cancelModal, setCancelModal] = useState(null);
@@ -492,7 +494,25 @@ export default function BookingsPage() {
           </button>
         </form>
 
-        <div className="flex items-center gap-2 w-full md:w-auto">
+        <div className="flex items-center gap-2 w-full md:w-auto flex-wrap">
+          <button
+            type="button"
+            onClick={() => setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'))}
+            className="px-3 py-2 text-xs font-bold border border-slate-200 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 transition-colors flex items-center gap-1.5 shrink-0"
+            title="Toggle date sort order"
+          >
+            <CalendarDays size={13} className="text-emerald-600" />
+            <span>{sortOrder === 'asc' ? 'Earliest First' : 'Latest First'}</span>
+          </button>
+
+          <input
+            type="date"
+            value={filters.date}
+            onChange={(e) => setFilters(prev => ({ ...prev, date: e.target.value }))}
+            className="px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-white"
+            title="Filter by check-in date"
+          />
+
           <select
             value={filters.status}
             onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
@@ -521,124 +541,144 @@ export default function BookingsPage() {
           <p className="text-xs text-slate-400">Click "Add Manual Booking" to create a new reservation.</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {bookings.map((b) => (
-            <div key={b._id} className="glass-card rounded-2xl p-5 bg-white border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-slate-300 transition-all">
-              <div className="space-y-1.5 flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="font-display font-bold text-base text-slate-800">{b.customerName}</h3>
-                  <StatusBadge status={b.status} />
-                  <span className="text-[10px] bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded-full capitalize">
-                    {b.bookingType || 'Couple'}
-                  </span>
-
-                  {/* ID Proof Thumbnail */}
-                  {b.guestIdProofPhoto && (
-                    <button
-                      onClick={() => setIdPhotoPreviewModal(b.guestIdProofPhoto)}
-                      className="inline-flex items-center gap-1 text-[10px] bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded-full border border-indigo-200 hover:bg-indigo-100 transition-colors"
-                      title="View Guest ID Photo"
-                    >
-                      <ImageIcon size={10} />
-                      <span>ID Attached</span>
-                    </button>
-                  )}
+        <div className="space-y-6">
+          {groupBookingsByDate(bookings, sortOrder).map((dateGroup) => (
+            <div key={dateGroup.isoDateKey} className="space-y-3">
+              {/* DATE HEADER BANNER */}
+              <div className="flex items-center justify-between p-3.5 px-4 rounded-2xl bg-gradient-to-r from-slate-900 via-emerald-950 to-teal-900 text-white shadow-xs border border-emerald-700/40">
+                <div className="flex items-center gap-2.5">
+                  <CalendarDays size={18} className="text-emerald-400" />
+                  <h3 className="font-display font-extrabold text-sm tracking-wide uppercase">
+                    📅 {dateGroup.formattedDate}
+                  </h3>
                 </div>
-
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-                  <span className="flex items-center gap-1">
-                    <Phone size={13} className="text-slate-400" />
-                    <span>{b.customerPhone}</span>
-                  </span>
-
-                  <span className="flex items-center gap-1 font-semibold text-slate-700">
-                    <CalendarDays size={13} className="text-slate-400" />
-                    <span>{formatDMY(b.checkInDate || b.date)} ➔ {formatDMY(b.checkOutDate || (new Date(b.checkInDate || b.date).getTime() + 86400000))}</span>
-                  </span>
-
-                  <span className="flex items-center gap-1 font-bold text-emerald-800">
-                    <DollarSign size={13} />
-                    <span>Total: ₹{b.totalAmount}</span>
-                  </span>
-
-                  {b.advancePayment > 0 && (
-                    <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                      Adv: ₹{b.advancePayment}
-                    </span>
-                  )}
-
-                  {b.remainingPayment > 0 ? (
-                    <span className="text-[11px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                      Bal: ₹{b.remainingPayment}
-                    </span>
-                  ) : (
-                    <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-300">
-                      ✓ Paid
-                    </span>
-                  )}
-                </div>
+                <span className="bg-white/15 backdrop-blur-md px-3 py-1 rounded-full text-xs font-extrabold text-emerald-200 border border-white/20">
+                  {dateGroup.bookings.length} {dateGroup.bookings.length === 1 ? 'booking' : 'bookings'}
+                </span>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-wrap items-center gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
-                
-                {/* FEATURE #1: 1-Click Settle Balance */}
-                {b.remainingPayment > 0 && (
-                  <button
-                    onClick={() => handleSettlePayment(b._id, b.remainingPayment)}
-                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-all flex items-center gap-1 hover:scale-105"
-                    title="Mark Remaining Balance as Fully Paid"
-                  >
-                    <CheckCheck size={13} />
-                    <span>Settle Bal (₹{b.remainingPayment})</span>
-                  </button>
-                )}
+              {/* BOOKINGS LIST FOR THIS DATE */}
+              <div className="space-y-3 pl-1 sm:pl-2">
+                {dateGroup.bookings.map((b) => (
+                  <div key={b._id} className="glass-card rounded-2xl p-5 bg-white border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-slate-300 transition-all">
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-display font-bold text-base text-slate-800">{b.customerName}</h3>
+                        <StatusBadge status={b.status} />
+                        <span className="text-[10px] bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded-full capitalize">
+                          {b.bookingType || 'Couple'}
+                        </span>
 
-                {/* FEATURE #2: Printable / WhatsApp PDF Receipt */}
-                <button
-                  onClick={() => setInvoiceModal(b)}
-                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors flex items-center gap-1"
-                  title="Generate Printable PDF Invoice Receipt"
-                >
-                  <Printer size={13} />
-                  <span>PDF Invoice</span>
-                </button>
+                        {/* ID Proof Thumbnail */}
+                        {b.guestIdProofPhoto && (
+                          <button
+                            onClick={() => setIdPhotoPreviewModal(b.guestIdProofPhoto)}
+                            className="inline-flex items-center gap-1 text-[10px] bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded-full border border-indigo-200 hover:bg-indigo-100 transition-colors"
+                            title="View Guest ID Photo"
+                          >
+                            <ImageIcon size={10} />
+                            <span>ID Attached</span>
+                          </button>
+                        )}
+                      </div>
 
-                {b.status === 'confirmed' && (
-                  <button
-                    onClick={() => handleStatusChange(b._id, 'checked_in')}
-                    className="px-3 py-1.5 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 text-xs font-semibold rounded-xl border border-emerald-200 transition-colors flex items-center gap-1"
-                  >
-                    <LogIn size={13} />
-                    <span>Check In</span>
-                  </button>
-                )}
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                        <span className="flex items-center gap-1">
+                          <Phone size={13} className="text-slate-400" />
+                          <span>{b.customerPhone}</span>
+                        </span>
 
-                {b.status === 'checked_in' && (
-                  <button
-                    onClick={() => handleStatusChange(b._id, 'checked_out')}
-                    className="px-3 py-1.5 bg-indigo-50 text-indigo-800 hover:bg-indigo-100 text-xs font-semibold rounded-xl border border-indigo-200 transition-colors flex items-center gap-1"
-                  >
-                    <LogOut size={13} />
-                    <span>Check Out</span>
-                  </button>
-                )}
+                        <span className="flex items-center gap-1 font-semibold text-slate-700">
+                          <CalendarDays size={13} className="text-slate-400" />
+                          <span>{formatDMY(b.checkInDate || b.date)} ➔ {formatDMY(b.checkOutDate || (new Date(b.checkInDate || b.date).getTime() + 86400000))}</span>
+                        </span>
 
-                <button
-                  onClick={() => { setCancelModal(b); setCancelReason(''); }}
-                  className="px-3 py-1.5 bg-amber-50 text-amber-800 hover:bg-amber-100 text-xs font-semibold rounded-xl border border-amber-200 transition-colors flex items-center gap-1"
-                >
-                  <XCircle size={13} />
-                  <span>Cancel</span>
-                </button>
+                        <span className="flex items-center gap-1 font-bold text-emerald-800">
+                          <DollarSign size={13} />
+                          <span>Total: ₹{b.totalAmount}</span>
+                        </span>
 
-                <button
-                  onClick={() => handleDeleteBooking(b._id)}
-                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-all flex items-center gap-1"
-                >
-                  <Trash2 size={13} />
-                  <span>Delete</span>
-                </button>
+                        {b.advancePayment > 0 && (
+                          <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                            Adv: ₹{b.advancePayment}
+                          </span>
+                        )}
+
+                        {b.remainingPayment > 0 ? (
+                          <span className="text-[11px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                            Bal: ₹{b.remainingPayment}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-300">
+                            ✓ Paid
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex flex-wrap items-center gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
+                      
+                      {/* FEATURE #1: 1-Click Settle Balance */}
+                      {b.remainingPayment > 0 && (
+                        <button
+                          onClick={() => handleSettlePayment(b._id, b.remainingPayment)}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-all flex items-center gap-1 hover:scale-105"
+                          title="Mark Remaining Balance as Fully Paid"
+                        >
+                          <CheckCheck size={13} />
+                          <span>Settle Bal (₹{b.remainingPayment})</span>
+                        </button>
+                      )}
+
+                      {/* FEATURE #2: Printable / WhatsApp PDF Receipt */}
+                      <button
+                        onClick={() => setInvoiceModal(b)}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors flex items-center gap-1"
+                        title="Generate Printable PDF Invoice Receipt"
+                      >
+                        <Printer size={13} />
+                        <span>PDF Invoice</span>
+                      </button>
+
+                      {b.status === 'confirmed' && (
+                        <button
+                          onClick={() => handleStatusChange(b._id, 'checked_in')}
+                          className="px-3 py-1.5 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 text-xs font-semibold rounded-xl border border-emerald-200 transition-colors flex items-center gap-1"
+                        >
+                          <LogIn size={13} />
+                          <span>Check In</span>
+                        </button>
+                      )}
+
+                      {b.status === 'checked_in' && (
+                        <button
+                          onClick={() => handleStatusChange(b._id, 'checked_out')}
+                          className="px-3 py-1.5 bg-indigo-50 text-indigo-800 hover:bg-indigo-100 text-xs font-semibold rounded-xl border border-indigo-200 transition-colors flex items-center gap-1"
+                        >
+                          <LogOut size={13} />
+                          <span>Check Out</span>
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => { setCancelModal(b); setCancelReason(''); }}
+                        className="px-3 py-1.5 bg-amber-50 text-amber-800 hover:bg-amber-100 text-xs font-semibold rounded-xl border border-amber-200 transition-colors flex items-center gap-1"
+                      >
+                        <XCircle size={13} />
+                        <span>Cancel</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteBooking(b._id)}
+                        className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-all flex items-center gap-1"
+                      >
+                        <Trash2 size={13} />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           ))}
