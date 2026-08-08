@@ -200,6 +200,7 @@ const ManualBookingForm = () => {
     try {
       await api.post('/bookings/manual-booking', {
         ...formData,
+        advancePaid: Number(formData.advancePayment) || 0,
         adults: formData.guestComposition.adults
       });
 

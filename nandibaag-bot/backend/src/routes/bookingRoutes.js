@@ -215,6 +215,9 @@ router.post('/manual-booking', async (req, res) => {
         staffId: bookedBy.staffId || ''
       },
       staffNames: staffNames || staffList,
+      advancePayment: Number(req.body.advancePayment || req.body.advancePaid) || 0,
+      advancePaid: Number(req.body.advancePaid || req.body.advancePayment) || 0,
+      remainingPayment: Number(req.body.remainingPayment) || Math.max(0, (Number(totalAmount) || 0) - (Number(req.body.advancePaid || req.body.advancePayment) || 0)),
       totalAmount: Number(totalAmount) || 0,
       notes: notes || '',
       createdBy: 'staff',
@@ -224,10 +227,73 @@ router.post('/manual-booking', async (req, res) => {
     await booking.save();
     
     console.log('[Booking:Manual] Booking created:', booking._id);
+
+    // Auto-send confirmation messages to Customer and Staff Group
+    try {
+      const {
+        formatBookingMessageForCustomer,
+        formatBookingMessageForStaffGroup
+      } = require('../utils/bookingMessageFormatter');
+      const { sendMessageViaChannel } = require('../services/channelManager');
+
+      console.log('[Booking:AutoSend] Sending confirmation messages...');
+      
+      const customerMessage = formatBookingMessageForCustomer(booking);
+      const staffGroupMessage = formatBookingMessageForStaffGroup(booking);
+      
+      console.log('[Booking:AutoSend] Customer message formatted');
+      console.log('[Booking:AutoSend] Staff message formatted');
+      
+      let customerSMSSent = false;
+      let staffGroupSent = false;
+
+      // 1. Send to CUSTOMER (Phone)
+      try {
+        const customerSent = await sendMessageViaChannel(booking.customerPhone, customerMessage, 'fast2sms');
+        if (customerSent) {
+          customerSMSSent = true;
+          console.log('[Booking:AutoSend] ✅ Message sent to customer:', booking.customerPhone);
+        } else {
+          console.log('[Booking:AutoSend] ⚠️ Customer message delivery attempted for:', booking.customerPhone);
+        }
+      } catch (smsError) {
+        console.error('[Booking:AutoSend] ❌ Failed to send customer SMS:', smsError.message);
+      }
+      
+      // 2. Send to STAFF GROUP
+      const staffGroupNumber = process.env.STAFF_GROUP_NUMBER;
+      
+      if (staffGroupNumber) {
+        try {
+          const groupSent = await sendMessageViaChannel(staffGroupNumber, staffGroupMessage, 'fast2sms');
+          if (groupSent) {
+            staffGroupSent = true;
+            console.log('[Booking:AutoSend] ✅ Message sent to staff group:', staffGroupNumber);
+          } else {
+            console.log('[Booking:AutoSend] ⚠️ Staff group message delivery attempted for:', staffGroupNumber);
+          }
+        } catch (groupError) {
+          console.error('[Booking:AutoSend] ❌ Failed to send staff group message:', groupError.message);
+        }
+      } else {
+        console.warn('[Booking:AutoSend] ⚠️ Staff group number not configured in .env');
+      }
+
+      booking.messagesSent = {
+        customerSMS: customerSMSSent,
+        staffGroup: staffGroupSent,
+        sentAt: new Date()
+      };
+      await booking.save();
+      
+    } catch (messageError) {
+      console.error('[Booking:AutoSend] Error formatting/sending messages:', messageError.message);
+    }
     
     res.json({
       success: true,
-      booking
+      booking,
+      message: 'Booking created and confirmation messages sent'
     });
     
   } catch (error) {

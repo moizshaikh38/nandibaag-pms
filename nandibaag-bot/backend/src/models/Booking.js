@@ -86,9 +86,25 @@ const bookingSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  advancePaid: {
+    type: Number,
+    required: false,
+    default: 0
+  },
   remainingPayment: {
     type: Number,
     default: 0
+  },
+  messagesSent: {
+    customerSMS: {
+      type: Boolean,
+      default: false
+    },
+    staffGroup: {
+      type: Boolean,
+      default: false
+    },
+    sentAt: Date
   },
   paymentStatus: {
     type: String,

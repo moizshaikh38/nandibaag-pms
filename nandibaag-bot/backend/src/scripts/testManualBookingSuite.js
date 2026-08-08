@@ -3,6 +3,10 @@ const http = require('http');
 const express = require('express');
 const { mongoUri } = require('../config/env');
 const bookingRoutes = require('../routes/bookingRoutes');
+const {
+  formatBookingMessageForCustomer,
+  formatBookingMessageForStaffGroup
+} = require('../utils/bookingMessageFormatter');
 
 async function runTest() {
   console.log('====================================================');
@@ -65,26 +69,47 @@ async function runTest() {
 
     console.log('--- TEST 4: POST /api/bookings/manual-booking ---');
     const bookingData = {
-      customerName: 'Aarav Mehta',
-      customerPhone: '+919988776655',
+      customerName: 'Swati Kamble',
+      customerPhone: '+919876543210',
       checkInDate: '2026-08-15',
-      checkOutDate: '2026-08-17',
-      packageType: 'couple',
-      guestComposition: { adults: 2, children: 1 },
+      checkOutDate: '2026-08-16',
+      packageType: 'group',
+      guestComposition: { adults: 8, children: 2 },
       bookedBy: { name: 'Kadambari', staffId: 'staff_1' },
       staffNames: [{ name: 'Kadambari', id: 'staff_1' }],
-      totalAmount: 7000,
-      notes: 'Anniversary celebration requested'
+      totalAmount: 10000,
+      advancePaid: 1000,
+      notes: 'Family gathering with birthday celebration'
     };
 
     const res4 = await makeRequest('/api/bookings/manual-booking', 'POST', bookingData);
     console.log('Status:', res4.status);
     console.log('Booking ID:', res4.body.booking?._id);
     console.log('Package Type:', res4.body.booking?.packageType);
-    console.log('Guest Composition:', res4.body.booking?.guestComposition);
-    console.log('Notes:', res4.body.booking?.notes);
-    const pass4 = res4.status === 200 && res4.body.success === true && res4.body.booking?.customerName === 'Aarav Mehta' && res4.body.booking?.packageType === 'couple';
+    console.log('Advance Paid:', res4.body.booking?.advancePaid);
+    const pass4 = res4.status === 200 && res4.body.success === true && res4.body.booking?.customerName === 'Swati Kamble';
     console.log(`TEST 4 RESULT: ${pass4 ? '✅ PASS' : '❌ FAIL'}\n`);
+
+    console.log('--- TEST 5: FORMATTED BOOKING MESSAGES VERIFICATION ---');
+    const testBooking = res4.body.booking;
+    const custMsg = formatBookingMessageForCustomer(testBooking);
+    const staffMsg = formatBookingMessageForStaffGroup(testBooking);
+
+    console.log('--- CUSTOMER MESSAGE OUTPUT ---');
+    console.log(custMsg);
+    console.log('\n--- STAFF GROUP MESSAGE OUTPUT ---');
+    console.log(staffMsg);
+
+    const pass5 = custMsg.includes('Swati Kamble') && 
+                  custMsg.includes('Members: 10') && 
+                  custMsg.includes('Total Payment: 10000') && 
+                  custMsg.includes('Advance Payment: 1000') && 
+                  custMsg.includes('Pending Payment: 9000') && 
+                  staffMsg.includes('NEW BOOKING CREATED') &&
+                  staffMsg.includes('Members: 10') &&
+                  staffMsg.includes('Pending: ₹9000');
+
+    console.log(`\nTEST 5 RESULT: ${pass5 ? '✅ PASS' : '❌ FAIL'}\n`);
 
     console.log('====================================================');
     console.log('                 SUMMARY OF TESTS                   ');
@@ -93,6 +118,7 @@ async function runTest() {
     console.log(`TEST 2 (POST staff-names): ${pass2 ? '✅ PASS' : '❌ FAIL'}`);
     console.log(`TEST 3 (DELETE staff-names): ${pass3 ? '✅ PASS' : '❌ FAIL'}`);
     console.log(`TEST 4 (POST manual-booking): ${pass4 ? '✅ PASS' : '❌ FAIL'}`);
+    console.log(`TEST 5 (MESSAGE FORMATTER VERIFICATION): ${pass5 ? '✅ PASS' : '❌ FAIL'}`);
 
     server.close();
     await mongoose.disconnect();
