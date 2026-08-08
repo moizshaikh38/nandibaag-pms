@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 import {
@@ -47,6 +47,18 @@ const ManualBookingForm = () => {
   const [showAddStaff, setShowAddStaff] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+
+  // Group rooms by Series Name
+  const roomsBySeries = useMemo(() => {
+    const map = {};
+    for (const room of roomsList) {
+      const num = String(room.number || room.roomNumber || '');
+      const series = room.seriesName || (num.startsWith('2') ? 'Series 200 (Deluxe)' : 'Series 100 (Cottages)');
+      if (!map[series]) map[series] = [];
+      map[series].push(room);
+    }
+    return map;
+  }, [roomsList]);
 
   // Fetch staff & rooms on load
   useEffect(() => {
@@ -479,30 +491,46 @@ const ManualBookingForm = () => {
               </div>
 
               {roomsList.length > 0 ? (
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 max-h-32 overflow-y-auto p-1 bg-white border border-slate-200 rounded-lg">
-                  {roomsList.map((room) => {
-                    const num = room.number || room.roomNumber || String(room._id);
-                    const isChecked = selectedRooms.includes(num);
-                    return (
-                      <label
-                        key={num}
-                        onClick={() => handleRoomToggle(num)}
-                        className={`p-1.5 rounded-md border text-left cursor-pointer transition-all flex items-center justify-between select-none ${
-                          isChecked
-                            ? 'bg-emerald-600 text-white border-emerald-600 font-bold shadow-2xs'
-                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                        }`}
-                      >
-                        <span className="text-[11px]">Room {num}</span>
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          readOnly
-                          className="w-3 h-3 accent-emerald-600 rounded"
-                        />
-                      </label>
-                    );
-                  })}
+                <div className="max-h-40 overflow-y-auto space-y-2 p-1.5 bg-white border border-slate-200 rounded-lg">
+                  {Object.entries(roomsBySeries).map(([seriesName, rooms]) => (
+                    <div key={seriesName} className="space-y-1">
+                      <div className="text-[10px] font-extrabold text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/80 flex items-center justify-between">
+                        <span>🏷️ {seriesName}</span>
+                        <span className="text-[9px] text-emerald-700 font-bold">{rooms.length} available</span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                        {rooms.map((room) => {
+                          const num = room.number || room.roomNumber || String(room._id);
+                          const cap = room.capacity || 4;
+                          const isChecked = selectedRooms.includes(num);
+                          return (
+                            <label
+                              key={num}
+                              onClick={() => handleRoomToggle(num)}
+                              className={`p-1.5 rounded-lg border text-left cursor-pointer transition-all flex flex-col justify-between select-none ${
+                                isChecked
+                                  ? 'bg-emerald-700 text-white border-emerald-700 font-bold shadow-2xs'
+                                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-bold">Room {num}</span>
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  readOnly
+                                  className="w-3.5 h-3.5 accent-emerald-600 rounded"
+                                />
+                              </div>
+                              <div className={`text-[9px] font-bold mt-1 ${isChecked ? 'text-emerald-100' : 'text-slate-500'}`}>
+                                Cap: <span className="underline">{cap} Guests</span>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <p className="text-[10px] text-slate-500 bg-slate-100 p-1.5 rounded-lg border border-slate-200">
