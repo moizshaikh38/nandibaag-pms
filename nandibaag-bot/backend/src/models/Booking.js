@@ -158,6 +158,15 @@ const bookingSchema = new mongoose.Schema({
     default: 'draft',
     index: true
   },
+  roomId: {
+    type: String,
+    required: false
+  },
+  roomIds: {
+    type: [String],
+    required: false,
+    default: []
+  },
   createdBy: {
     type: String,
     enum: ['ai', 'staff'],
@@ -166,6 +175,20 @@ const bookingSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+bookingSchema.methods.getRoomsDisplay = function() {
+  return this.roomIds && this.roomIds.length > 0 
+    ? this.roomIds.join(', ')
+    : (this.roomId || 'TBA');
+};
+
+bookingSchema.methods.getTotalRoomCapacity = async function() {
+  const Room = require('./Room');
+  if (!this.roomIds || this.roomIds.length === 0) return 0;
+  
+  const rooms = await Room.find({ _id: { $in: this.roomIds } });
+  return rooms.reduce((sum, room) => sum + (room.capacity || 0), 0);
+};
 
 bookingSchema.index({ customerPhone: 1 });
 bookingSchema.index({ date: 1 });

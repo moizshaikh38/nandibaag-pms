@@ -45,6 +45,9 @@ const ManualBookingForm = () => {
   const [activeTab, setActiveTab] = useState('step1'); // 'step1' | 'step2' for mobile view
   const [staffOptions, setStaffOptions] = useState([]);
   const [availableRooms, setAvailableRooms] = useState([]);
+  const [selectedRooms, setSelectedRooms] = useState([]);
+  const [roomsList, setRoomsList] = useState([]);
+  const [totalCapacity, setTotalCapacity] = useState(0);
   const [newStaffName, setNewStaffName] = useState('');
   const [showAddStaff, setShowAddStaff] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -73,20 +76,48 @@ const ManualBookingForm = () => {
   const fetchRooms = async (checkIn, checkOut) => {
     if (!checkIn || !checkOut) return;
     try {
-      const res = await api.get('/availability/rooms', { params: { checkInDate: checkIn, checkOutDate: checkOut } });
-      setAvailableRooms(res.data.rooms || []);
+      const res = await api.get('/rooms/availability', { params: { checkInDate: checkIn, checkOutDate: checkOut } });
+      const rooms = res.data.rooms || [];
+      setAvailableRooms(rooms);
+      setRoomsList(rooms);
     } catch (err) {
+      console.error('[Form:Rooms] Error:', err);
       setAvailableRooms([]);
+      setRoomsList([]);
     }
+  };
+
+  useEffect(() => {
+    if (formData.checkInDate && formData.checkOutDate) {
+      fetchRooms(formData.checkInDate, formData.checkOutDate);
+      setSelectedRooms([]);
+      setTotalCapacity(0);
+    }
+  }, [formData.checkInDate, formData.checkOutDate]);
+
+  const handleRoomToggle = (roomIdentifier) => {
+    const isSelected = selectedRooms.includes(roomIdentifier);
+    const newSelection = isSelected
+      ? selectedRooms.filter(r => r !== roomIdentifier)
+      : [...selectedRooms, roomIdentifier];
+
+    setSelectedRooms(newSelection);
+
+    // Calculate capacity
+    const cap = newSelection.reduce((sum, num) => {
+      const roomObj = roomsList.find(r => (r.number || r.roomNumber || String(r._id)) === num);
+      return sum + (roomObj?.capacity || 4);
+    }, 0);
+
+    setTotalCapacity(cap);
+    setFormData(prev => ({
+      ...prev,
+      roomId: newSelection.join(', ')
+    }));
   };
 
   const handleDateChange = (field, value) => {
     const updated = { ...formData, [field]: value };
-    if (field === 'checkInDate') {
-      fetchRooms(value, formData.checkOutDate);
-    } else if (field === 'checkOutDate') {
-      fetchRooms(formData.checkInDate, value);
-    }
     setFormData(updated);
   };
 
@@ -201,6 +232,8 @@ const ManualBookingForm = () => {
     try {
       await api.post('/bookings/manual-booking', {
         ...formData,
+        roomIds: selectedRooms,
+        roomId: selectedRooms.join(', '),
         advancePaid: Number(formData.advancePayment) || 0,
         adults: formData.guestComposition.adults
       });
@@ -209,6 +242,8 @@ const ManualBookingForm = () => {
       setMessage('✅ Booking created successfully!');
 
       setTimeout(() => {
+        setSelectedRooms([]);
+        setTotalCapacity(0);
         setFormData({
           customerName: '',
           customerPhone: '+91',
@@ -500,23 +535,69 @@ const ManualBookingForm = () => {
                 <Building size={15} /> Room & Staff Handover
               </h3>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Assign Cottage Room</label>
-                  <select
-                    name="roomId"
-                    value={formData.roomId}
-                    onChange={handleInputChange}
-                    className="w-full px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-xl bg-white"
-                  >
-                    <option value="">-- Assign Later --</option>
-                    {availableRooms.map(r => (
-                      <option key={r.roomId} value={r.roomId}>
-                        Room {r.roomNumber} ({r.seriesName})
-                      </option>
-                    ))}
-                  </select>
+              {/* ===== MULTI-ROOM SELECTION SECTION ===== */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-bold text-slate-700">
+                    🏨 Select Cottage Rooms (Multi-Select):
+                  </label>
+                  {selectedRooms.length > 0 && (
+                    <span className="text-[10px] text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full font-bold border border-emerald-300">
+                      Cap: {totalCapacity} Guests ({selectedRooms.length} {selectedRooms.length === 1 ? 'room' : 'rooms'})
+                    </span>
+                  )}
                 </div>
+
+                {roomsList.length > 0 ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 max-h-44 overflow-y-auto p-1.5 bg-white border border-slate-300 rounded-xl">
+                    {roomsList.map((room) => {
+                      const num = room.number || room.roomNumber || String(room._id);
+                      const isChecked = selectedRooms.includes(num);
+                      return (
+                        <label
+                          key={num}
+                          onClick={() => handleRoomToggle(num)}
+                          className={`p-2 rounded-lg border text-left cursor-pointer transition-all flex flex-col justify-between select-none ${
+                            isChecked
+                              ? 'bg-emerald-600 text-white border-emerald-600 font-bold shadow-xs'
+                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs">Room {num}</span>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              readOnly
+                              className="w-3.5 h-3.5 accent-emerald-600 rounded"
+                            />
+                          </div>
+                          <span className={`text-[9px] block mt-0.5 ${isChecked ? 'text-emerald-100' : 'text-slate-400'}`}>
+                            Cap: {room.capacity || 4} guests
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-500 bg-slate-100 p-2 rounded-xl border border-slate-200 font-medium">
+                    No available rooms for selected dates. Choose different dates.
+                  </p>
+                )}
+
+                {selectedRooms.length > 0 && (
+                  <div className="p-2 rounded-xl bg-sky-50 border border-sky-200 text-sky-900 text-[11px] space-y-1">
+                    <p className="font-semibold">
+                      Selected Rooms: <strong className="font-bold text-sky-950">{selectedRooms.join(', ')}</strong>
+                    </p>
+                    {formData.guestComposition.adults + formData.guestComposition.children > totalCapacity && (
+                      <p className="text-rose-700 font-bold flex items-center gap-1">
+                        ⚠️ Total guests ({formData.guestComposition.adults + formData.guestComposition.children}) exceeds total capacity ({totalCapacity}). Please add more rooms!
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
 
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Booked By (Staff) *</label>
@@ -535,7 +616,6 @@ const ManualBookingForm = () => {
                     ))}
                   </select>
                 </div>
-              </div>
 
               {/* Compact Staff Pills */}
               <div className="flex flex-wrap items-center gap-1.5 pt-1">

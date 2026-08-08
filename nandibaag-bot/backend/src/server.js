@@ -172,8 +172,11 @@ app.use('/api/auth', authRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/numbers', numberRoutes);
 app.use('/api/chats', chatRoutes);
+const roomRoutes = require('./routes/roomRoutes');
+
 app.use('/api/leads', leadRoutes);
 app.use('/api/bookings', bookingRoutes);
+app.use('/api/rooms', roomRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/inventory', inventoryRoutes);

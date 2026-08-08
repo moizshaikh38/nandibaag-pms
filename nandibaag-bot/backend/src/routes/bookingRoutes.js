@@ -204,6 +204,26 @@ router.post('/manual-booking', async (req, res) => {
     const checkIn = checkInDate ? new Date(checkInDate) : new Date();
     const checkOut = checkOutDate ? new Date(checkOutDate) : new Date(checkIn.getTime() + 86400000);
     const dateStr = checkIn.toISOString().split('T')[0];
+
+    // Multi-room handling
+    const roomIds = Array.isArray(req.body.roomIds) 
+      ? req.body.roomIds.filter(Boolean)
+      : (req.body.roomId ? [req.body.roomId] : []);
+
+    if (roomIds.length > 0) {
+      const { checkMultipleRoomsAvailable } = require('../services/availabilityService');
+      const availabilityCheck = await checkMultipleRoomsAvailable(
+        roomIds,
+        checkIn,
+        checkOut
+      );
+
+      if (!availabilityCheck.available) {
+        console.warn('[Booking:Manual] Room availability conflict warning:', availabilityCheck.reason);
+      } else {
+        console.log('[Booking:Manual] ✅ All selected rooms available:', roomIds.join(', '));
+      }
+    }
     
     // Create booking
     const booking = new Booking({
@@ -229,6 +249,8 @@ router.post('/manual-booking', async (req, res) => {
       advancePaid: Number(req.body.advancePaid || req.body.advancePayment) || 0,
       remainingPayment: Number(req.body.remainingPayment) || Math.max(0, (Number(totalAmount) || 0) - (Number(req.body.advancePaid || req.body.advancePayment) || 0)),
       totalAmount: Number(totalAmount) || 0,
+      roomId: roomIds.join(', ') || req.body.roomId || '',
+      roomIds: roomIds,
       notes: notes || '',
       createdBy: 'staff',
       status: 'confirmed'

@@ -342,6 +342,99 @@ async function rescheduleRoomBooking(roomBookingId, newCheckInDate, newCheckOutD
   return roomBooking;
 }
 
+/**
+ * Check availability for an array of roomIds (or room numbers) between checkInDate & checkOutDate.
+ */
+const checkMultipleRoomsAvailable = async (roomIds, checkInDate, checkOutDate) => {
+  try {
+    console.log('[Availability:MultiRoom] Checking rooms:', {
+      roomIds,
+      checkInDate,
+      checkOutDate
+    });
+    
+    if (!roomIds || roomIds.length === 0) {
+      console.log('[Availability:MultiRoom] No rooms to check');
+      return { available: false, reason: 'No rooms selected' };
+    }
+
+    const { Booking, RoomBooking, Room } = require('../models');
+    
+    // Check each room
+    const availabilityResults = await Promise.all(
+      roomIds.map(async (roomId) => {
+        const isValidObjectId = mongoose.Types.ObjectId.isValid(roomId);
+        
+        const roomDoc = await Room.findOne({
+          $or: [
+            ...(isValidObjectId ? [{ _id: roomId }] : []),
+            { number: String(roomId) },
+            { roomNumber: String(roomId) }
+          ]
+        }).lean();
+
+        const roomObjectId = roomDoc ? roomDoc._id : (isValidObjectId ? roomId : null);
+        const roomNumStr = String(roomId);
+
+        const conflictsInBookings = await Booking.findOne({
+          $or: [
+            { roomIds: roomNumStr },
+            { roomId: roomNumStr },
+            ...(roomObjectId ? [{ roomIds: String(roomObjectId) }, { roomId: String(roomObjectId) }] : [])
+          ],
+          checkInDate: { $lt: new Date(checkOutDate) },
+          checkOutDate: { $gt: new Date(checkInDate) },
+          status: { $in: ['pending_payment', 'confirmed', 'checked_in'] }
+        });
+
+        let conflictsInRoomBookings = null;
+        if (roomObjectId) {
+          conflictsInRoomBookings = await RoomBooking.findOne({
+            roomId: roomObjectId,
+            checkInDate: { $lt: new Date(checkOutDate) },
+            checkOutDate: { $gt: new Date(checkInDate) },
+            status: { $in: ['confirmed', 'checked_in'] }
+          });
+        }
+
+        const conflict = conflictsInBookings || conflictsInRoomBookings;
+        
+        return {
+          roomId: roomNumStr,
+          available: !conflict,
+          conflict: conflict ? {
+            customer: conflict.customerName || 'Reserved',
+            dates: `${new Date(conflict.checkInDate).toLocaleDateString()} - ${new Date(conflict.checkOutDate).toLocaleDateString()}`
+          } : null
+        };
+      })
+    );
+    
+    console.log('[Availability:MultiRoom] Results:', availabilityResults);
+    
+    const allAvailable = availabilityResults.every(r => r.available);
+    const unavailableRooms = availabilityResults.filter(r => !r.available);
+    
+    if (!allAvailable) {
+      return {
+        available: false,
+        reason: `Room(s) ${unavailableRooms.map(r => r.roomId).join(', ')} not available`,
+        conflicts: unavailableRooms
+      };
+    }
+    
+    return {
+      available: true,
+      selectedRooms: roomIds,
+      message: `All ${roomIds.length} room(s) available`
+    };
+    
+  } catch (error) {
+    console.error('[Availability:MultiRoom] Error:', error.message);
+    return { available: false, reason: error.message };
+  }
+};
+
 module.exports = {
   checkOverlap,
   getCapacityAvailability,
@@ -349,5 +442,6 @@ module.exports = {
   suggestRoomCombinations,
   createRoomBooking,
   cancelRoomBooking,
-  rescheduleRoomBooking
+  rescheduleRoomBooking,
+  checkMultipleRoomsAvailable
 };

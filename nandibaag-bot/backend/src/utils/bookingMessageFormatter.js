@@ -55,7 +55,9 @@ const formatBookingMessageForCustomer = (booking) => {
   const pendingPayment = Math.max(0, totalAmount - advancePaid);
 
   const bookedByName = booking.bookedBy?.name || 'Staff';
-  const roomInfo = booking.roomId ? `Room ${booking.roomId}` : 'Will be assigned at check-in';
+  const roomInfo = (booking.roomIds && booking.roomIds.length > 0)
+    ? `Room ${booking.roomIds.join(', ')}`
+    : (booking.roomId ? `Room ${booking.roomId}` : 'Will be assigned at check-in');
 
   const { checkInTime, checkOutTime } = getDynamicTimings(booking.packageType, booking.mealOption);
 
@@ -116,7 +118,9 @@ const formatBookingMessageForStaffGroup = (booking) => {
   const pendingPayment = Math.max(0, totalAmount - advancePaid);
 
   const bookedByName = booking.bookedBy?.name || 'Staff';
-  const roomInfo = booking.roomId ? `Room ${booking.roomId}` : 'ASSIGN AT CHECK-IN';
+  const roomInfo = (booking.roomIds && booking.roomIds.length > 0)
+    ? `Room ${booking.roomIds.join(', ')}`
+    : (booking.roomId ? `Room ${booking.roomId}` : 'ASSIGN AT CHECK-IN');
   const packageType = booking.packageType || booking.bookingType || 'Couple';
 
   const { checkInTime, checkOutTime } = getDynamicTimings(booking.packageType, booking.mealOption);
