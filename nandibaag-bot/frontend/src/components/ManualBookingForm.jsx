@@ -28,6 +28,7 @@ const ManualBookingForm = () => {
     checkInDate: new Date().toISOString().split('T')[0],
     checkOutDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
     packageType: 'couple',
+    mealOption: 'B->D',
     guestComposition: { adults: 2, children: 0 },
     bookedBy: { name: '', staffId: '' },
     staffNames: [],
@@ -214,6 +215,7 @@ const ManualBookingForm = () => {
           checkInDate: new Date().toISOString().split('T')[0],
           checkOutDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
           packageType: 'couple',
+          mealOption: 'B->D',
           guestComposition: { adults: 2, children: 0 },
           bookedBy: { name: '', staffId: '' },
           staffNames: staffOptions,
@@ -402,6 +404,46 @@ const ManualBookingForm = () => {
                   </button>
                 ))}
               </div>
+
+              {/* Show meal option only for One Day Picnic */}
+              {formData.packageType === 'oneDay' && (
+                <div className="mt-2.5 p-3 rounded-xl bg-sky-50/80 border border-sky-200/80 space-y-2">
+                  <label className="block text-[11px] font-bold text-sky-900">
+                    One Day Meal Option:
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {[
+                      { value: 'B->D', label: 'Breakfast to Dinner', time: '9 AM - 9:30 PM' },
+                      { value: 'B->T', label: 'Breakfast to Hi-tea', time: '9 AM - 6:30 PM' },
+                      { value: 'B->L', label: 'Breakfast to Lunch', time: '9 AM - 2:30 PM' }
+                    ].map(opt => (
+                      <label
+                        key={opt.value}
+                        className={`p-2 rounded-lg border text-left cursor-pointer transition-all flex flex-col justify-between ${
+                          formData.mealOption === opt.value
+                            ? 'bg-sky-600 text-white border-sky-600 font-bold shadow-xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="radio"
+                            name="mealOption"
+                            value={opt.value}
+                            checked={formData.mealOption === opt.value}
+                            onChange={(e) => setFormData(prev => ({ ...prev, mealOption: e.target.value }))}
+                            className="sr-only"
+                          />
+                          <span className="text-[11px] leading-tight block">{opt.label}</span>
+                        </div>
+                        <span className={`text-[9px] block mt-1 ${formData.mealOption === opt.value ? 'text-sky-100' : 'text-slate-400'}`}>
+                          ({opt.time})
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-2.5">
                 <div>

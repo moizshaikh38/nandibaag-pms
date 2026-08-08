@@ -28,6 +28,12 @@ const bookingSchema = new mongoose.Schema({
     enum: ['couple', 'group', 'oneDay', 'picnic'],
     required: false
   },
+  mealOption: {
+    type: String,
+    enum: ['B->D', 'B->T', 'B->L', null],
+    required: false,
+    default: null
+  },
   guestComposition: {
     adults: {
       type: Number,

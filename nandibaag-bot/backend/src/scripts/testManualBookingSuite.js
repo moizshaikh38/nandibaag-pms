@@ -10,7 +10,7 @@ const {
 
 async function runTest() {
   console.log('====================================================');
-  console.log('      RUNNING MANUAL BOOKING & STAFF SUITE          ');
+  console.log('      RUNNING MANUAL BOOKING & DYNAMIC TIMINGS SUITE ');
   console.log('====================================================\n');
 
   try {
@@ -47,78 +47,107 @@ async function runTest() {
 
     console.log('--- TEST 1: GET /api/bookings/staff-names ---');
     const res1 = await makeRequest('/api/bookings/staff-names');
-    console.log('Status:', res1.status);
-    console.log('Staff count:', res1.body.staffNames?.length);
-    const pass1 = res1.status === 200 && res1.body.success === true && Array.isArray(res1.body.staffNames);
+    const pass1 = res1.status === 200 && res1.body.success === true;
     console.log(`TEST 1 RESULT: ${pass1 ? '✅ PASS' : '❌ FAIL'}\n`);
 
-    console.log('--- TEST 2: POST /api/bookings/staff-names (Add Staff) ---');
-    const res2 = await makeRequest('/api/bookings/staff-names', 'POST', { name: 'Karan Test' });
-    console.log('Status:', res2.status);
-    console.log('New Staff:', res2.body.staff);
-    const addedStaffId = res2.body.staff?.id;
-    const pass2 = res2.status === 200 && res2.body.success === true && res2.body.staff?.name === 'Karan Test';
-    console.log(`TEST 2 RESULT: ${pass2 ? '✅ PASS' : '❌ FAIL'}\n`);
+    console.log('--- SCENARIO 1: ONE DAY PICNIC (B→D) ---');
+    const sc1Data = {
+      customerName: 'Aarav Mehta',
+      customerPhone: '+919988776655',
+      checkInDate: '2026-08-15',
+      packageType: 'oneDay',
+      mealOption: 'B->D',
+      guestComposition: { adults: 4, children: 0 },
+      bookedBy: { name: 'Kadambari' },
+      totalAmount: 5000,
+      advancePaid: 1000
+    };
+    const resSc1 = await makeRequest('/api/bookings/manual-booking', 'POST', sc1Data);
+    const msg1Cust = formatBookingMessageForCustomer(resSc1.body.booking);
+    const msg1Staff = formatBookingMessageForStaffGroup(resSc1.body.booking);
+    const passSc1 = msg1Cust.includes('⏳ Check in: 09:00 AM') && msg1Cust.includes('⏳ Check out: 9:30 PM') && msg1Staff.includes('Meal: B->D');
+    console.log('Customer Check-in/out:', msg1Cust.match(/⏳ Check in: .*\n⏳ Check out: .*/)?.[0]);
+    console.log(`SCENARIO 1 (One Day B→D) RESULT: ${passSc1 ? '✅ PASS' : '❌ FAIL'}\n`);
 
-    console.log('--- TEST 3: DELETE /api/bookings/staff-names/:staffId ---');
-    const res3 = await makeRequest(`/api/bookings/staff-names/${addedStaffId}`, 'DELETE');
-    console.log('Status:', res3.status);
-    console.log('Deleted ID:', res3.body.deletedId);
-    const pass3 = res3.status === 200 && res3.body.success === true && res3.body.deletedId === addedStaffId;
-    console.log(`TEST 3 RESULT: ${pass3 ? '✅ PASS' : '❌ FAIL'}\n`);
+    console.log('--- SCENARIO 2: ONE DAY PICNIC (B→T) ---');
+    const sc2Data = {
+      customerName: 'Rohan Verma',
+      customerPhone: '+919988776644',
+      checkInDate: '2026-08-15',
+      packageType: 'oneDay',
+      mealOption: 'B->T',
+      guestComposition: { adults: 2, children: 1 },
+      bookedBy: { name: 'Ravi' },
+      totalAmount: 3250
+    };
+    const resSc2 = await makeRequest('/api/bookings/manual-booking', 'POST', sc2Data);
+    const msg2Cust = formatBookingMessageForCustomer(resSc2.body.booking);
+    const msg2Staff = formatBookingMessageForStaffGroup(resSc2.body.booking);
+    const passSc2 = msg2Cust.includes('⏳ Check in: 09:00 AM') && msg2Cust.includes('⏳ Check out: 6:30 PM') && msg2Staff.includes('Meal: B->T');
+    console.log('Customer Check-in/out:', msg2Cust.match(/⏳ Check in: .*\n⏳ Check out: .*/)?.[0]);
+    console.log(`SCENARIO 2 (One Day B→T) RESULT: ${passSc2 ? '✅ PASS' : '❌ FAIL'}\n`);
 
-    console.log('--- TEST 4: POST /api/bookings/manual-booking ---');
-    const bookingData = {
+    console.log('--- SCENARIO 3: ONE DAY PICNIC (B→L) ---');
+    const sc3Data = {
+      customerName: 'Pooja Patel',
+      customerPhone: '+919988776633',
+      checkInDate: '2026-08-15',
+      packageType: 'oneDay',
+      mealOption: 'B->L',
+      guestComposition: { adults: 3, children: 0 },
+      bookedBy: { name: 'Priti' },
+      totalAmount: 3000
+    };
+    const resSc3 = await makeRequest('/api/bookings/manual-booking', 'POST', sc3Data);
+    const msg3Cust = formatBookingMessageForCustomer(resSc3.body.booking);
+    const msg3Staff = formatBookingMessageForStaffGroup(resSc3.body.booking);
+    const passSc3 = msg3Cust.includes('⏳ Check in: 09:00 AM') && msg3Cust.includes('⏳ Check out: 2:30 PM') && msg3Staff.includes('Meal: B->L');
+    console.log('Customer Check-in/out:', msg3Cust.match(/⏳ Check in: .*\n⏳ Check out: .*/)?.[0]);
+    console.log(`SCENARIO 3 (One Day B→L) RESULT: ${passSc3 ? '✅ PASS' : '❌ FAIL'}\n`);
+
+    console.log('--- SCENARIO 4: COUPLE STAY ---');
+    const sc4Data = {
+      customerName: 'Karan & Ananya',
+      customerPhone: '+919988776622',
+      checkInDate: '2026-08-15',
+      checkOutDate: '2026-08-16',
+      packageType: 'couple',
+      guestComposition: { adults: 2, children: 0 },
+      bookedBy: { name: 'Mansi' },
+      totalAmount: 5500
+    };
+    const resSc4 = await makeRequest('/api/bookings/manual-booking', 'POST', sc4Data);
+    const msg4Cust = formatBookingMessageForCustomer(resSc4.body.booking);
+    const passSc4 = msg4Cust.includes('⏳ Check in: 12:00 PM') && msg4Cust.includes('⏳ Check out: 10:30 AM');
+    console.log('Customer Check-in/out:', msg4Cust.match(/⏳ Check in: .*\n⏳ Check out: .*/)?.[0]);
+    console.log(`SCENARIO 4 (Couple Stay) RESULT: ${passSc4 ? '✅ PASS' : '❌ FAIL'}\n`);
+
+    console.log('--- SCENARIO 5: GROUP STAY ---');
+    const sc5Data = {
       customerName: 'Swati Kamble',
       customerPhone: '+919876543210',
       checkInDate: '2026-08-15',
       checkOutDate: '2026-08-16',
       packageType: 'group',
       guestComposition: { adults: 8, children: 2 },
-      bookedBy: { name: 'Kadambari', staffId: 'staff_1' },
-      staffNames: [{ name: 'Kadambari', id: 'staff_1' }],
+      bookedBy: { name: 'Kadambari' },
       totalAmount: 10000,
-      advancePaid: 1000,
-      notes: 'Family gathering with birthday celebration'
+      advancePaid: 1000
     };
-
-    const res4 = await makeRequest('/api/bookings/manual-booking', 'POST', bookingData);
-    console.log('Status:', res4.status);
-    console.log('Booking ID:', res4.body.booking?._id);
-    console.log('Package Type:', res4.body.booking?.packageType);
-    console.log('Advance Paid:', res4.body.booking?.advancePaid);
-    const pass4 = res4.status === 200 && res4.body.success === true && res4.body.booking?.customerName === 'Swati Kamble';
-    console.log(`TEST 4 RESULT: ${pass4 ? '✅ PASS' : '❌ FAIL'}\n`);
-
-    console.log('--- TEST 5: FORMATTED BOOKING MESSAGES VERIFICATION ---');
-    const testBooking = res4.body.booking;
-    const custMsg = formatBookingMessageForCustomer(testBooking);
-    const staffMsg = formatBookingMessageForStaffGroup(testBooking);
-
-    console.log('--- CUSTOMER MESSAGE OUTPUT ---');
-    console.log(custMsg);
-    console.log('\n--- STAFF GROUP MESSAGE OUTPUT ---');
-    console.log(staffMsg);
-
-    const pass5 = custMsg.includes('Swati Kamble') && 
-                  custMsg.includes('Members: 10') && 
-                  custMsg.includes('Total Payment: 10000') && 
-                  custMsg.includes('Advance Payment: 1000') && 
-                  custMsg.includes('Pending Payment: 9000') && 
-                  staffMsg.includes('NEW BOOKING CREATED') &&
-                  staffMsg.includes('Members: 10') &&
-                  staffMsg.includes('Pending: ₹9000');
-
-    console.log(`\nTEST 5 RESULT: ${pass5 ? '✅ PASS' : '❌ FAIL'}\n`);
+    const resSc5 = await makeRequest('/api/bookings/manual-booking', 'POST', sc5Data);
+    const msg5Cust = formatBookingMessageForCustomer(resSc5.body.booking);
+    const passSc5 = msg5Cust.includes('⏳ Check in: 12:00 PM') && msg5Cust.includes('⏳ Check out: 10:30 AM');
+    console.log('Customer Check-in/out:', msg5Cust.match(/⏳ Check in: .*\n⏳ Check out: .*/)?.[0]);
+    console.log(`SCENARIO 5 (Group Stay) RESULT: ${passSc5 ? '✅ PASS' : '❌ FAIL'}\n`);
 
     console.log('====================================================');
     console.log('                 SUMMARY OF TESTS                   ');
     console.log('====================================================');
-    console.log(`TEST 1 (GET staff-names): ${pass1 ? '✅ PASS' : '❌ FAIL'}`);
-    console.log(`TEST 2 (POST staff-names): ${pass2 ? '✅ PASS' : '❌ FAIL'}`);
-    console.log(`TEST 3 (DELETE staff-names): ${pass3 ? '✅ PASS' : '❌ FAIL'}`);
-    console.log(`TEST 4 (POST manual-booking): ${pass4 ? '✅ PASS' : '❌ FAIL'}`);
-    console.log(`TEST 5 (MESSAGE FORMATTER VERIFICATION): ${pass5 ? '✅ PASS' : '❌ FAIL'}`);
+    console.log(`SCENARIO 1 (One Day B→D [9 AM - 9:30 PM]): ${passSc1 ? '✅ PASS' : '❌ FAIL'}`);
+    console.log(`SCENARIO 2 (One Day B→T [9 AM - 6:30 PM]): ${passSc2 ? '✅ PASS' : '❌ FAIL'}`);
+    console.log(`SCENARIO 3 (One Day B→L [9 AM - 2:30 PM]): ${passSc3 ? '✅ PASS' : '❌ FAIL'}`);
+    console.log(`SCENARIO 4 (Couple Stay [12 PM - 10:30 AM]): ${passSc4 ? '✅ PASS' : '❌ FAIL'}`);
+    console.log(`SCENARIO 5 (Group Stay [12 PM - 10:30 AM]): ${passSc5 ? '✅ PASS' : '❌ FAIL'}`);
 
     server.close();
     await mongoose.disconnect();

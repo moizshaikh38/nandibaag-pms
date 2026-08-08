@@ -205,6 +205,7 @@ router.post('/manual-booking', async (req, res) => {
       checkOutDate: checkOut,
       bookingType: packageType === 'oneDay' ? 'picnic' : packageType,
       packageType,
+      mealOption: req.body.mealOption || (packageType === 'oneDay' ? 'B->D' : null),
       guestComposition: {
         adults: Number(guestComposition.adults) || 2,
         children: Number(guestComposition.children) || 0

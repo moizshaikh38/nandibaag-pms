@@ -1,6 +1,32 @@
 /**
  * Formats booking confirmation messages for customer and staff group.
+ * Dynamic check-in/check-out timings based on packageType and mealOption.
  */
+
+const getDynamicTimings = (packageType, mealOption) => {
+  let checkInTime = '12:00 PM';
+  let checkOutTime = '10:30 AM';
+
+  if (packageType === 'oneDay' || packageType === 'picnic') {
+    checkInTime = '09:00 AM';
+
+    switch (mealOption) {
+      case 'B->D':
+        checkOutTime = '9:30 PM';
+        break;
+      case 'B->T':
+        checkOutTime = '6:30 PM';
+        break;
+      case 'B->L':
+        checkOutTime = '2:30 PM';
+        break;
+      default:
+        checkOutTime = '9:30 PM'; // default for one day
+    }
+  }
+
+  return { checkInTime, checkOutTime };
+};
 
 const formatBookingMessageForCustomer = (booking) => {
   const checkInDateObj = new Date(booking.checkInDate || booking.date);
@@ -31,6 +57,10 @@ const formatBookingMessageForCustomer = (booking) => {
   const bookedByName = booking.bookedBy?.name || 'Staff';
   const roomInfo = booking.roomId ? `Room ${booking.roomId}` : 'Will be assigned at check-in';
 
+  const { checkInTime, checkOutTime } = getDynamicTimings(booking.packageType, booking.mealOption);
+
+  console.log('[Message:Formatter] Package:', booking.packageType, 'Timings:', checkInTime, '-', checkOutTime);
+
   const message = `
 Name: ${booking.customerName}
 Check In Date: ${checkInDateStr}
@@ -46,8 +76,8 @@ Contact No.: ${booking.customerPhone}
 Booked by: ${bookedByName}
 
 Note:
-Check in: 09:00 am
-Check out: 06:30 pm
+⏳ Check in: ${checkInTime}
+⏳ Check out: ${checkOutTime}
 Lunch: 1:30 - 2:30 pm
 Hi-tea: 5:30 - 6:30 pm
 Dinner: 8:30 - 9:30 pm
@@ -89,6 +119,8 @@ const formatBookingMessageForStaffGroup = (booking) => {
   const roomInfo = booking.roomId ? `Room ${booking.roomId}` : 'ASSIGN AT CHECK-IN';
   const packageType = booking.packageType || booking.bookingType || 'Couple';
 
+  const { checkInTime, checkOutTime } = getDynamicTimings(booking.packageType, booking.mealOption);
+
   const message = `
 🎫 NEW BOOKING CREATED
 
@@ -97,8 +129,11 @@ Contact: ${booking.customerPhone}
 Check In: ${checkInDateStr} (${checkInDayShort})
 Check Out: ${checkOutDateStr} (${checkOutDayShort})
 Members: ${totalMembers}
-Package: ${packageType}
-Booked By: ${bookedByName}
+Package: ${packageType.toUpperCase()}
+${booking.packageType === 'oneDay' && booking.mealOption ? `Meal: ${booking.mealOption}\n` : ''}Booked By: ${bookedByName}
+
+⏳ Check-in: ${checkInTime}
+⏳ Check-out: ${checkOutTime}
 
 💰 Payment:
 Total: ₹${totalAmount}
