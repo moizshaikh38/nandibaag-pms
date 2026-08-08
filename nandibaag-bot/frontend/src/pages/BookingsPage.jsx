@@ -3,6 +3,7 @@ import api from '../utils/api';
 import { formatDMY } from '../utils/formatters';
 import toast from 'react-hot-toast';
 import ManualBookingForm from '../components/ManualBookingForm';
+import BookingsTableView from '../components/BookingsTableView';
 import { groupBookingsByDate } from '../utils/bookingGrouper';
 import {
   Plus,
@@ -59,6 +60,7 @@ export default function BookingsPage() {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ status: '', search: '', date: '' });
   const [sortOrder, setSortOrder] = useState('asc');
+  const [viewMode, setViewMode] = useState('card');
 
   // Modals
   const [cancelModal, setCancelModal] = useState(null);
@@ -525,6 +527,32 @@ export default function BookingsPage() {
             <option value="cancelled">Cancelled</option>
             <option value="pending_payment">Pending Payment</option>
           </select>
+
+          {/* View Mode Switcher */}
+          <div className="flex items-center p-0.5 bg-slate-100 rounded-xl border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setViewMode('card')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                viewMode === 'card'
+                  ? 'bg-white text-slate-800 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              📋 Cards
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                viewMode === 'table'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              📊 Spreadsheet Table
+            </button>
+          </div>
         </div>
       </div>
 
@@ -534,6 +562,8 @@ export default function BookingsPage() {
           <RefreshCw size={32} className="animate-spin text-emerald-600 mx-auto" />
           <p className="text-xs font-semibold text-slate-600">Loading guest bookings...</p>
         </div>
+      ) : viewMode === 'table' ? (
+        <BookingsTableView bookings={bookings} />
       ) : bookings.length === 0 ? (
         <div className="py-16 text-center space-y-3 glass-card rounded-2xl">
           <BookOpen size={36} className="text-slate-300 mx-auto" />

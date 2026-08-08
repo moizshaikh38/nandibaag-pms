@@ -8,25 +8,34 @@ const router = express.Router();
  * GET /api/bookings
  * List bookings with status filter
  */
-router.get('/', verifyToken, async (req, res, next) => {
+router.get('/', async (req, res, next) => {
   try {
+    console.log('[Bookings:GetAll] Fetching all bookings');
     const { status } = req.query;
     
     const query = {};
-    if (status && ['draft', 'pending_payment', 'confirmed', 'cancelled'].includes(status)) {
+    if (status && ['draft', 'pending_payment', 'confirmed', 'cancelled', 'checked_in', 'checked_out'].includes(status)) {
       query.status = status;
     }
     
     const bookings = await Booking.find(query)
-      .sort({ createdAt: -1 })
-      .populate('chatId', 'customerPhone customerName');
+      .sort({ checkInDate: -1, createdAt: -1 })
+      .populate('chatId', 'customerPhone customerName')
+      .lean();
+    
+    console.log('[Bookings:GetAll] Found:', bookings.length, 'bookings');
     
     res.json({
       success: true,
-      bookings
+      bookings,
+      count: bookings.length
     });
   } catch (error) {
-    next(error);
+    console.error('[Bookings:GetAll] Error:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
   }
 });
 
