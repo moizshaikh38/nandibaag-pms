@@ -343,7 +343,12 @@ export default function CalendarPage() {
                 const badgeInfo = STATUS_BADGES[b.status] || STATUS_BADGES.confirmed;
                 const Icon = badgeInfo.icon;
                 const guestCount = (b.adults || 0) + (b.kids || []).length;
-                const roomInfo = b.room;
+                const roomsDisplay = (b.roomIds && b.roomIds.length > 0) 
+                  ? b.roomIds.join(', ') 
+                  : (b.roomId || (b.room?.roomNumber ? `Room ${b.room.roomNumber}` : 'TBA'));
+                const roomCount = (b.roomIds && b.roomIds.length > 0) 
+                  ? b.roomIds.length 
+                  : (b.roomId || b.room ? 1 : 0);
 
                 return (
                   <div key={b._id} className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3 hover:border-emerald-300 transition-all">
@@ -366,8 +371,13 @@ export default function CalendarPage() {
 
                     <div className="grid grid-cols-2 gap-2 text-xs bg-white p-2.5 rounded-lg border border-slate-200">
                       <div>
-                        <span className="text-[10px] text-slate-400 block">Cottage Room:</span>
-                        <strong className="text-slate-800">{roomInfo ? `Room ${roomInfo.roomNumber}` : 'Assigned'}</strong>
+                        <span className="text-[10px] text-slate-400 block">Cottage Rooms:</span>
+                        <strong className="text-slate-800 font-semibold">Rooms: {roomsDisplay}</strong>
+                        {roomCount > 1 && (
+                          <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full font-bold ml-1">
+                            ({roomCount} rooms)
+                          </span>
+                        )}
                       </div>
                       <div>
                         <span className="text-[10px] text-slate-400 block">Stay Dates:</span>

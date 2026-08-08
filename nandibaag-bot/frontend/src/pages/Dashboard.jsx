@@ -444,7 +444,9 @@ export default function Dashboard() {
                     <div key={item._id} className="p-2.5 bg-emerald-50/60 rounded-lg text-xs flex justify-between items-center border border-emerald-100">
                       <div>
                         <p className="font-semibold text-slate-800">{item.customerName}</p>
-                        <p className="text-[10px] text-slate-500">{item.bookingType} • Adults: {item.adults || 1}</p>
+                        <p className="text-[10px] text-slate-500">
+                          {item.bookingType} • Rooms: {item.roomIds?.length > 0 ? item.roomIds.join(', ') : (item.roomId || 'TBA')}
+                        </p>
                       </div>
                       <span className="text-[10px] bg-emerald-600 text-white font-semibold px-2 py-0.5 rounded-full">
                         Check-in
@@ -470,7 +472,9 @@ export default function Dashboard() {
                     <div key={item._id} className="p-2.5 bg-purple-50/60 rounded-lg text-xs flex justify-between items-center border border-purple-100">
                       <div>
                         <p className="font-semibold text-slate-800">{item.customerName}</p>
-                        <p className="text-[10px] text-slate-500">Phone: {item.customerPhone}</p>
+                        <p className="text-[10px] text-slate-500">
+                          Rooms: {item.roomIds?.length > 0 ? item.roomIds.join(', ') : (item.roomId || 'TBA')} • {item.customerPhone}
+                        </p>
                       </div>
                       <span className="text-[10px] bg-purple-600 text-white font-semibold px-2 py-0.5 rounded-full">
                         Check-out

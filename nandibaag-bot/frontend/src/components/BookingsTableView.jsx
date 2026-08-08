@@ -52,6 +52,13 @@ const BookingsTableView = ({ bookings = [] }) => {
       const bookedByName = booking.bookedBy?.name || booking.bookedBy || 'Staff';
       const pkg = booking.packageType || booking.bookingType || 'couple';
 
+      const roomsDisplay = (booking.roomIds && booking.roomIds.length > 0)
+        ? booking.roomIds.join(', ')
+        : (booking.roomId || 'TBA');
+      const roomCount = (booking.roomIds && booking.roomIds.length > 0)
+        ? booking.roomIds.length
+        : (booking.roomId ? 1 : 0);
+
       return {
         ...booking,
         date,
@@ -66,6 +73,8 @@ const BookingsTableView = ({ bookings = [] }) => {
         advance,
         pending,
         bookedByName,
+        roomsDisplay,
+        roomCount,
         packageDisplay: pkg === 'oneDay' ? 'One Day' : pkg === 'couple' ? 'Couple' : 'Group',
         isOneDay: pkg === 'oneDay' ? '✓' : '',
         isGroup: pkg === 'group' ? '✓' : '',
@@ -122,7 +131,8 @@ const BookingsTableView = ({ bookings = [] }) => {
       'One Day': booking.isOneDay,
       'Group': booking.isGroup,
       'Couple': booking.isCouple,
-      'Room': booking.roomId || 'TBA',
+      'Rooms': booking.roomsDisplay,
+      'Room Count': booking.roomCount,
       'Booked By': booking.bookedByName,
       'Notes': booking.notes || ''
     }));
@@ -270,7 +280,14 @@ const BookingsTableView = ({ bookings = [] }) => {
                   <td className="center text-sky-600 font-bold">{booking.isOneDay}</td>
                   <td className="center text-emerald-600 font-bold">{booking.isGroup}</td>
                   <td className="center text-indigo-600 font-bold">{booking.isCouple}</td>
-                  <td className="room-cell">{booking.roomId || 'TBA'}</td>
+                  <td className="room-cell">
+                    <span className="font-medium text-emerald-900">{booking.roomsDisplay}</span>
+                    {booking.roomCount > 1 && (
+                      <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full font-bold ml-1">
+                        ({booking.roomCount} rms)
+                      </span>
+                    )}
+                  </td>
                   <td className="staff-cell">{booking.bookedByName}</td>
                   <td className="notes-cell" title={booking.notes}>
                     {booking.notes ? (booking.notes.length > 25 ? booking.notes.substring(0, 25) + '...' : booking.notes) : '-'}

@@ -599,6 +599,19 @@ export default function BookingsPage() {
                           {b.bookingType || 'Couple'}
                         </span>
 
+                        {/* Room Badges */}
+                        {b.roomIds && b.roomIds.length > 0 ? (
+                          b.roomIds.map((rId, idx) => (
+                            <span key={idx} className="text-[10px] bg-emerald-700 text-white font-extrabold px-2 py-0.5 rounded-md shadow-xs">
+                              Room {rId}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-[10px] bg-slate-200 text-slate-700 font-bold px-2 py-0.5 rounded-md">
+                            {b.roomId ? `Room ${b.roomId}` : 'Room TBA'}
+                          </span>
+                        )}
+
                         {/* ID Proof Thumbnail */}
                         {b.guestIdProofPhoto && (
                           <button
@@ -774,7 +787,12 @@ export default function BookingsPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   <tr>
-                    <td className="p-2.5">Cottage Room Package Stay</td>
+                    <td className="p-2.5">
+                      Cottage Room Package Stay 
+                      <span className="text-[11px] font-bold text-slate-500 block">
+                        Rooms: {invoiceModal.roomIds && invoiceModal.roomIds.length > 0 ? invoiceModal.roomIds.join(', ') : (invoiceModal.roomId || 'Assigned at check-in')}
+                      </span>
+                    </td>
                     <td className="p-2.5 text-right font-semibold">₹{invoiceModal.totalAmount}</td>
                   </tr>
                   <tr>
