@@ -328,34 +328,43 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <a
             href={`tel:${chat?.customerPhone}`}
             className="p-2 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl border border-slate-200 transition-colors flex items-center gap-1 text-xs font-semibold"
             title="Call Customer"
           >
             <PhoneCall size={15} />
-            <span className="hidden sm:inline">Call</span>
+            <span className="hidden lg:inline">Call</span>
           </a>
 
           <button
-            onClick={handleOpenAssignModal}
-            className="px-3 py-2 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 font-semibold text-xs rounded-xl transition-all flex items-center gap-1.5"
+            onClick={() => navigate('/pms/manual-booking')}
+            className="px-2.5 py-1.5 sm:px-3 sm:py-2 bg-amber-500/10 text-amber-900 hover:bg-amber-500/20 border border-amber-300 font-bold text-xs rounded-xl transition-all flex items-center gap-1"
+            title="Open Manual Booking Form"
           >
-            <Bed size={15} />
-            <span>Assign Cottage</span>
+            <PlusCircle size={14} className="text-amber-600" />
+            <span className="hidden sm:inline">Booking</span>
+          </button>
+
+          <button
+            onClick={handleOpenAssignModal}
+            className="px-2.5 py-1.5 sm:px-3 sm:py-2 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 font-semibold text-xs rounded-xl transition-all flex items-center gap-1"
+          >
+            <Bed size={14} />
+            <span className="hidden sm:inline">Cottage</span>
           </button>
 
           <button
             onClick={handleModeToggle}
-            className={`px-3 py-2 font-bold text-xs rounded-xl border transition-all flex items-center gap-1.5 ${
+            className={`px-2.5 py-1.5 sm:px-3 sm:py-2 font-bold text-xs rounded-xl border transition-all flex items-center gap-1.5 ${
               optimisticMode === 'ai'
                 ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
                 : 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
             }`}
           >
             {optimisticMode === 'ai' ? <Zap size={14} /> : <User size={14} />}
-            <span>{optimisticMode === 'ai' ? 'AI Bot Active' : 'Staff Handover'}</span>
+            <span>{optimisticMode === 'ai' ? 'AI Bot' : 'Staff'}</span>
           </button>
         </div>
       </div>
@@ -375,17 +384,18 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
               key={index}
               className={`flex ${isCustomer ? 'justify-start' : 'justify-end'} animate-fade-in`}
             >
-              <div className={`max-w-[80%] sm:max-w-[70%] p-3.5 rounded-2xl shadow-xs space-y-1 relative ${
+              <div className={`max-w-[85%] sm:max-w-[70%] p-3.5 rounded-2xl shadow-sm space-y-1 relative ${
                 isCustomer
-                  ? 'bg-white text-slate-800 rounded-tl-xs border border-slate-200'
+                  ? 'bg-white text-slate-800 rounded-tl-xs border border-slate-200/90 shadow-slate-200/50'
                   : isBot
-                  ? 'bg-emerald-800 text-white rounded-tr-xs shadow-emerald-900/10'
-                  : 'bg-indigo-600 text-white rounded-tr-xs'
+                  ? 'bg-gradient-to-r from-emerald-800 to-teal-900 text-white rounded-tr-xs shadow-emerald-950/20'
+                  : 'bg-gradient-to-r from-indigo-700 to-purple-800 text-white rounded-tr-xs shadow-indigo-950/20'
               }`}>
-                <div className="flex items-center justify-between gap-3 text-[10px] opacity-75 border-b border-white/10 pb-1 mb-1">
-                  <span className="font-bold capitalize">{isCustomer ? (chat.customerName || formatPhoneDisplay(chat.customerPhone)) : isBot ? '🤖 AI Bot' : '👤 Staff'}</span>
-                  <div className="flex items-center gap-1">
+                <div className="flex items-center justify-between gap-3 text-[10px] opacity-80 border-b border-white/10 pb-1 mb-1 font-semibold">
+                  <span className="capitalize">{isCustomer ? (chat.customerName || formatPhoneDisplay(chat.customerPhone)) : isBot ? '🤖 AI Bot' : '👤 Staff'}</span>
+                  <div className="flex items-center gap-1 font-mono">
                     <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    {!isCustomer && <CheckCircle size={10} className="text-emerald-300" />}
                     {msg.deliveryStatus === 'failed' && (
                       <span className="text-rose-200 font-bold flex items-center gap-0.5 ml-1" title="Message failed to deliver to WhatsApp">
                         <AlertCircle size={12} className="text-rose-300" />
@@ -430,23 +440,23 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
       </div>
 
       {/* Input Reply Bar */}
-      <div className="p-3 bg-white border-t border-slate-200 flex items-center gap-2">
+      <div className="p-3 bg-white/95 backdrop-blur-md border-t border-slate-200 flex items-center gap-2">
         <input
           type="text"
           value={messageText}
           onChange={(e) => setMessageText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-          placeholder="Type message to guest on WhatsApp..."
-          className="flex-1 px-4 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+          placeholder="Type WhatsApp message to guest..."
+          className="flex-1 px-4 py-2.5 text-base sm:text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none transition-all shadow-inner"
         />
 
         <button
           onClick={() => handleSendMessage()}
           disabled={isSending || !messageText.trim()}
-          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5"
+          className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 shrink-0"
         >
           {isSending ? <Loader size={15} className="animate-spin" /> : <Send size={15} />}
-          <span>Send</span>
+          <span className="hidden sm:inline">Send</span>
         </button>
       </div>
 
