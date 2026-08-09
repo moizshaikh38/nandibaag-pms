@@ -14,6 +14,7 @@ import CalendarPage from './pages/CalendarPage';
 import AvailabilityPage from './pages/AvailabilityPage';
 import PublicWidgetPage from './pages/PublicWidgetPage';
 import TeamSecurityPage from './pages/TeamSecurityPage';
+import StaffAnalyticsDashboard from './components/StaffAnalyticsDashboard';
 import ManualBookingForm from './components/ManualBookingForm';
 import Sidebar from './components/Sidebar';
 import BottomNav from './components/BottomNav';
@@ -161,6 +162,14 @@ function App() {
           element={
             <ProtectedLayout>
               <TeamSecurityPage />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/staff-analytics"
+          element={
+            <ProtectedLayout>
+              <StaffAnalyticsDashboard />
             </ProtectedLayout>
           }
         />

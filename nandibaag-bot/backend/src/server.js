@@ -168,15 +168,15 @@ const { ensureDbConnected } = require('./config/db');
 app.use('/api', ensureDbConnected);
 
 // API routes
+const staffRoutes = require('./routes/staffRoutes');
+
 app.use('/api/auth', authRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
-app.use('/api/numbers', numberRoutes);
 app.use('/api/chats', chatRoutes);
-const roomRoutes = require('./routes/roomRoutes');
-
 app.use('/api/leads', leadRoutes);
 app.use('/api/bookings', bookingRoutes);
-app.use('/api/rooms', roomRoutes);
+app.use('/api/rooms', require('./routes/roomRoutes'));
+app.use('/api/numbers', numberRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/inventory', inventoryRoutes);
@@ -185,6 +185,7 @@ app.use('/api/pms', pmsBookingRoutes);
 app.use('/api/message-log', messageLogRoutes);
 app.use('/api/team', teamSecurityRoutes);
 app.use('/api/fast2sms', fast2smsRoutes);
+app.use('/api/staff', staffRoutes);
 
 // Global error handler (must be last)
 app.use(errorHandler);
