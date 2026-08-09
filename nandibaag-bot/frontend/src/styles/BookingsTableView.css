@@ -214,7 +214,47 @@
     width: 100%;
   }
   
-  .table-wrapper {
-    max-height: 400px;
-  }
 }
+
+/* Subtotal & Grand Total Rows */
+.subtotal-row {
+  background: #f1f5f9;
+  border-top: 2px solid #cbd5e1;
+  border-bottom: 2px solid #cbd5e1;
+}
+
+.subtotal-row td {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #0f172a;
+  white-space: nowrap;
+}
+
+.grand-total-row {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  color: white;
+  border-top: 3px solid #047857;
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+}
+
+.grand-total-row td {
+  padding: 14px 12px;
+  font-size: 14px;
+  color: #ffffff;
+  white-space: nowrap;
+}
+
+.grand-total-row .positive-grand {
+  color: #34d399 !important;
+}
+
+.grand-total-row .negative-grand {
+  color: #f87171 !important;
+}
+
+.booking-row:hover {
+  background: #f8fafc;
+}
+

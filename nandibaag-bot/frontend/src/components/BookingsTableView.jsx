@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import * as XLSX from 'xlsx';
+import { groupBookingsWithTotals } from '../utils/bookingGrouper';
 import '../styles/BookingsTableView.css';
 
 const BookingsTableView = ({ bookings = [] }) => {
@@ -47,7 +48,7 @@ const BookingsTableView = ({ bookings = [] }) => {
       const totalMembers = adults + children;
 
       const totalAmount = Number(booking.totalAmount || 0);
-      const advance = Number(booking.advancePaid ?? booking.advancePayment ?? 0);
+      const advance = Number(booking.advancePaid ?? booking.advancePayment ?? booking.advance ?? 0);
       const pending = Math.max(0, totalAmount - advance);
       const bookedByName = booking.bookedBy?.name || booking.bookedBy || 'Staff';
       const pkg = booking.packageType || booking.bookingType || 'couple';
@@ -112,37 +113,77 @@ const BookingsTableView = ({ bookings = [] }) => {
     return sorted;
   }, [filteredBookings, sortColumn, sortOrder]);
 
-  // Export to Excel spreadsheet
+  // Compute daily subtotals and grand totals
+  const { groupedArray, grandTotal } = useMemo(() => {
+    return groupBookingsWithTotals(sortedBookings);
+  }, [sortedBookings]);
+
+  // Export to Excel spreadsheet with subtotals & grand totals
   const handleExportExcel = () => {
-    console.log('[Export] Exporting', sortedBookings.length, 'bookings to Excel');
+    console.log('[Export] Exporting', sortedBookings.length, 'bookings with subtotals to Excel');
     
-    const excelData = sortedBookings.map(booking => ({
-      'Date': booking.date,
-      'Customer Name': booking.customerName,
-      'Phone': booking.customerPhone,
-      'Check-in': booking.checkIn,
-      'Check-out': booking.checkOut,
-      'Total (₹)': booking.totalAmount,
-      'Advance (₹)': booking.advance,
-      'Pending (₹)': booking.pending,
-      'Adults': booking.adults,
-      'Children': booking.children,
-      'Total Members': booking.totalMembers,
-      'One Day': booking.isOneDay,
-      'Group': booking.isGroup,
-      'Couple': booking.isCouple,
-      'Rooms': booking.roomsDisplay,
-      'Room Count': booking.roomCount,
-      'Booked By': booking.bookedByName,
-      'Notes': booking.notes || ''
-    }));
-    
-    const ws = XLSX.utils.json_to_sheet(excelData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Bookings');
-    
-    ws['!cols'] = [
-      { wch: 12 }, // Date
+    const rows = [];
+
+    groupedArray.forEach((day) => {
+      day.bookings.forEach((booking) => {
+        rows.push({
+          Date: day.date,
+          'Customer Name': booking.customerName,
+          Phone: booking.customerPhone,
+          'Check-in': booking.checkIn,
+          'Check-out': booking.checkOut,
+          'Total (₹)': booking.totalAmount || 0,
+          'Advance (₹)': booking.advance || 0,
+          'Pending (₹)': booking.pending || 0,
+          Adults: booking.adults || 0,
+          Children: booking.children || 0,
+          Members: booking.totalMembers || 0,
+          'One Day': booking.isOneDay,
+          Group: booking.isGroup,
+          Couple: booking.isCouple,
+          Room: booking.roomsDisplay,
+          'Booked By': booking.bookedByName,
+          Notes: booking.notes || ''
+        });
+      });
+
+      // Daily subtotal row
+      rows.push({
+        Date: `TOTAL ${day.date} (${day.totals.count} Bookings)`,
+        'Customer Name': '', Phone: '', 'Check-in': '', 'Check-out': '',
+        'Total (₹)': day.totals.amount,
+        'Advance (₹)': day.totals.advance,
+        'Pending (₹)': day.totals.pending,
+        Adults: day.totals.adults,
+        Children: day.totals.children,
+        Members: day.totals.members,
+        'One Day': '', Group: '', Couple: '',
+        Room: '', 'Booked By': '', Notes: ''
+      });
+
+      rows.push({}); // Spacer row
+    });
+
+    // Grand total row
+    rows.push({
+      Date: `GRAND TOTAL (${grandTotal.count} Bookings)`,
+      'Customer Name': '', Phone: '', 'Check-in': '', 'Check-out': '',
+      'Total (₹)': grandTotal.amount,
+      'Advance (₹)': grandTotal.advance,
+      'Pending (₹)': grandTotal.pending,
+      Adults: grandTotal.adults,
+      Children: grandTotal.children,
+      Members: grandTotal.members,
+      'One Day': '', Group: '', Couple: '',
+      Room: '', 'Booked By': '', Notes: ''
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Bookings');
+
+    worksheet['!cols'] = [
+      { wch: 26 }, // Date / Total header
       { wch: 18 }, // Customer Name
       { wch: 15 }, // Phone
       { wch: 11 }, // Check-in
@@ -152,18 +193,18 @@ const BookingsTableView = ({ bookings = [] }) => {
       { wch: 12 }, // Pending
       { wch: 8 },  // Adults
       { wch: 8 },  // Children
-      { wch: 14 }, // Total Members
+      { wch: 12 }, // Members
       { wch: 9 },  // One Day
       { wch: 8 },  // Group
       { wch: 8 },  // Couple
-      { wch: 12 }, // Room
+      { wch: 14 }, // Room
       { wch: 14 }, // Booked By
       { wch: 25 }  // Notes
     ];
-    
+
     const fileName = `Nandibaag_Bookings_${new Date().toISOString().split('T')[0]}.xlsx`;
-    XLSX.writeFile(wb, fileName);
-    console.log('[Export] ✅ Excel file exported:', fileName);
+    XLSX.writeFile(workbook, fileName);
+    console.log('[Export] ✅ Excel file exported with subtotals:', fileName);
   };
 
   const handleSort = (column) => {
@@ -186,10 +227,10 @@ const BookingsTableView = ({ bookings = [] }) => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
           <div>
             <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-              📊 Bookings Overview (Spreadsheet View)
+              📊 Bookings Overview (Daily Subtotals & Grand Total View)
             </h2>
             <p className="record-count">
-              Showing {sortedBookings.length} of {processedBookings.length} bookings
+              Showing {sortedBookings.length} of {processedBookings.length} bookings ({groupedArray.length} Dates)
             </p>
           </div>
 
@@ -263,37 +304,72 @@ const BookingsTableView = ({ bookings = [] }) => {
             </tr>
           </thead>
           <tbody>
-            {sortedBookings.length > 0 ? (
-              sortedBookings.map((booking, idx) => (
-                <tr key={booking._id || idx} className="booking-row">
-                  <td className="date-cell">{booking.date}</td>
-                  <td className="name-cell">{booking.customerName}</td>
-                  <td className="phone-cell">{booking.customerPhone}</td>
-                  <td className="time-cell">{booking.checkIn}</td>
-                  <td className="time-cell">{booking.checkOut}</td>
-                  <td className="amount-cell">₹{booking.totalAmount}</td>
-                  <td className="amount-cell positive">₹{booking.advance}</td>
-                  <td className="amount-cell negative">₹{booking.pending}</td>
-                  <td className="center">{booking.adults}</td>
-                  <td className="center">{booking.children}</td>
-                  <td className="center">{booking.totalMembers}</td>
-                  <td className="center text-sky-600 font-bold">{booking.isOneDay}</td>
-                  <td className="center text-emerald-600 font-bold">{booking.isGroup}</td>
-                  <td className="center text-indigo-600 font-bold">{booking.isCouple}</td>
-                  <td className="room-cell">
-                    <span className="font-medium text-emerald-900">{booking.roomsDisplay}</span>
-                    {booking.roomCount > 1 && (
-                      <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full font-bold ml-1">
-                        ({booking.roomCount} rms)
-                      </span>
-                    )}
+            {groupedArray.length > 0 ? (
+              <>
+                {groupedArray.map((day) => (
+                  <React.Fragment key={day.date}>
+                    {/* INDIVIDUAL BOOKING ROWS */}
+                    {day.bookings.map((booking, idx) => (
+                      <tr key={booking._id || `${day.date}-${idx}`} className="booking-row">
+                        <td className="date-cell">{booking.date}</td>
+                        <td className="name-cell">{booking.customerName}</td>
+                        <td className="phone-cell">{booking.customerPhone}</td>
+                        <td className="time-cell">{booking.checkIn}</td>
+                        <td className="time-cell">{booking.checkOut}</td>
+                        <td className="amount-cell">₹{booking.totalAmount.toLocaleString('en-IN')}</td>
+                        <td className="amount-cell positive">₹{booking.advance.toLocaleString('en-IN')}</td>
+                        <td className="amount-cell negative">₹{booking.pending.toLocaleString('en-IN')}</td>
+                        <td className="center">{booking.adults}</td>
+                        <td className="center">{booking.children}</td>
+                        <td className="center font-bold">{booking.totalMembers}</td>
+                        <td className="center text-sky-600 font-bold">{booking.isOneDay}</td>
+                        <td className="center text-emerald-600 font-bold">{booking.isGroup}</td>
+                        <td className="center text-indigo-600 font-bold">{booking.isCouple}</td>
+                        <td className="room-cell">
+                          <span className="font-medium text-emerald-900">{booking.roomsDisplay}</span>
+                          {booking.roomCount > 1 && (
+                            <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full font-bold ml-1">
+                              ({booking.roomCount} rms)
+                            </span>
+                          )}
+                        </td>
+                        <td className="staff-cell">{booking.bookedByName}</td>
+                        <td className="notes-cell" title={booking.notes}>
+                          {booking.notes ? (booking.notes.length > 25 ? booking.notes.substring(0, 25) + '...' : booking.notes) : '-'}
+                        </td>
+                      </tr>
+                    ))}
+
+                    {/* DAILY SUBTOTAL ROW */}
+                    <tr className="subtotal-row">
+                      <td colSpan={5}>
+                        <strong>TOTAL {day.date} ({day.totals.count} {day.totals.count === 1 ? 'Booking' : 'Bookings'})</strong>
+                      </td>
+                      <td className="amount-cell"><strong>₹{day.totals.amount.toLocaleString('en-IN')}</strong></td>
+                      <td className="amount-cell positive"><strong>₹{day.totals.advance.toLocaleString('en-IN')}</strong></td>
+                      <td className="amount-cell negative"><strong>₹{day.totals.pending.toLocaleString('en-IN')}</strong></td>
+                      <td className="center"><strong>{day.totals.adults}</strong></td>
+                      <td className="center"><strong>{day.totals.children}</strong></td>
+                      <td className="center"><strong>{day.totals.members}</strong></td>
+                      <td colSpan={6}></td>
+                    </tr>
+                  </React.Fragment>
+                ))}
+
+                {/* GRAND TOTAL ROW */}
+                <tr className="grand-total-row">
+                  <td colSpan={5}>
+                    <strong>GRAND TOTAL ({grandTotal.count} {grandTotal.count === 1 ? 'Booking' : 'Bookings'})</strong>
                   </td>
-                  <td className="staff-cell">{booking.bookedByName}</td>
-                  <td className="notes-cell" title={booking.notes}>
-                    {booking.notes ? (booking.notes.length > 25 ? booking.notes.substring(0, 25) + '...' : booking.notes) : '-'}
-                  </td>
+                  <td className="amount-cell"><strong>₹{grandTotal.amount.toLocaleString('en-IN')}</strong></td>
+                  <td className="amount-cell positive-grand"><strong>₹{grandTotal.advance.toLocaleString('en-IN')}</strong></td>
+                  <td className="amount-cell negative-grand"><strong>₹{grandTotal.pending.toLocaleString('en-IN')}</strong></td>
+                  <td className="center"><strong>{grandTotal.adults}</strong></td>
+                  <td className="center"><strong>{grandTotal.children}</strong></td>
+                  <td className="center"><strong>{grandTotal.members}</strong></td>
+                  <td colSpan={6}></td>
                 </tr>
-              ))
+              </>
             ) : (
               <tr>
                 <td colSpan="17" className="no-data">

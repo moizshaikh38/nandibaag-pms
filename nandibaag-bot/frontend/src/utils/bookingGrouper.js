@@ -1,49 +1,87 @@
-/**
- * Groups bookings by check-in date (formatted as "DD MMMM YYYY", e.g. "08 August 2026")
- * and sorts date groups in ascending order (earliest dates first).
- *
- * @param {Array} bookings Array of booking objects
- * @param {'asc' | 'desc'} [sortOrder='asc'] Date sort order
- * @returns {Array<{ isoDateKey: string, formattedDate: string, rawDate: Date, bookings: Array }>}
- */
-export const groupBookingsByDate = (bookings = [], sortOrder = 'asc') => {
-  if (!Array.isArray(bookings) || bookings.length === 0) {
-    return [];
-  }
+export const groupBookingsWithTotals = (bookings = []) => {
+  const sorted = [...bookings].sort(
+    (a, b) => (a.rawCheckIn || new Date(a.checkInDate || a.date).getTime()) - (b.rawCheckIn || new Date(b.checkInDate || b.date).getTime())
+  );
 
   const grouped = {};
 
-  bookings.forEach(booking => {
-    const rawCheckIn = booking.checkInDate || booking.date;
-    const dateObj = rawCheckIn ? new Date(rawCheckIn) : new Date();
+  sorted.forEach((booking) => {
+    const rawDate = booking.checkInDate || booking.date;
+    const dateObj = rawDate ? new Date(rawDate) : new Date();
+    const dateKey = dateObj.toLocaleDateString('en-GB'); // dd/mm/yyyy
 
-    // Key format: YYYY-MM-DD for reliable date sorting
-    const isoDateKey = dateObj.toISOString().split('T')[0];
-
-    // Pretty display format: "08 August 2026"
-    const formattedDate = dateObj.toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'long',
-      year: 'numeric'
-    });
-
-    if (!grouped[isoDateKey]) {
-      grouped[isoDateKey] = {
-        isoDateKey,
-        formattedDate,
-        rawDate: dateObj,
-        bookings: []
+    if (!grouped[dateKey]) {
+      grouped[dateKey] = {
+        date: dateKey,
+        bookings: [],
+        totals: {
+          amount: 0,
+          advance: 0,
+          pending: 0,
+          adults: 0,
+          children: 0,
+          members: 0,
+          count: 0
+        }
       };
     }
 
-    grouped[isoDateKey].bookings.push(booking);
+    const advance = Number(booking.advance ?? booking.advancePaid ?? booking.advancePayment ?? 0);
+    const amount = Number(booking.totalAmount || 0);
+    const pending = Math.max(0, amount - advance);
+    const adults = Number(booking.adults ?? booking.guestComposition?.adults ?? 0);
+    const children = Number(booking.children ?? booking.guestComposition?.children ?? 0);
+
+    grouped[dateKey].bookings.push(booking);
+    grouped[dateKey].totals.amount += amount;
+    grouped[dateKey].totals.advance += advance;
+    grouped[dateKey].totals.pending += pending;
+    grouped[dateKey].totals.adults += adults;
+    grouped[dateKey].totals.children += children;
+    grouped[dateKey].totals.members += (adults + children);
+    grouped[dateKey].totals.count += 1;
   });
 
-  // Sort dates (ascending by default: earliest dates first)
-  const sortedKeys = Object.keys(grouped).sort((a, b) => {
-    const diff = new Date(a) - new Date(b);
-    return sortOrder === 'desc' ? -diff : diff;
+  const groupedArray = Object.values(grouped);
+
+  const grandTotal = groupedArray.reduce(
+    (acc, day) => {
+      acc.amount += day.totals.amount;
+      acc.advance += day.totals.advance;
+      acc.pending += day.totals.pending;
+      acc.adults += day.totals.adults;
+      acc.children += day.totals.children;
+      acc.members += day.totals.members;
+      acc.count += day.totals.count;
+      return acc;
+    },
+    { amount: 0, advance: 0, pending: 0, adults: 0, children: 0, members: 0, count: 0 }
+  );
+
+  return { groupedArray, grandTotal };
+};
+
+export const groupBookingsByDate = (bookings = [], order = 'asc') => {
+  const groups = {};
+
+  bookings.forEach((booking) => {
+    const rawDate = booking.checkInDate || booking.date;
+    const dateObj = rawDate ? new Date(rawDate) : new Date();
+    const dateKey = dateObj.toLocaleDateString('en-GB');
+
+    if (!groups[dateKey]) {
+      groups[dateKey] = {
+        date: dateKey,
+        rawTime: dateObj.getTime(),
+        bookings: []
+      };
+    }
+    groups[dateKey].bookings.push(booking);
   });
 
-  return sortedKeys.map(key => grouped[key]);
+  const sortedGroups = Object.values(groups).sort((a, b) => {
+    return order === 'asc' ? a.rawTime - b.rawTime : b.rawTime - a.rawTime;
+  });
+
+  return sortedGroups;
 };
