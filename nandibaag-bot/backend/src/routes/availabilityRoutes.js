@@ -387,24 +387,63 @@ router.get('/grid', verifyToken, async (req, res, next) => {
       seriesId: { $in: series.map(s => s._id) }
     }).populate('seriesId', 'name status').sort({ 'seriesId.name': 1, roomNumber: 1 });
 
+    // Fetch all active maintenance locks overlapping the date range
+    const RoomMaintenance = require('../models/RoomMaintenance');
+    const checkInObj = new Date(checkInDate);
+    const checkOutObj = new Date(checkOutDate);
+
+    const overlappingMaintenance = await RoomMaintenance.find({
+      status: 'active',
+      startDate: { $lt: checkOutObj },
+      endDate: { $gt: checkInObj }
+    }).lean();
+
+    const maintenanceMap = {};
+    overlappingMaintenance.forEach(m => {
+      maintenanceMap[String(m.roomId)] = m;
+    });
+
     // Get all active bookings that overlap the date range
     const overlappingBookings = await RoomBooking.find({
       status: { $in: ['confirmed', 'checked_in'] },
-      checkInDate: { $lt: new Date(checkOutDate) },
-      checkOutDate: { $gt: new Date(checkInDate) }
+      checkInDate: { $lt: checkOutObj },
+      checkOutDate: { $gt: checkInObj }
     }).populate('bookingId', 'customerName customerPhone');
+
+    // Also get all active Bookings from main collection
+    const activeMainBookings = await Booking.find({
+      status: { $in: ['pending_payment', 'confirmed', 'checked_in'] },
+      checkInDate: { $lt: checkOutObj },
+      checkOutDate: { $gt: checkInObj }
+    }).lean();
 
     // Create a map of roomId -> booking info
     const bookingMap = {};
     overlappingBookings.forEach(rb => {
       bookingMap[rb.roomId.toString()] = {
-        bookingId: rb.bookingId._id,
-        customerName: rb.bookingId.customerName,
-        customerPhone: rb.bookingId.customerPhone,
+        bookingId: rb.bookingId?._id || rb.bookingId,
+        customerName: rb.bookingId?.customerName || 'Guest',
+        customerPhone: rb.bookingId?.customerPhone || '',
         checkInDate: rb.checkInDate,
         checkOutDate: rb.checkOutDate,
         status: rb.status
       };
+    });
+
+    activeMainBookings.forEach(b => {
+      const ids = Array.isArray(b.roomIds) ? b.roomIds : [b.roomId];
+      ids.forEach(id => {
+        if (id) {
+          bookingMap[String(id)] = {
+            bookingId: b._id,
+            customerName: b.customerName || 'Guest',
+            customerPhone: b.customerPhone || '',
+            checkInDate: b.checkInDate,
+            checkOutDate: b.checkOutDate,
+            status: b.status
+          };
+        }
+      });
     });
 
     // Group rooms by series and compute status
@@ -425,15 +464,25 @@ router.get('/grid', verifyToken, async (req, res, next) => {
 
       let status = 'available';
       let booking = null;
+      let maintenance = null;
 
-      // Check if room is in maintenance
-      if (room.status === 'maintenance') {
+      const roomIdStr = room._id.toString();
+      const roomNumStr = String(room.roomNumber);
+
+      // Check if room is in active maintenance
+      const maintObj = maintenanceMap[roomIdStr] || maintenanceMap[roomNumStr];
+      if (maintObj || room.status === 'maintenance') {
         status = 'maintenance';
+        maintenance = maintObj ? {
+          type: maintObj.maintenanceType,
+          reason: maintObj.reason,
+          until: maintObj.endDate
+        } : { type: 'maintenance', reason: 'Under servicing' };
       }
       // Check if room has overlapping booking
-      else if (bookingMap[room._id.toString()]) {
+      else if (bookingMap[roomIdStr] || bookingMap[roomNumStr]) {
         status = 'booked';
-        booking = bookingMap[room._id.toString()];
+        booking = bookingMap[roomIdStr] || bookingMap[roomNumStr];
       }
 
       seriesMapObj[seriesId].rooms.push({
@@ -441,7 +490,8 @@ router.get('/grid', verifyToken, async (req, res, next) => {
         roomNumber: room.roomNumber,
         capacity: room.capacity,
         status,
-        booking
+        booking,
+        maintenance
       });
     }
 

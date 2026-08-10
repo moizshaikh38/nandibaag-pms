@@ -408,8 +408,17 @@ export default function AvailabilityPage() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                   {seriesRooms.map((room) => {
                     const isAvailable = room.status === 'available';
+                    const isMaintenance = room.status === 'maintenance';
+                    const isBooked = room.status === 'booked';
                     const isBookingThisRoom = bookingRoomId === room._id;
                     const isUnbookingThisRoom = unbookingRoomId === room._id;
+
+                    let cardClass = 'bg-emerald-50/80 hover:bg-emerald-600 hover:text-white text-emerald-900 border-emerald-300 hover:scale-[1.04] hover:shadow-md cursor-pointer';
+                    if (isMaintenance) {
+                      cardClass = 'bg-amber-100/90 text-amber-950 border-amber-300 font-medium opacity-90 cursor-not-allowed';
+                    } else if (isBooked) {
+                      cardClass = 'bg-slate-100 text-slate-700 border-slate-200';
+                    }
 
                     return (
                       <div
@@ -419,11 +428,7 @@ export default function AvailabilityPage() {
                             handleInstantOneClickBooking(room);
                           }
                         }}
-                        className={`p-3.5 rounded-xl border transition-all select-none space-y-2 relative overflow-hidden group ${
-                          isAvailable
-                            ? 'bg-emerald-50/80 hover:bg-emerald-600 hover:text-white text-emerald-900 border-emerald-300 hover:scale-[1.04] hover:shadow-md cursor-pointer'
-                            : 'bg-amber-50 text-amber-950 border-amber-200'
-                        }`}
+                        className={`p-3.5 rounded-xl border transition-all select-none space-y-2 relative overflow-hidden group ${cardClass}`}
                       >
                         <div className="flex items-center justify-between">
                           <span className="font-display font-bold text-base">
@@ -436,6 +441,10 @@ export default function AvailabilityPage() {
                             <span className="text-[10px] bg-emerald-700 group-hover:bg-white group-hover:text-emerald-900 text-white font-bold px-2 py-0.5 rounded-full transition-colors flex items-center gap-1">
                               <Zap size={10} />
                               <span>1-Click</span>
+                            </span>
+                          ) : isMaintenance ? (
+                            <span className="text-[10px] bg-amber-600 text-white font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1 uppercase">
+                              <span>Lock</span>
                             </span>
                           ) : (
                             <button
@@ -458,12 +467,18 @@ export default function AvailabilityPage() {
 
                         <div className="flex items-center justify-between text-[11px]">
                           <span className="opacity-80">Cap: {room.capacity}</span>
-                          <span className={`font-semibold capitalize text-[10px] px-2 py-0.5 rounded-full ${
+                          <span className={`font-bold capitalize text-[10px] px-2 py-0.5 rounded-full ${
                             isAvailable
                               ? 'bg-emerald-200 group-hover:bg-emerald-800 group-hover:text-white text-emerald-950'
-                              : 'bg-amber-200 text-amber-950'
+                              : isMaintenance
+                              ? 'bg-amber-200 text-amber-950 border border-amber-300'
+                              : 'bg-slate-200 text-slate-800'
                           }`}>
-                            {isAvailable ? 'Available' : 'Booked'}
+                            {isAvailable
+                              ? 'Available'
+                              : isMaintenance
+                              ? `🔧 ${room.maintenance?.type || 'Maintenance'}`
+                              : 'Booked'}
                           </span>
                         </div>
                       </div>

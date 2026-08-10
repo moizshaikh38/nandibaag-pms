@@ -94,6 +94,19 @@ router.get('/availability', async (req, res) => {
           status: { $in: ['confirmed', 'checked_in'] }
         });
         
+        const RoomMaintenance = require('../models/RoomMaintenance');
+        const maintenanceConflict = await RoomMaintenance.findOne({
+          $or: [
+            { roomId: identifier },
+            { roomId: String(room._id) }
+          ],
+          startDate: { $lt: checkOut },
+          endDate: { $gt: checkIn },
+          status: 'active'
+        });
+
+        const isAvailable = !bookingConflict && !roomBookingConflict && !maintenanceConflict && room.status !== 'maintenance';
+
         return {
           ...room,
           _id: String(room._id),
@@ -101,7 +114,8 @@ router.get('/availability', async (req, res) => {
           roomNumber: identifier,
           seriesName,
           capacity: Number(room.capacity || 4),
-          available: !bookingConflict && !roomBookingConflict
+          available: isAvailable,
+          isMaintenance: !!maintenanceConflict || room.status === 'maintenance'
         };
       })
     );

@@ -87,20 +87,35 @@ async function getCapacityAvailability(checkInDate, checkOutDate, minCapacity = 
   const rooms = await getActiveRoomStructure();
   const eligibleRooms = rooms.filter(r => r.capacity >= minCapacity);
 
-  // Fetch all overlapping bookings for this date range in ONE single DB query
+  // Fetch all overlapping bookings & active maintenance for this date range in DB queries
+  const RoomMaintenance = require('../models/RoomMaintenance');
+  const checkInObj = new Date(checkInDate);
+  const checkOutObj = new Date(checkOutDate);
+
   const overlappingBookings = await RoomBooking.find({
     status: { $in: BLOCKING_STATUSES },
-    checkInDate: { $lt: new Date(checkOutDate) },
-    checkOutDate: { $gt: new Date(checkInDate) }
+    checkInDate: { $lt: checkOutObj },
+    checkOutDate: { $gt: checkInObj }
   }).select('roomId').lean();
 
-  const blockedRoomIds = new Set(overlappingBookings.map(b => b.roomId.toString()));
+  const activeMaintenance = await RoomMaintenance.find({
+    status: 'active',
+    startDate: { $lt: checkOutObj },
+    endDate: { $gt: checkInObj }
+  }).select('roomId').lean();
+
+  const blockedRoomIds = new Set([
+    ...overlappingBookings.map(b => b.roomId.toString()),
+    ...activeMaintenance.map(m => String(m.roomId))
+  ]);
 
   let availableCount = 0;
   const capacityBreakdown = {};
 
   for (const room of eligibleRooms) {
-    const isBlocked = blockedRoomIds.has(room._id.toString());
+    const roomIdStr = room._id.toString();
+    const roomNumStr = String(room.roomNumber);
+    const isBlocked = blockedRoomIds.has(roomIdStr) || blockedRoomIds.has(roomNumStr) || room.status === 'maintenance';
     if (!isBlocked) {
       availableCount++;
       const tier = `capacity${room.capacity}`;
@@ -132,19 +147,32 @@ async function getCapacityAvailability(checkInDate, checkOutDate, minCapacity = 
  */
 async function getDetailedAvailability(checkInDate, checkOutDate, minCapacity = 0) {
   const rooms = await getActiveRoomStructure();
+  const RoomMaintenance = require('../models/RoomMaintenance');
+  const checkInObj = new Date(checkInDate);
+  const checkOutObj = new Date(checkOutDate);
 
-  // Fetch all overlapping bookings for this date range in ONE single DB query
   const overlappingBookings = await RoomBooking.find({
     status: { $in: BLOCKING_STATUSES },
-    checkInDate: { $lt: new Date(checkOutDate) },
-    checkOutDate: { $gt: new Date(checkInDate) }
+    checkInDate: { $lt: checkOutObj },
+    checkOutDate: { $gt: checkInObj }
   }).select('roomId').lean();
 
-  const blockedRoomIds = new Set(overlappingBookings.map(b => b.roomId.toString()));
+  const activeMaintenance = await RoomMaintenance.find({
+    status: 'active',
+    startDate: { $lt: checkOutObj },
+    endDate: { $gt: checkInObj }
+  }).select('roomId').lean();
+
+  const blockedRoomIds = new Set([
+    ...overlappingBookings.map(b => b.roomId.toString()),
+    ...activeMaintenance.map(m => String(m.roomId))
+  ]);
 
   return rooms.filter(r => (
     (minCapacity === 0 || r.capacity >= minCapacity) &&
-    !blockedRoomIds.has(r._id.toString())
+    !blockedRoomIds.has(r._id.toString()) &&
+    !blockedRoomIds.has(String(r.roomNumber)) &&
+    r.status !== 'maintenance'
   ));
 }
 
