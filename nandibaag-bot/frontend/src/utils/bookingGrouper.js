@@ -1,3 +1,5 @@
+import { formatDMY } from './formatters';
+
 export const groupBookingsWithTotals = (bookings = []) => {
   const sorted = [...bookings].sort(
     (a, b) => (a.rawCheckIn || new Date(a.checkInDate || a.date).getTime()) - (b.rawCheckIn || new Date(b.checkInDate || b.date).getTime())
@@ -8,7 +10,7 @@ export const groupBookingsWithTotals = (bookings = []) => {
   sorted.forEach((booking) => {
     const rawDate = booking.checkInDate || booking.date;
     const dateObj = rawDate ? new Date(rawDate) : new Date();
-    const dateKey = dateObj.toLocaleDateString('en-GB'); // dd/mm/yyyy
+    const dateKey = formatDMY(dateObj); // dd/mm/yyyy
 
     if (!grouped[dateKey]) {
       grouped[dateKey] = {
@@ -67,11 +69,12 @@ export const groupBookingsByDate = (bookings = [], order = 'asc') => {
   bookings.forEach((booking) => {
     const rawDate = booking.checkInDate || booking.date;
     const dateObj = rawDate ? new Date(rawDate) : new Date();
-    const dateKey = dateObj.toLocaleDateString('en-GB');
+    const dateKey = formatDMY(dateObj); // dd/mm/yyyy
 
     if (!groups[dateKey]) {
       groups[dateKey] = {
         date: dateKey,
+        formattedDate: dateKey,
         rawTime: dateObj.getTime(),
         bookings: []
       };

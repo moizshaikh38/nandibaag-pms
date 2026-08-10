@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
+import { formatDMY } from '../utils/formatters';
 
 const StaffIndividualProfile = ({ staffName, onClose }) => {
   const [profile, setProfile] = useState(null);
@@ -133,7 +134,7 @@ const StaffIndividualProfile = ({ staffName, onClose }) => {
                   <div key={booking._id || idx} className="booking-item">
                     <div className="booking-info">
                       <strong>{booking.customerName}</strong>
-                      <small>{new Date(booking.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</small>
+                      <small>{formatDMY(booking.createdAt)}</small>
                     </div>
                     <div className="booking-package">
                       <span className="badge">

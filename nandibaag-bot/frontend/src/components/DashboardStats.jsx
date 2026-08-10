@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
+import { formatDMY } from '../utils/formatters';
 import '../styles/DashboardStats.css';
 
 const DashboardStats = () => {
@@ -88,8 +89,8 @@ const DashboardStats = () => {
 
       <div className="period-info">
         <p>
-          📅 {stats.periodStart ? new Date(stats.periodStart).toLocaleDateString() : ''} - 
-          {stats.periodEnd ? new Date(stats.periodEnd).toLocaleDateString() : ''}
+          📅 {stats.periodStart ? formatDMY(stats.periodStart) : ''} - 
+          {stats.periodEnd ? formatDMY(stats.periodEnd) : ''}
         </p>
       </div>
 

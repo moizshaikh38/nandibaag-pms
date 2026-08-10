@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
+import { formatDMY } from '../utils/formatters';
 import {
   Clock,
   User,
@@ -274,7 +275,7 @@ export default function PendingBookingsPage() {
                   </div>
                   <div className="px-4 py-2 bg-gray-50 border-t flex items-center justify-between">
                     <span className="text-xs text-gray-500">
-                      {h.lastMessageAt ? new Date(h.lastMessageAt).toLocaleDateString() : ''}
+                      {h.lastMessageAt ? formatDMY(h.lastMessageAt) : ''}
                     </span>
                     <span className="text-whatsapp text-sm font-medium flex items-center gap-1">
                       Confirm Booking <ChevronRight size={14} />

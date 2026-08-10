@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { groupBookingsWithTotals } from '../utils/bookingGrouper';
+import { formatDMY } from '../utils/formatters';
 import '../styles/BookingsTableView.css';
 
 const BookingsTableView = ({ bookings = [] }) => {
@@ -40,7 +41,7 @@ const BookingsTableView = ({ bookings = [] }) => {
       const times = getCheckTimes(booking);
       const rawCheckInDate = booking.checkInDate || booking.date;
       const dateObj = rawCheckInDate ? new Date(rawCheckInDate) : new Date();
-      const date = dateObj.toLocaleDateString('en-GB'); // DD/MM/YYYY
+      const date = formatDMY(dateObj); // DD/MM/YYYY
       const isoDate = dateObj.toISOString().split('T')[0]; // YYYY-MM-DD for filter matching
 
       const adults = Number(booking.guestComposition?.adults ?? booking.adults ?? 1);
