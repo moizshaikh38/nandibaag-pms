@@ -261,8 +261,8 @@ router.post('/manual-booking', async (req, res) => {
     console.log('[Booking:Manual] Booking created:', booking._id);
 
     // ─── AUTO-SEND CONFIRMATION MESSAGES ────────────────────────────
-    // Sends formatted booking confirmation to Customer (SMS) and Staff Group
-    let customerSMSSent = false;
+    // Sends formatted booking confirmation to Customer (WhatsApp) and Staff Group
+    let customerMsgSent = false;
     let staffGroupSent = false;
 
     try {
@@ -271,76 +271,124 @@ router.post('/manual-booking', async (req, res) => {
         formatBookingMessageForStaffGroup
       } = require('../utils/bookingMessageFormatter');
       const { sendMessageViaChannel } = require('../services/channelManager');
+      const whatsappService = require('../services/whatsappService');
 
-      console.log('[Booking:SMS] ══════════════════════════════════════════');
-      console.log('[Booking:SMS] Preparing to send confirmation messages');
-      console.log('[Booking:SMS] Customer phone:', booking.customerPhone);
-      console.log('[Booking:SMS] Booking ID:', booking._id);
+      console.log('[Booking:MSG] ══════════════════════════════════════════');
+      console.log('[Booking:MSG] Preparing to send confirmation messages');
+      console.log('[Booking:MSG] Customer phone:', booking.customerPhone);
+      console.log('[Booking:MSG] Booking ID:', booking._id);
 
       const customerMessage = formatBookingMessageForCustomer(booking);
       const staffGroupMessage = formatBookingMessageForStaffGroup(booking);
 
-      console.log('[Booking:SMS] ✅ Messages formatted successfully');
-      console.log('[Booking:SMS] Customer message preview:', customerMessage.substring(0, 120));
-      console.log('[Booking:SMS] Staff message preview:', staffGroupMessage.substring(0, 120));
+      console.log('[Booking:MSG] ✅ Messages formatted successfully');
+      console.log('[Booking:MSG] Customer message length:', customerMessage.length);
+      console.log('[Booking:MSG] Customer message preview:', customerMessage.substring(0, 150));
 
-      // 1. SEND TO CUSTOMER
-      console.log('[Booking:SMS] ─── Sending to CUSTOMER ───');
+      // ─── SEND TO CUSTOMER ──────────────────────────────────────
+      console.log('[Booking:MSG] ─── Sending to CUSTOMER ───');
+      
+      // Strategy: Try WhatsApp Web (Baileys) first → fast2sms → direct Baileys
+      // Baileys is the primary connected channel for this bot
+      
+      // Attempt 1: WhatsApp Web via channelManager
       try {
-        const customerSent = await sendMessageViaChannel(booking.customerPhone, customerMessage, 'fast2sms');
-        if (customerSent) {
-          customerSMSSent = true;
-          console.log('[Booking:SMS] ✅ Sent successfully to customer:', booking.customerPhone);
+        const sent = await sendMessageViaChannel(booking.customerPhone, customerMessage, 'whatsapp-web');
+        if (sent) {
+          customerMsgSent = true;
+          console.log('[Booking:MSG] ✅ ATTEMPT 1 SUCCESS: WhatsApp Web sent to customer:', booking.customerPhone);
         } else {
-          console.log('[Booking:SMS] ⚠️ sendMessageViaChannel returned false for customer:', booking.customerPhone);
+          console.log('[Booking:MSG] ⚠️ ATTEMPT 1: WhatsApp Web returned false (session may not be ready)');
         }
-      } catch (smsError) {
-        console.error('[Booking:SMS] ❌ Failed to send customer SMS:', smsError.message);
-        console.error('[Booking:SMS] Stack:', smsError.stack);
+      } catch (wa1Error) {
+        console.error('[Booking:MSG] ❌ ATTEMPT 1 WhatsApp Web error:', wa1Error.message);
       }
 
-      // 2. SEND TO STAFF GROUP
+      // Attempt 2: fast2sms channel (if FAST2SMS_API_KEY configured)
+      if (!customerMsgSent) {
+        try {
+          const sent = await sendMessageViaChannel(booking.customerPhone, customerMessage, 'fast2sms');
+          if (sent) {
+            customerMsgSent = true;
+            console.log('[Booking:MSG] ✅ ATTEMPT 2 SUCCESS: Fast2SMS sent to customer:', booking.customerPhone);
+          } else {
+            console.log('[Booking:MSG] ⚠️ ATTEMPT 2: Fast2SMS returned false (API key may be missing)');
+          }
+        } catch (sms2Error) {
+          console.error('[Booking:MSG] ❌ ATTEMPT 2 Fast2SMS error:', sms2Error.message);
+        }
+      }
+
+      // Attempt 3: Direct Baileys sendMessage (last resort — tries ANY active session)
+      if (!customerMsgSent) {
+        try {
+          const sent = await whatsappService.sendMessage('primary', booking.customerPhone, customerMessage);
+          if (sent) {
+            customerMsgSent = true;
+            console.log('[Booking:MSG] ✅ ATTEMPT 3 SUCCESS: Direct Baileys sent to customer');
+          } else {
+            console.log('[Booking:MSG] ❌ ATTEMPT 3: Direct Baileys also failed (no active WhatsApp session — message queued)');
+          }
+        } catch (wa3Error) {
+          console.error('[Booking:MSG] ❌ ATTEMPT 3 Direct Baileys error:', wa3Error.message);
+        }
+      }
+
+      if (!customerMsgSent) {
+        console.error('[Booking:MSG] ❌❌❌ ALL 3 ATTEMPTS FAILED for customer:', booking.customerPhone);
+        console.error('[Booking:MSG] DIAGNOSIS: Check if WhatsApp Web (Baileys) QR code has been scanned and session is active.');
+        console.error('[Booking:MSG] DIAGNOSIS: Check if FAST2SMS_API_KEY is set in .env');
+      }
+
+      // ─── SEND TO STAFF GROUP ───────────────────────────────────
       const staffGroupNumber = process.env.STAFF_GROUP_NUMBER;
-      console.log('[Booking:SMS] ─── Sending to STAFF GROUP ───');
-      console.log('[Booking:SMS] Staff group number configured:', staffGroupNumber || 'NOT SET');
+      console.log('[Booking:MSG] ─── Sending to STAFF GROUP ───');
+      console.log('[Booking:MSG] Staff group number:', staffGroupNumber || 'NOT SET in .env');
 
       if (staffGroupNumber) {
         try {
-          const groupSent = await sendMessageViaChannel(staffGroupNumber, staffGroupMessage, 'fast2sms');
+          const groupSent = await sendMessageViaChannel(staffGroupNumber, staffGroupMessage, 'whatsapp-web');
           if (groupSent) {
             staffGroupSent = true;
-            console.log('[Booking:SMS] ✅ Sent to staff group:', staffGroupNumber);
+            console.log('[Booking:MSG] ✅ Sent to staff group via WhatsApp');
           } else {
-            console.log('[Booking:SMS] ⚠️ sendMessageViaChannel returned false for staff group');
+            // Try fast2sms fallback
+            const groupSent2 = await sendMessageViaChannel(staffGroupNumber, staffGroupMessage, 'fast2sms');
+            if (groupSent2) {
+              staffGroupSent = true;
+              console.log('[Booking:MSG] ✅ Sent to staff group via Fast2SMS');
+            } else {
+              console.log('[Booking:MSG] ⚠️ Staff group message failed both channels');
+            }
           }
         } catch (groupError) {
-          console.error('[Booking:SMS] ❌ Failed to send staff group message:', groupError.message);
+          console.error('[Booking:MSG] ❌ Failed to send staff group message:', groupError.message);
         }
       } else {
-        console.warn('[Booking:SMS] ⚠️ STAFF_GROUP_NUMBER not set in .env — skipping staff notification');
+        console.warn('[Booking:MSG] ⚠️ STAFF_GROUP_NUMBER not set in .env — skipping staff notification');
       }
 
       // Track message status on booking
       booking.messagesSent = {
-        customerSMS: customerSMSSent,
+        customerSMS: customerMsgSent,
         staffGroup: staffGroupSent,
         sentAt: new Date()
       };
       try { await booking.save(); } catch (_) {}
 
-      console.log('[Booking:SMS] ══════════════════════════════════════════');
-      console.log('[Booking:SMS] RESULT: Customer SMS:', customerSMSSent ? '✅' : '❌', '| Staff Group:', staffGroupSent ? '✅' : '❌');
+      console.log('[Booking:MSG] ══════════════════════════════════════════');
+      console.log('[Booking:MSG] RESULT: Customer:', customerMsgSent ? '✅ SENT' : '❌ FAILED', '| Staff:', staffGroupSent ? '✅ SENT' : '❌ FAILED');
 
     } catch (messageError) {
-      console.error('[Booking:SMS] ❌ FATAL: Error in formatting/sending block:', messageError.message);
-      console.error('[Booking:SMS] Stack:', messageError.stack);
+      console.error('[Booking:MSG] ❌ FATAL: Error in formatting/sending block:', messageError.message);
+      console.error('[Booking:MSG] Stack:', messageError.stack);
     }
 
     res.json({
       success: true,
       booking,
-      messagesSent: { customerSMS: customerSMSSent, staffGroup: staffGroupSent },
-      message: customerSMSSent ? 'Booking created and SMS sent' : 'Booking created (SMS delivery pending)'
+      messagesSent: { customerSMS: customerMsgSent, staffGroup: staffGroupSent },
+      message: customerMsgSent ? 'Booking created and confirmation sent' : 'Booking created (message delivery pending)'
     });
     
   } catch (error) {
