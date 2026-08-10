@@ -340,12 +340,41 @@ router.post('/manual-booking', async (req, res) => {
       // Attempt 2: fast2sms channel (if FAST2SMS_API_KEY configured)
       if (!customerMsgSent) {
         try {
-          const sent = await sendMessageViaChannel(booking.customerPhone, customerMessage, 'fast2sms');
-          if (sent) {
-            customerMsgSent = true;
-            console.log('[Booking:MSG] ✅ ATTEMPT 2 SUCCESS: Fast2SMS sent to customer:', booking.customerPhone);
+          const fast2smsApiKey = (process.env.FAST2SMS_API_KEY || '').trim();
+          if (fast2smsApiKey) {
+            console.log('[Booking:MSG] Trying Fast2SMS channel with configured API Key...');
+            const sent = await sendMessageViaChannel(booking.customerPhone, customerMessage, 'fast2sms');
+            if (sent) {
+              customerMsgSent = true;
+              console.log('[Booking:MSG] ✅ ATTEMPT 2 SUCCESS: Fast2SMS sent to customer:', booking.customerPhone);
+            } else {
+              // Direct Fast2SMS Bulk SMS fallback call
+              console.log('[Booking:MSG] Trying direct Fast2SMS Bulk SMS API endpoint (route=q)...');
+              const digits = (booking.customerPhone || '').replace(/\D/g, '');
+              const phoneDigits = digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits;
+              const senderId = (process.env.FAST2SMS_SENDER_ID || 'NBAAG').trim();
+
+              const bulkUrl = new URL('https://www.fast2sms.com/dev/bulksms');
+              bulkUrl.searchParams.set('authorization', fast2smsApiKey);
+              bulkUrl.searchParams.set('route', 'q');
+              bulkUrl.searchParams.set('message', customerMessage);
+              bulkUrl.searchParams.set('language', 'english');
+              bulkUrl.searchParams.set('flash', '0');
+              bulkUrl.searchParams.set('numbers', phoneDigits);
+              if (senderId) bulkUrl.searchParams.set('sender_id', senderId);
+
+              const smsRes = await fetch(bulkUrl.toString(), { method: 'GET' });
+              const smsJson = await smsRes.json();
+              console.log('[Booking:MSG] Fast2SMS Bulk SMS API response:', smsJson);
+              if (smsJson && (smsJson.return === true || smsJson.status_code === 200)) {
+                customerMsgSent = true;
+                console.log('[Booking:MSG] ✅ ATTEMPT 2 SUCCESS: Fast2SMS Bulk SMS sent to:', phoneDigits);
+              } else {
+                console.log('[Booking:MSG] ⚠️ Fast2SMS Bulk SMS returned:', smsJson?.message || smsJson);
+              }
+            }
           } else {
-            console.log('[Booking:MSG] ⚠️ ATTEMPT 2: Fast2SMS returned false (API key may be missing)');
+            console.log('[Booking:MSG] ⚠️ ATTEMPT 2 SKIPPED: FAST2SMS_API_KEY is not set in .env');
           }
         } catch (sms2Error) {
           console.error('[Booking:MSG] ❌ ATTEMPT 2 Fast2SMS error:', sms2Error.message);

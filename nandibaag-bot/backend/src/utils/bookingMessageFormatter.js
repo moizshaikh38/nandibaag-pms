@@ -199,7 +199,15 @@ Notes: ${booking.notes || 'None'}
   return message;
 };
 
+const formatBookingConfirmationMessage = (booking) => {
+  return {
+    customerMessage: formatBookingMessageForCustomer(booking),
+    staffMessage: formatBookingMessageForStaffGroup(booking)
+  };
+};
+
 module.exports = {
   formatBookingMessageForCustomer,
-  formatBookingMessageForStaffGroup
+  formatBookingMessageForStaffGroup,
+  formatBookingConfirmationMessage
 };
