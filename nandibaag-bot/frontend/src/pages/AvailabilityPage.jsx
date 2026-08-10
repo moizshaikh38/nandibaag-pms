@@ -114,23 +114,38 @@ export default function AvailabilityPage() {
   }, [selectedDate]);
 
   useEffect(() => {
-    if (!socket) return;
     const handleGridUpdate = () => {
+      console.log('[AvailabilityPage] Live sync event received, refreshing grid...');
       fetchGrid();
     };
 
-    socket.on('availability:updated', handleGridUpdate);
-    socket.on('inventory:updated', handleGridUpdate);
-    socket.on('room:status_updated', handleGridUpdate);
-    socket.on('pms:booking_created', handleGridUpdate);
-    socket.on('booking:created', handleGridUpdate);
+    if (socket) {
+      socket.on('availability:updated', handleGridUpdate);
+      socket.on('availability_updated', handleGridUpdate);
+      socket.on('inventory:updated', handleGridUpdate);
+      socket.on('room:status_updated', handleGridUpdate);
+      socket.on('pms:booking_created', handleGridUpdate);
+      socket.on('pms:booking_updated', handleGridUpdate);
+      socket.on('booking:created', handleGridUpdate);
+      socket.on('booking_created', handleGridUpdate);
+      socket.on('reservation_updated', handleGridUpdate);
+    }
+
+    window.addEventListener('refresh_availability', handleGridUpdate);
 
     return () => {
-      socket.off('availability:updated', handleGridUpdate);
-      socket.off('inventory:updated', handleGridUpdate);
-      socket.off('room:status_updated', handleGridUpdate);
-      socket.off('pms:booking_created', handleGridUpdate);
-      socket.off('booking:created', handleGridUpdate);
+      if (socket) {
+        socket.off('availability:updated', handleGridUpdate);
+        socket.off('availability_updated', handleGridUpdate);
+        socket.off('inventory:updated', handleGridUpdate);
+        socket.off('room:status_updated', handleGridUpdate);
+        socket.off('pms:booking_created', handleGridUpdate);
+        socket.off('pms:booking_updated', handleGridUpdate);
+        socket.off('booking:created', handleGridUpdate);
+        socket.off('booking_created', handleGridUpdate);
+        socket.off('reservation_updated', handleGridUpdate);
+      }
+      window.removeEventListener('refresh_availability', handleGridUpdate);
     };
   }, [socket, selectedDate]);
 

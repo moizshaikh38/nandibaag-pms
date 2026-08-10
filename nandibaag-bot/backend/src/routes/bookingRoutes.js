@@ -267,6 +267,34 @@ router.post('/manual-booking', async (req, res) => {
     await booking.save();
     console.log('[Booking:Manual] Booking created:', booking._id);
 
+    // Create linked RoomBooking records for each selected room for full PMS compatibility
+    if (roomIds && roomIds.length > 0) {
+      const { Room, RoomBooking } = require('../models');
+      for (const rId of roomIds) {
+        try {
+          const targetRoom = await Room.findOne({
+            $or: [
+              { _id: mongoose.Types.ObjectId.isValid(rId) ? rId : null },
+              { number: String(rId) },
+              { roomNumber: String(rId) }
+            ]
+          });
+
+          if (targetRoom) {
+            await RoomBooking.create({
+              roomId: targetRoom._id,
+              bookingId: booking._id,
+              checkInDate: checkIn,
+              checkOutDate: checkOut,
+              status: 'confirmed'
+            });
+          }
+        } catch (rbErr) {
+          console.warn('[Booking:Manual] Could not create RoomBooking for room:', rId, rbErr.message);
+        }
+      }
+    }
+
     // Confirm temporary room reservations (convert active -> confirmed)
     if (sessionId) {
       try {
@@ -281,21 +309,21 @@ router.post('/manual-booking', async (req, res) => {
     try {
       const io = req.app?.get?.('io') || (require('../sockets').getIO ? require('../sockets').getIO() : null);
       if (io) {
-        console.log('[Socket:Broadcast] Emitting availability_updated and booking_created events');
-        io.emit('availability_updated', {
+        console.log('[Socket:Broadcast] Emitting real-time availability & booking sync events');
+        const syncData = {
           roomIds: booking.roomIds,
           checkInDate: booking.checkInDate,
           checkOutDate: booking.checkOutDate,
           customerName: booking.customerName,
+          bookingId: booking._id,
           action: 'booked'
-        });
-        io.emit('booking_created', {
-          roomIds: booking.roomIds,
-          checkInDate: booking.checkInDate,
-          checkOutDate: booking.checkOutDate,
-          customerName: booking.customerName,
-          message: `${booking.customerName} booked ${roomIds.length} room(s)`
-        });
+        };
+
+        io.emit('availability_updated', syncData);
+        io.emit('availability:updated', syncData);
+        io.emit('booking_created', syncData);
+        io.emit('booking:created', syncData);
+        io.emit('pms:booking_created', syncData);
       }
     } catch (ioError) {
       console.error('[Socket:Broadcast] Error:', ioError.message);
