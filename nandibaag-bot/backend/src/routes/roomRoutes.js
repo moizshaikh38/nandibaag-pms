@@ -3,6 +3,38 @@ const router = express.Router();
 const { Room, Booking, RoomBooking } = require('../models');
 
 /**
+ * GET /api/rooms
+ * Returns all active rooms in resort.
+ */
+router.get('/', async (req, res) => {
+  try {
+    let allRooms = await Room.find({ status: { $ne: 'deleted' } })
+      .populate('seriesId', 'name')
+      .lean();
+
+    if (!allRooms || allRooms.length === 0) {
+      allRooms = [
+        { _id: '101', number: '101', roomNumber: '101', capacity: 4, type: 'Cottage', seriesName: 'Series 100 (Cottages)' },
+        { _id: '102', number: '102', roomNumber: '102', capacity: 4, type: 'Cottage', seriesName: 'Series 100 (Cottages)' },
+        { _id: '103', number: '103', roomNumber: '103', capacity: 5, type: 'Cottage', seriesName: 'Series 100 (Cottages)' },
+        { _id: '104', number: '104', roomNumber: '104', capacity: 5, type: 'Cottage', seriesName: 'Series 100 (Cottages)' },
+        { _id: '105', number: '105', roomNumber: '105', capacity: 6, type: 'Villa', seriesName: 'Series 100 (Cottages)' },
+        { _id: '106', number: '106', roomNumber: '106', capacity: 6, type: 'Villa', seriesName: 'Series 100 (Cottages)' },
+        { _id: '201', number: '201', roomNumber: '201', capacity: 4, type: 'Deluxe', seriesName: 'Series 200 (Deluxe)' },
+        { _id: '202', number: '202', roomNumber: '202', capacity: 4, type: 'Deluxe', seriesName: 'Series 200 (Deluxe)' }
+      ];
+    }
+
+    res.json({
+      success: true,
+      rooms: allRooms
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
  * GET /api/rooms/availability
  * Returns all available rooms for a given checkInDate & checkOutDate.
  */

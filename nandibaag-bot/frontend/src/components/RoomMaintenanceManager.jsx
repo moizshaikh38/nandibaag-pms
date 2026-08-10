@@ -18,20 +18,23 @@ const RoomMaintenanceManager = () => {
   });
 
   const fetchData = useCallback(async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      
       // Fetch all rooms
-      const roomsRes = await api.get('/rooms');
-      setRooms(roomsRes.data.rooms || roomsRes.data || []);
+      try {
+        const roomsRes = await api.get('/rooms');
+        setRooms(roomsRes.data.rooms || roomsRes.data || []);
+      } catch (rErr) {
+        console.error('[MaintenanceManager] Error loading rooms:', rErr);
+      }
 
       // Fetch active maintenance
-      const maintenanceRes = await api.get('/maintenance');
-      setActiveMaintenance(maintenanceRes.data.maintenance || []);
-
-    } catch (error) {
-      console.error('[MaintenanceManager] Error loading data:', error);
-      toast.error('Failed to load maintenance data');
+      try {
+        const maintenanceRes = await api.get('/maintenance');
+        setActiveMaintenance(maintenanceRes.data.maintenance || []);
+      } catch (mErr) {
+        console.error('[MaintenanceManager] Error loading maintenance:', mErr);
+      }
     } finally {
       setLoading(false);
     }
