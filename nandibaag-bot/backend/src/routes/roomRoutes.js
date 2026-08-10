@@ -117,12 +117,14 @@ router.get('/availability-realtime', async (req, res) => {
       });
     }
 
-    const { getRoomsWithReservationStatus } = require('../services/availabilityService');
+    const { getRoomsWithReservationStatus, getAvailabilityMessage } = require('../services/availabilityService');
     const rooms = await getRoomsWithReservationStatus(checkInDate, checkOutDate, sessionId);
+    const availabilityMessage = await getAvailabilityMessage(checkInDate, checkOutDate, sessionId);
 
     res.json({
       success: true,
       rooms,
+      availabilityMessage,
       timestamp: new Date().toISOString()
     });
   } catch (error) {

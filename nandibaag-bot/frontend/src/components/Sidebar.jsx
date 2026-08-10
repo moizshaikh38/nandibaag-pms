@@ -27,7 +27,8 @@ import {
   Flame,
   Zap,
   Users,
-  ShieldCheck
+  ShieldCheck,
+  Wrench
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -109,6 +110,7 @@ export default function Sidebar() {
       items: [
         { path: '/pms/pending', label: 'Pending Handovers', icon: Clock, badge: pendingHandoverCount },
         { path: '/inventory', label: 'Room Inventory', icon: Home },
+        { path: '/maintenance', label: 'Room Maintenance', icon: Wrench },
         { path: '/staff-analytics', label: 'Staff Analytics', icon: Users },
         { path: '/pms/message-log', label: 'WhatsApp Message Log', icon: FileText }
       ]

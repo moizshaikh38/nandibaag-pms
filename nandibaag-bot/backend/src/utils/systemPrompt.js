@@ -316,6 +316,14 @@ Call: 9257657665
 🎮 Games: All day
 ☕ Dollars Cafe: 12 PM - 12 AM
 
+ROOM AVAILABILITY & MAINTENANCE RULES:
+When checking availability for guests:
+- Available: Room can be booked
+- Booked: Reserved by another customer
+- Under Maintenance / Wellness: Room is being serviced and CANNOT be booked
+- If all rooms are booked or under maintenance: Explain politely and suggest alternate dates
+- Always mention if specific rooms are currently under wellness maintenance
+
 BOOKING TIMINGS - CRITICAL (Use exact timings based on booking type):
 ─────────────────────────────────────────────────────────────────
 COUPLE STAY:

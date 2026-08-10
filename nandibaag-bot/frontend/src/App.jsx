@@ -16,6 +16,7 @@ import PublicWidgetPage from './pages/PublicWidgetPage';
 import TeamSecurityPage from './pages/TeamSecurityPage';
 import StaffAnalyticsDashboard from './components/StaffAnalyticsDashboard';
 import ManualBookingForm from './components/ManualBookingForm';
+import RoomMaintenanceManager from './components/RoomMaintenanceManager';
 import Sidebar from './components/Sidebar';
 import BottomNav from './components/BottomNav';
 
@@ -105,6 +106,14 @@ function App() {
           element={
             <ProtectedLayout>
               <InventoryPage />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/maintenance"
+          element={
+            <ProtectedLayout>
+              <RoomMaintenanceManager />
             </ProtectedLayout>
           }
         />

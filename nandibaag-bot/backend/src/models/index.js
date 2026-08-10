@@ -28,5 +28,6 @@ module.exports = {
   MessageQueue: require('./MessageQueue'),
   FailedMessage: require('./FailedMessage'),
   Staff: require('./Staff'),
-  RoomReservation: require('./RoomReservation')
+  RoomReservation: require('./RoomReservation'),
+  RoomMaintenance: require('./RoomMaintenance')
 };

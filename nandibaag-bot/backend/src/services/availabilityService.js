@@ -483,7 +483,7 @@ const getRoomsWithReservationStatus = async (checkInDate, checkOutDate, sessionI
   try {
     console.log('[Availability:RoomStatus] Fetching room status for:', { checkInDate, checkOutDate, sessionId });
 
-    const { Booking, RoomReservation, Series } = require('../models');
+    const { Booking, RoomReservation, Series, RoomMaintenance } = require('../models');
     const allRooms = await Room.find({ status: { $ne: 'deleted' } }).lean();
 
     const seriesList = await Series.find({ status: { $ne: 'deleted' } }).lean();
@@ -498,7 +498,30 @@ const getRoomsWithReservationStatus = async (checkInDate, checkOutDate, sessionI
         const roomIdStr = room._id.toString();
         const roomNumStr = String(room.roomNumber);
 
-        // 1. Check for confirmed bookings
+        // 1. Check for active maintenance/wellness
+        const maintenance = await RoomMaintenance.findOne({
+          $or: [
+            { roomId: roomIdStr },
+            { roomId: roomNumStr }
+          ],
+          startDate: { $lt: checkOut },
+          endDate: { $gt: checkIn },
+          status: 'active'
+        });
+
+        if (maintenance) {
+          console.log('[Availability:Status] Room', room.roomNumber || roomIdStr, 'under maintenance');
+          return {
+            ...room,
+            seriesName: seriesMap.get(room.seriesId?.toString()) || 'Other Cottages',
+            status: 'maintenance',
+            maintenanceType: maintenance.maintenanceType,
+            maintenanceReason: maintenance.reason,
+            maintenanceUntil: maintenance.endDate
+          };
+        }
+
+        // 2. Check for confirmed bookings
         const booking = await Booking.findOne({
           $or: [
             { roomIds: roomIdStr },
@@ -520,7 +543,7 @@ const getRoomsWithReservationStatus = async (checkInDate, checkOutDate, sessionI
           };
         }
 
-        // 2. Check for active reservations
+        // 3. Check for active reservations
         const reservation = await RoomReservation.findOne({
           $or: [
             { roomId: roomIdStr },
@@ -564,6 +587,57 @@ const getRoomsWithReservationStatus = async (checkInDate, checkOutDate, sessionI
   }
 };
 
+/**
+ * Returns overall availability status breakdown message.
+ */
+const getAvailabilityMessage = async (checkInDate, checkOutDate, sessionId = null) => {
+  try {
+    console.log('[Availability:Message] Checking overall status for:', checkInDate, 'to', checkOutDate);
+
+    const rooms = await getRoomsWithReservationStatus(checkInDate, checkOutDate, sessionId);
+
+    const availableCount = rooms.filter(r => r.status === 'available' || r.status === 'reserved_by_you').length;
+    const bookedCount = rooms.filter(r => r.status === 'booked').length;
+    const maintenanceCount = rooms.filter(r => r.status === 'maintenance').length;
+    const reservedCount = rooms.filter(r => r.status === 'reserved_by_other').length;
+    const totalRooms = rooms.length;
+
+    const result = {
+      availableRooms: availableCount,
+      bookedRooms: bookedCount,
+      maintenanceRooms: maintenanceCount,
+      reservedRooms: reservedCount,
+      totalRooms: totalRooms,
+      isAvailable: availableCount > 0,
+      message: ''
+    };
+
+    if (availableCount === 0) {
+      if (maintenanceCount > 0 && bookedCount > 0) {
+        result.message = `Sorry, all rooms are currently booked or under maintenance. ${maintenanceCount} room(s) are under service. Please try different dates.`;
+      } else if (maintenanceCount > 0) {
+        result.message = `Sorry, all rooms are currently under maintenance for servicing. Please try different dates.`;
+      } else {
+        result.message = `Sorry, all rooms are currently booked for these dates. Please try different dates.`;
+      }
+    } else if (availableCount <= 2) {
+      result.message = `⚠️ Only ${availableCount} room(s) available for these dates! Book soon.`;
+    } else {
+      result.message = `✅ We have ${availableCount} room(s) available for your dates.`;
+    }
+
+    if (maintenanceCount > 0 && availableCount > 0) {
+      result.message += ` (${maintenanceCount} room(s) under maintenance)`;
+    }
+
+    console.log('[Availability:Message] Result:', result);
+    return result;
+  } catch (error) {
+    console.error('[Availability:Message] Error:', error.message);
+    throw error;
+  }
+};
+
 module.exports = {
   checkOverlap,
   getCapacityAvailability,
@@ -573,5 +647,6 @@ module.exports = {
   cancelRoomBooking,
   rescheduleRoomBooking,
   checkMultipleRoomsAvailable,
-  getRoomsWithReservationStatus
+  getRoomsWithReservationStatus,
+  getAvailabilityMessage
 };

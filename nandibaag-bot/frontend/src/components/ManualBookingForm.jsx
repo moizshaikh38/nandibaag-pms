@@ -99,6 +99,8 @@ const ManualBookingForm = () => {
     }
   };
 
+  const [availabilityMessage, setAvailabilityMessage] = useState(null);
+
   const fetchRealtimeRooms = async (checkIn, checkOut) => {
     if (!checkIn || !checkOut) return;
     try {
@@ -107,6 +109,7 @@ const ManualBookingForm = () => {
       });
       const rooms = res.data.rooms || [];
       setRoomsList(rooms);
+      setAvailabilityMessage(res.data.availabilityMessage?.message || null);
     } catch (err) {
       console.error('[Form:RealtimeRooms] Error:', err);
       fetchRooms(checkIn, checkOut);
@@ -560,6 +563,17 @@ const ManualBookingForm = () => {
                 )}
               </div>
 
+              {/* Overall Availability Message Banner */}
+              {availabilityMessage && (
+                <div className={`p-2 rounded-lg text-[11px] font-bold border flex items-center justify-between shadow-2xs ${
+                  availabilityMessage.includes('✅')
+                    ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                    : 'bg-amber-50 text-amber-900 border-amber-300'
+                }`}>
+                  <span>{availabilityMessage}</span>
+                </div>
+              )}
+
               {/* 15-Minute Reservation Lock Banner */}
               {reservationExpiry && (
                 <div className="p-1.5 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 text-[10px] flex items-center justify-between font-medium">
@@ -591,11 +605,14 @@ const ManualBookingForm = () => {
                           const isReservedByYou = room.status === 'reserved_by_you';
                           const isReservedByOther = room.status === 'reserved_by_other';
                           const isBooked = room.status === 'booked';
-                          const isDisabled = isBooked || isReservedByOther;
+                          const isMaintenance = room.status === 'maintenance';
+                          const isDisabled = isBooked || isReservedByOther || isMaintenance;
 
                           let cardStyle = 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 cursor-pointer';
                           if (isChecked || isReservedByYou) {
                             cardStyle = 'bg-emerald-700 text-white border-emerald-700 font-bold shadow-2xs cursor-pointer';
+                          } else if (isMaintenance) {
+                            cardStyle = 'bg-amber-100 text-amber-900 border-amber-300 font-semibold opacity-85 cursor-not-allowed';
                           } else if (isReservedByOther) {
                             cardStyle = 'bg-rose-50 text-rose-800 border-rose-300 opacity-60 cursor-not-allowed';
                           } else if (isBooked) {
@@ -618,15 +635,18 @@ const ManualBookingForm = () => {
                                   className="w-3.5 h-3.5 accent-emerald-600 rounded"
                                 />
                               </div>
-                              <div className="mt-1 flex items-center justify-between text-[9px] font-semibold">
-                                <span className={isChecked || isReservedByYou ? 'text-emerald-100' : 'text-slate-500'}>
-                                  Cap: {cap} Guests
-                                </span>
-                                <span>
-                                  {isAvailable && <span className="text-emerald-600 font-bold">✓ Free</span>}
-                                  {isReservedByYou && <span className="text-amber-200 font-bold">⏱️ Yours</span>}
-                                  {isReservedByOther && <span className="text-rose-700 font-bold">🔒 Locked</span>}
-                                  {isBooked && <span className="text-slate-500 font-bold">📅 {room.bookedBy || 'Booked'}</span>}
+                              <div className="flex items-center justify-between text-[9px] mt-1 opacity-90">
+                                <span>Cap: {cap}</span>
+                                <span className="font-bold uppercase">
+                                  {isMaintenance
+                                    ? `🔧 ${room.maintenanceType || 'LOCK'}`
+                                    : isBooked
+                                    ? 'Booked'
+                                    : isReservedByOther
+                                    ? 'Held'
+                                    : isReservedByYou || isChecked
+                                    ? 'Selected'
+                                    : 'Available'}
                                 </span>
                               </div>
                             </label>

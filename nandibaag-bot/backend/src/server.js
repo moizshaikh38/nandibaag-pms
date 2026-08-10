@@ -187,6 +187,8 @@ app.use('/api/message-log', messageLogRoutes);
 app.use('/api/team', teamSecurityRoutes);
 app.use('/api/fast2sms', fast2smsRoutes);
 app.use('/api/staff', staffRoutes);
+app.use('/api/maintenance', require('./routes/maintenanceRoutes'));
+app.use('/pms/maintenance', require('./routes/maintenanceRoutes'));
 
 // Global error handler (must be last)
 app.use(errorHandler);
