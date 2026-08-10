@@ -1,3 +1,5 @@
+const { getTodayIST, getDayName, buildCalendarReference } = require('../services/dateHelper');
+
 /**
  * Production System Prompt Builder for Nandibaag Resort WhatsApp AI Assistant.
  * 
@@ -28,20 +30,27 @@ function buildSystemPrompt(arg1, arg2, arg3, arg4) {
     dayOfWeek = typeof arg2 === 'string' ? arg2 : '';
   }
 
+  // Use dateHelper for IST-accurate date calculations (single source of truth)
+  const todayIST = getTodayIST();
   const now = new Date();
   const currentDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
-  const currentDayName = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', weekday: 'long' }).format(now);
+  const currentDayName = getDayName(todayIST);
 
-  const tomorrowDate = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-  const tomorrowDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(tomorrowDate);
+  const tomorrowDate = new Date(todayIST.getFullYear(), todayIST.getMonth(), todayIST.getDate() + 1);
+  const tomorrowDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now.getTime() + 24 * 60 * 60 * 1000);
+  const tomorrowDayName = getDayName(tomorrowDate);
 
-  const nextWeekDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-  const nextWeekDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(nextWeekDate);
+  const nextWeekDate = new Date(todayIST.getFullYear(), todayIST.getMonth(), todayIST.getDate() + 7);
+  const nextWeekDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  // Build dynamic 30-day calendar reference (replaces hardcoded calendar)
+  const calendarReference = buildCalendarReference(todayIST);
 
   console.log('[SystemPrompt:DEBUG] Current date injected:', {
     date: currentDateStr,
     day: currentDayName,
-    timezone: 'Asia/Kolkata'
+    timezone: 'Asia/Kolkata',
+    source: 'dateHelper (single source of truth)'
   });
 
   const RESORT_NAME = 'Nandibaag Resort';
@@ -169,27 +178,26 @@ FORMATTING RULES (CRITICAL - FOLLOW ALWAYS):
    All details taken ✅
    Hamari team aapse jald hi connect karegi for booking 😊
 
-TODAY'S DATE: ${currentDateStr} (${currentDayName})
+TODAY'S ACTUAL DATE: ${currentDateStr} (${currentDayName})
+Current year: ${todayIST.getFullYear()}
+
+CRITICAL DATE RULE: You must NEVER calculate or guess which day of the week
+any date falls on. You are frequently wrong when you do this. Whenever
+a customer gives you check-in/check-out dates, the system will provide
+you an EXACT DATE TABLE below listing every night with its real day
+name and WEEKDAY/WEEKEND type. Always use that table exactly as given.
+Never override it with your own calculation.
 
 IMPORTANT DATE RULES:
 - Use today's date (${currentDateStr}, ${currentDayName}) for all calculations.
-- If customer says "tomorrow", check-in is: ${tomorrowDateStr}
+- If customer says "tomorrow", check-in is: ${tomorrowDateStr} (${tomorrowDayName})
 - If customer says "next week", check-in is: ${nextWeekDateStr}
 
 WEEKDAY vs WEEKEND RATES:
 - Weekday (Mon-Thu): ₹5,500 per couple / ₹2,000 per person per night
 - Weekend (Fri-Sun): ₹6,500 per couple / ₹3,000 per person per night (Friday IS a weekend)
 
-August 2026 Calendar Reference:
-- 5 Aug (Wed) = WEEKDAY (₹5,500 couple / ₹2,000 group)
-- 6 Aug (Thu) = WEEKDAY (₹5,500 couple / ₹2,000 group)
-- 7 Aug (Fri) = WEEKEND (₹6,500 couple / ₹3,000 group)
-- 8 Aug (Sat) = WEEKEND (₹6,500 couple / ₹3,000 group)
-- 9 Aug (Sun) = WEEKEND (₹6,500 couple / ₹3,000 group)
-- 10 Aug (Mon) = WEEKDAY (₹5,500 couple / ₹2,000 group)
-- 12 Aug (Wed) = WEEKDAY (₹5,500 couple / ₹2,000 group)
-- 15 Aug (Sat) = WEEKEND (₹6,500 couple / ₹3,000 group)
-- 16 Aug (Sun) = WEEKEND (₹6,500 couple / ₹3,000 group)
+${calendarReference}
 
 [IDENTITY]
 Tum Nandibaag Resort ke ek warm, helpful receptionist ho.

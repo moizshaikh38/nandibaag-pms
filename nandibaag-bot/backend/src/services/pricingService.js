@@ -11,38 +11,27 @@
  * COUPLE (2 people): Weekday ₹5,000/couple | Weekend ₹6,500/couple
  * DAY PICNIC: ₹1,200/person (Breakfast-Dinner) | ₹1,000/person (Breakfast-Tea)
  * KIDS: Below 5 FREE | 6-10 ₹1,000 | Above 10 adult rate
+ * 
+ * NOTE: All date/day-of-week calculations delegate to dateHelper.js (single source of truth).
  */
+
+const dateHelper = require('./dateHelper');
 
 /**
  * Parses a date input into a local Date object without timezone shift.
+ * Delegates to dateHelper.normalizeDate().
  */
 function parseLocalDate(dateInput) {
-  if (dateInput instanceof Date) {
-    return new Date(dateInput.getFullYear(), dateInput.getMonth(), dateInput.getDate());
-  }
-  if (typeof dateInput === 'string') {
-    const cleanStr = dateInput.split('T')[0];
-    const parts = cleanStr.split('-');
-    if (parts.length === 3) {
-      return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-    }
-  }
-  const d = new Date(dateInput);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return dateHelper.normalizeDate(dateInput);
 }
 
 /**
  * Checks if a given date is a Weekend.
  * Weekend = Friday (5), Saturday (6), Sunday (0).
- * 
- * @param {Date|string|number} dateInput 
- * @returns {boolean}
+ * Delegates to dateHelper.isWeekend().
  */
 function isWeekend(dateInput) {
-  const date = parseLocalDate(dateInput);
-  const day = date.getDay();
-  // Sunday = 0, Friday = 5, Saturday = 6
-  const result = day === 0 || day === 5 || day === 6;
+  const result = dateHelper.isWeekend(dateInput);
   const dayName = getDayName(dateInput);
   console.log(`[WeekendCheck] ${dateInput} (${dayName}) = ${result}`);
   return result;
@@ -51,14 +40,10 @@ function isWeekend(dateInput) {
 /**
  * Checks if a given date is a Weekday.
  * Weekday = Monday (1), Tuesday (2), Wednesday (3), Thursday (4).
- * 
- * @param {Date|string|number} dateInput 
- * @returns {boolean}
+ * Delegates to dateHelper.isWeekday().
  */
 function isWeekday(dateInput) {
-  const date = parseLocalDate(dateInput);
-  const day = date.getDay();
-  const result = day >= 1 && day <= 4;
+  const result = dateHelper.isWeekday(dateInput);
   const dayName = getDayName(dateInput);
   console.log(`[WeekdayCheck] ${dateInput} (${dayName}) = ${result}`);
   return result;
@@ -83,12 +68,11 @@ function formatDateShort(dateInput) {
 }
 
 /**
- * Get day label for a date (e.g. "Friday" or "WEEKEND"/"WEEKDAY")
+ * Get day label for a date (e.g. "Friday").
+ * Delegates to dateHelper.getDayName().
  */
 function getDayName(dateInput) {
-  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const d = parseLocalDate(dateInput);
-  return dayNames[d.getDay()];
+  return dateHelper.getDayName(dateInput);
 }
 
 /**

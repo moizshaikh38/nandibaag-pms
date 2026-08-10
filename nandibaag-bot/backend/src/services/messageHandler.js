@@ -6,6 +6,7 @@ const { scheduleFollowUps, cancelPendingFollowUps, containsOptOutPhrases, markCh
 const whatsappService = require('./whatsappService');
 const channelManager = require('./channelManager');
 const { getCapacityAvailability, suggestRoomCombinations } = require('./availabilityService');
+const { formatDateTableForPrompt } = require('./dateHelper');
 const crypto = require('crypto');
 const { sanitizeBookingDraft } = require('../utils/sanitizeBookingDraft');
 const logger = require('../config/logger');
@@ -756,6 +757,28 @@ Hamari team aapse jald hi connect karegi for booking 😊]`);
       if (isMediaAck) {
         replyToSend = mediaAckText;
       } else {
+        // ── INJECT DATE TABLE INTO SYSTEM NOTES ──
+        // Whenever check-in/check-out dates are known, inject a pre-computed
+        // date table so the LLM reads exact day names instead of guessing.
+        const draftForDateTable = chat.bookingDraft || {};
+        if (draftForDateTable.date) {
+          try {
+            const ciDate = new Date(draftForDateTable.date);
+            if (!isNaN(ciDate.getTime())) {
+              const nights = draftForDateTable.nights && draftForDateTable.nights > 0 ? draftForDateTable.nights : 1;
+              const coDate = new Date(ciDate);
+              coDate.setDate(coDate.getDate() + nights);
+              const dateTable = formatDateTableForPrompt(ciDate, coDate);
+              if (dateTable) {
+                console.log('[DateHelper] Injecting date table into system notes');
+                addSystemNote(dateTable);
+              }
+            }
+          } catch (dateTableErr) {
+            console.error('[DateHelper] Error generating date table:', dateTableErr.message);
+          }
+        }
+
         const systemNotes = systemNotesList.join('\n\n');
         replyToSend = await getAIResponse(chat, messageText, settings, systemNotes);
       }
