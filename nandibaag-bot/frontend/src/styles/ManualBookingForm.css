@@ -9,40 +9,72 @@
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
 }
 
-@media (max-width: 640px) {
-  .manual-booking-container {
-    margin: 8px;
-    padding: 12px;
-    border-radius: 16px;
-  }
-}
-
-/* Prevent auto-zoom on iOS Safari by enforcing min font-size 16px on inputs */
+/* Mobile: Full width, stack inputs and cards */
 @media (max-width: 768px) {
+  .manual-booking-container {
+    margin: 4px;
+    padding: 10px;
+    border-radius: 14px;
+  }
+
+  .form-section {
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+
+  /* Form inputs - full width & touch friendly */
   input[type="text"],
+  input[type="email"],
+  input[type="tel"],
   input[type="date"],
   input[type="number"],
   select,
   textarea {
-    font-size: 16px !important;
+    width: 100% !important;
+    padding: 10px 12px;
+    font-size: 16px !important; /* Prevents auto-zoom on iOS */
+    border-radius: 8px;
+    min-height: 44px;
+  }
+
+  /* Touch-friendly buttons */
+  button, 
+  .submit-btn,
+  .cancel-btn {
+    width: 100%;
+    min-height: 46px;
+    font-size: 14px;
+    border-radius: 10px;
+    font-weight: 700;
+  }
+
+  .guest-composition {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .rooms-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 }
 
-/* Touch targets optimization */
-button, 
-input, 
-select {
-  min-height: 42px;
+/* Tablet & Up */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .rooms-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Desktop */
+@media (min-width: 1025px) {
+  .rooms-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 /* Smooth Scrolling for Modal Containers */
 .overflow-y-auto {
   -webkit-overflow-scrolling: touch;
-}
-
-/* Add bottom padding for mobile devices so fixed bottom navigation doesn't clip content */
-@media (max-width: 1024px) {
-  body {
-    padding-bottom: 70px;
-  }
 }
