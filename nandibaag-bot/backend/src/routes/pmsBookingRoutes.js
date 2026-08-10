@@ -376,32 +376,29 @@ router.post('/rooms/:roomId/unbook', verifyToken, async (req, res, next) => {
 
     let unbookedAny = false;
 
-    // 1. Cancel active RoomBooking records
-    const roomBookingFilter = {
-      $or: [
-        { roomId: roomIdStr },
-        { roomId: roomNumStr }
-      ],
-      status: { $in: ['confirmed', 'checked_in'] },
-      checkInDate: { $lt: checkOut },
-      checkOutDate: { $gt: checkIn }
-    };
-    if (isValidObjectId(roomIdStr)) {
-      roomBookingFilter.$or.push({ roomId: new mongoose.Types.ObjectId(roomIdStr) });
-    }
+    // 1. Cancel active RoomBooking records (Filter ONLY valid ObjectIds to prevent Mongoose CastError)
+    const validObjectIds = [roomIdStr, roomNumStr, roomId].filter(id => isValidObjectId(id));
 
-    const roomBookings = await RoomBooking.find(roomBookingFilter);
-    for (const rb of roomBookings) {
-      rb.status = 'cancelled';
-      await rb.save();
-      unbookedAny = true;
+    if (validObjectIds.length > 0) {
+      const roomBookings = await RoomBooking.find({
+        roomId: { $in: validObjectIds },
+        status: { $in: ['confirmed', 'checked_in'] },
+        checkInDate: { $lt: checkOut },
+        checkOutDate: { $gt: checkIn }
+      });
 
-      if (rb.bookingId) {
-        await Booking.findByIdAndUpdate(rb.bookingId, { status: 'cancelled' });
+      for (const rb of roomBookings) {
+        rb.status = 'cancelled';
+        await rb.save();
+        unbookedAny = true;
+
+        if (rb.bookingId) {
+          await Booking.findByIdAndUpdate(rb.bookingId, { status: 'cancelled' });
+        }
       }
     }
 
-    // 2. Cancel active main Booking records
+    // 2. Cancel active main Booking records (String matching allowed)
     const mainBookings = await Booking.find({
       $or: [
         { roomIds: roomIdStr },
