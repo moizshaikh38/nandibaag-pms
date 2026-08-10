@@ -277,21 +277,29 @@ router.post('/manual-booking', async (req, res) => {
       }
     }
 
-    // Broadcast booking_created event to all connected socket clients
+    // Broadcast availability_updated and booking_created events to all connected socket clients
     try {
-      const { getIO } = require('../sockets');
-      const io = getIO();
+      const io = req.app?.get?.('io') || (require('../sockets').getIO ? require('../sockets').getIO() : null);
       if (io) {
-        io.emit('booking_created', {
-          roomIds,
-          checkInDate: checkIn,
-          checkOutDate: checkOut,
-          customerName,
-          message: `${customerName} booked ${roomIds.length} room(s)`
+        console.log('[Socket:Broadcast] Emitting availability_updated and booking_created events');
+        io.emit('availability_updated', {
+          roomIds: booking.roomIds,
+          checkInDate: booking.checkInDate,
+          checkOutDate: booking.checkOutDate,
+          customerName: booking.customerName,
+          action: 'booked'
         });
-        console.log('[Socket:Broadcast] booking_created event sent');
+        io.emit('booking_created', {
+          roomIds: booking.roomIds,
+          checkInDate: booking.checkInDate,
+          checkOutDate: booking.checkOutDate,
+          customerName: booking.customerName,
+          message: `${booking.customerName} booked ${roomIds.length} room(s)`
+        });
       }
-    } catch (_) {}
+    } catch (ioError) {
+      console.error('[Socket:Broadcast] Error:', ioError.message);
+    }
 
     // ─── AUTO-SEND CONFIRMATION MESSAGES ────────────────────────────
     // Sends formatted booking confirmation to Customer (WhatsApp) and Staff Group

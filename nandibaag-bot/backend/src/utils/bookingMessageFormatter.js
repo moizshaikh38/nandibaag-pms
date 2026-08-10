@@ -10,6 +10,8 @@
  * - Staff message shows "🔔 NEW BOOKING ALERT ✅" header
  */
 
+const { formatDateToDDMMYYYY, getDayName } = require('./dateUtils');
+
 const getDynamicTimings = (packageType, mealOption) => {
   let checkInTime = '12:00 PM';
   let checkOutTime = '10:30 AM';
@@ -71,19 +73,11 @@ const formatBookingMessageForCustomer = (booking) => {
   const checkInDateObj = new Date(booking.checkInDate || booking.date);
   const checkOutDateObj = new Date(booking.checkOutDate || (checkInDateObj.getTime() + 86400000));
 
-  const checkInDateStr = checkInDateObj.toLocaleDateString('en-GB', { 
-    day: '2-digit', 
-    month: 'short', 
-    year: '2-digit' 
-  }).replace(/ /g, '-');
-  const checkInDay = checkInDateObj.toLocaleDateString('en-US', { weekday: 'long' });
+  const checkInDateStr = formatDateToDDMMYYYY(checkInDateObj);
+  const checkInDay = getDayName(checkInDateObj);
 
-  const checkOutDateStr = checkOutDateObj.toLocaleDateString('en-GB', { 
-    day: '2-digit', 
-    month: 'short', 
-    year: '2-digit' 
-  }).replace(/ /g, '-');
-  const checkOutDay = checkOutDateObj.toLocaleDateString('en-US', { weekday: 'long' });
+  const checkOutDateStr = formatDateToDDMMYYYY(checkOutDateObj);
+  const checkOutDay = getDayName(checkOutDateObj);
 
   const adults = Number(booking.guestComposition?.adults ?? booking.adults ?? 1);
   const children = Number(booking.guestComposition?.children ?? booking.children ?? 0);
@@ -143,19 +137,11 @@ const formatBookingMessageForStaffGroup = (booking) => {
   const checkInDateObj = new Date(booking.checkInDate || booking.date);
   const checkOutDateObj = new Date(booking.checkOutDate || (checkInDateObj.getTime() + 86400000));
 
-  const checkInDateStr = checkInDateObj.toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: '2-digit'
-  }).replace(/ /g, '-');
-  const checkInDay = checkInDateObj.toLocaleDateString('en-US', { weekday: 'long' });
+  const checkInDateStr = formatDateToDDMMYYYY(checkInDateObj);
+  const checkInDay = getDayName(checkInDateObj);
 
-  const checkOutDateStr = checkOutDateObj.toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: '2-digit'
-  }).replace(/ /g, '-');
-  const checkOutDay = checkOutDateObj.toLocaleDateString('en-US', { weekday: 'long' });
+  const checkOutDateStr = formatDateToDDMMYYYY(checkOutDateObj);
+  const checkOutDay = getDayName(checkOutDateObj);
 
   const adults = Number(booking.guestComposition?.adults ?? booking.adults ?? 1);
   const children = Number(booking.guestComposition?.children ?? booking.children ?? 0);

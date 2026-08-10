@@ -43,6 +43,11 @@ export function connectSocket(token) {
     window.dispatchEvent(new CustomEvent('refresh_availability', { detail: data }));
   });
 
+  socket.on('availability_updated', (data) => {
+    console.log('[Socket] availability_updated received:', data);
+    window.dispatchEvent(new CustomEvent('refresh_availability', { detail: data }));
+  });
+
   socket.on('reservation_updated', (data) => {
     console.log('[Socket] reservation_updated received:', data);
     window.dispatchEvent(new CustomEvent('refresh_availability', { detail: data }));

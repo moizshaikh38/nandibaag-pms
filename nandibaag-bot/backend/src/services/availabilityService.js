@@ -11,6 +11,7 @@
 const mongoose = require('mongoose');
 const { Room, RoomBooking } = require('../models');
 const logger = require('../config/logger');
+const { formatDateToISO } = require('../utils/dateUtils');
 
 // Statuses that BLOCK a room (active bookings)
 const BLOCKING_STATUSES = ['confirmed', 'checked_in'];
@@ -347,10 +348,13 @@ async function rescheduleRoomBooking(roomBookingId, newCheckInDate, newCheckOutD
  */
 const checkMultipleRoomsAvailable = async (roomIds, checkInDate, checkOutDate, sessionId = null) => {
   try {
+    const checkIn = new Date(checkInDate);
+    const checkOut = new Date(checkOutDate);
+
     console.log('[Availability:MultiRoom] Checking rooms:', {
       roomIds,
-      checkInDate,
-      checkOutDate,
+      checkInDate: formatDateToISO(checkIn),
+      checkOutDate: formatDateToISO(checkOut),
       sessionId
     });
     
