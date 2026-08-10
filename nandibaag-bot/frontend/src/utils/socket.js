@@ -1,15 +1,9 @@
 import { io } from 'socket.io-client';
 import { getToken } from './api';
+import { getSessionId } from './sessionManager';
 
 let socket = null;
 
-/**
- * Initializes and returns a singleton socket.io-client instance
- * Connects to VITE_API_URL with JWT authentication
- * 
- * @param {string} token - JWT token for authentication
- * @returns {object} Socket.io client instance
- */
 const getSocketUrl = () => {
   if (import.meta.env.VITE_SOCKET_URL) return import.meta.env.VITE_SOCKET_URL;
   if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
@@ -25,45 +19,53 @@ export function connectSocket(token) {
   }
 
   const socketUrl = getSocketUrl();
-  
+  const sessionId = getSessionId();
+
   socket = io(socketUrl, {
     auth: {
       token: token || getToken()
     },
     transports: ['websocket', 'polling'],
     reconnection: true,
-    reconnectionAttempts: 5,
+    reconnectionAttempts: 10,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000
   });
 
   socket.on('connect', () => {
-    console.log('Socket connected');
+    console.log('[Socket] Connected to server, registering session:', sessionId);
+    socket.emit('register_session', sessionId);
+  });
+
+  // Listen for real-time room booking/reservation events
+  socket.on('booking_created', (data) => {
+    console.log('[Socket] booking_created received:', data);
+    window.dispatchEvent(new CustomEvent('refresh_availability', { detail: data }));
+  });
+
+  socket.on('reservation_updated', (data) => {
+    console.log('[Socket] reservation_updated received:', data);
+    window.dispatchEvent(new CustomEvent('refresh_availability', { detail: data }));
   });
 
   socket.on('disconnect', (reason) => {
-    console.log('Socket disconnected:', reason);
+    console.log('[Socket] Disconnected:', reason);
   });
 
   socket.on('connect_error', (error) => {
-    console.error('Socket connection error:', error);
+    console.error('[Socket] Connection error:', error.message);
   });
 
   return socket;
 }
 
-/**
- * Returns the existing socket instance or null if not connected
- * 
- * @returns {object|null} Socket.io client instance or null
- */
 export function getSocket() {
+  if (!socket) {
+    return connectSocket();
+  }
   return socket;
 }
 
-/**
- * Disconnects the socket instance
- */
 export function disconnectSocket() {
   if (socket) {
     socket.disconnect();

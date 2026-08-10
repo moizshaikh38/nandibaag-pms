@@ -345,12 +345,13 @@ async function rescheduleRoomBooking(roomBookingId, newCheckInDate, newCheckOutD
 /**
  * Check availability for an array of roomIds (or room numbers) between checkInDate & checkOutDate.
  */
-const checkMultipleRoomsAvailable = async (roomIds, checkInDate, checkOutDate) => {
+const checkMultipleRoomsAvailable = async (roomIds, checkInDate, checkOutDate, sessionId = null) => {
   try {
     console.log('[Availability:MultiRoom] Checking rooms:', {
       roomIds,
       checkInDate,
-      checkOutDate
+      checkOutDate,
+      sessionId
     });
     
     if (!roomIds || roomIds.length === 0) {
@@ -398,14 +399,49 @@ const checkMultipleRoomsAvailable = async (roomIds, checkInDate, checkOutDate) =
         }
 
         const conflict = conflictsInBookings || conflictsInRoomBookings;
+
+        if (conflict) {
+          return {
+            roomId: roomNumStr,
+            available: false,
+            reason: 'booked',
+            conflict: {
+              customer: conflict.customerName || 'Reserved',
+              dates: `${new Date(conflict.checkInDate).toLocaleDateString()} - ${new Date(conflict.checkOutDate).toLocaleDateString()}`
+            }
+          };
+        }
+
+        // Check for active reservations (EXCLUDING current session)
+        const { RoomReservation } = require('../models');
+        const now = new Date();
+        const reservation = await RoomReservation.findOne({
+          $or: [
+            { roomId: roomNumStr },
+            ...(roomObjectId ? [{ roomId: String(roomObjectId) }] : [])
+          ],
+          checkInDate: { $lt: new Date(checkOutDate) },
+          checkOutDate: { $gt: new Date(checkInDate) },
+          status: 'active',
+          expiresAt: { $gt: now },
+          ...(sessionId ? { sessionId: { $ne: sessionId } } : {})
+        });
+
+        if (reservation) {
+          return {
+            roomId: roomNumStr,
+            available: false,
+            reason: 'reserved',
+            conflict: {
+              reservedBy: reservation.reservedBy,
+              expiresAt: reservation.expiresAt
+            }
+          };
+        }
         
         return {
           roomId: roomNumStr,
-          available: !conflict,
-          conflict: conflict ? {
-            customer: conflict.customerName || 'Reserved',
-            dates: `${new Date(conflict.checkInDate).toLocaleDateString()} - ${new Date(conflict.checkOutDate).toLocaleDateString()}`
-          } : null
+          available: true
         };
       })
     );
@@ -418,7 +454,7 @@ const checkMultipleRoomsAvailable = async (roomIds, checkInDate, checkOutDate) =
     if (!allAvailable) {
       return {
         available: false,
-        reason: `Room(s) ${unavailableRooms.map(r => r.roomId).join(', ')} not available`,
+        reason: `Room(s) ${unavailableRooms.map(r => r.roomId).join(', ')} unavailable`,
         conflicts: unavailableRooms
       };
     }
@@ -435,6 +471,95 @@ const checkMultipleRoomsAvailable = async (roomIds, checkInDate, checkOutDate) =
   }
 };
 
+/**
+ * Gets all active rooms with their real-time availability/reservation status
+ * for a specific check-in/check-out date range and user session.
+ */
+const getRoomsWithReservationStatus = async (checkInDate, checkOutDate, sessionId = null) => {
+  try {
+    console.log('[Availability:RoomStatus] Fetching room status for:', { checkInDate, checkOutDate, sessionId });
+
+    const { Booking, RoomReservation, Series } = require('../models');
+    const allRooms = await Room.find({ status: { $ne: 'deleted' } }).lean();
+
+    const seriesList = await Series.find({ status: { $ne: 'deleted' } }).lean();
+    const seriesMap = new Map(seriesList.map(s => [s._id.toString(), s.name]));
+
+    const checkIn = new Date(checkInDate);
+    const checkOut = new Date(checkOutDate);
+    const now = new Date();
+
+    const roomsWithStatus = await Promise.all(
+      allRooms.map(async (room) => {
+        const roomIdStr = room._id.toString();
+        const roomNumStr = String(room.roomNumber);
+
+        // 1. Check for confirmed bookings
+        const booking = await Booking.findOne({
+          $or: [
+            { roomIds: roomIdStr },
+            { roomIds: roomNumStr },
+            { roomId: roomIdStr },
+            { roomId: roomNumStr }
+          ],
+          checkInDate: { $lt: checkOut },
+          checkOutDate: { $gt: checkIn },
+          status: { $in: ['pending_payment', 'confirmed', 'checked_in'] }
+        });
+
+        if (booking) {
+          return {
+            ...room,
+            seriesName: seriesMap.get(room.seriesId?.toString()) || 'Other Cottages',
+            status: 'booked',
+            bookedBy: booking.customerName
+          };
+        }
+
+        // 2. Check for active reservations
+        const reservation = await RoomReservation.findOne({
+          $or: [
+            { roomId: roomIdStr },
+            { roomId: roomNumStr }
+          ],
+          checkInDate: { $lt: checkOut },
+          checkOutDate: { $gt: checkIn },
+          status: 'active',
+          expiresAt: { $gt: now }
+        });
+
+        if (reservation) {
+          const isCurrentSession = sessionId && reservation.sessionId === sessionId;
+          return {
+            ...room,
+            seriesName: seriesMap.get(room.seriesId?.toString()) || 'Other Cottages',
+            status: isCurrentSession ? 'reserved_by_you' : 'reserved_by_other',
+            reservedUntil: reservation.expiresAt,
+            isYourReservation: isCurrentSession
+          };
+        }
+
+        return {
+          ...room,
+          seriesName: seriesMap.get(room.seriesId?.toString()) || 'Other Cottages',
+          status: 'available'
+        };
+      })
+    );
+
+    // Sort by seriesName and roomNumber
+    roomsWithStatus.sort((a, b) => 
+      (a.seriesName || '').localeCompare(b.seriesName || '', undefined, { numeric: true }) ||
+      (String(a.roomNumber) || '').localeCompare(String(b.roomNumber) || '', undefined, { numeric: true })
+    );
+
+    return roomsWithStatus;
+  } catch (error) {
+    console.error('[Availability:RoomStatus] Error:', error.message);
+    throw error;
+  }
+};
+
 module.exports = {
   checkOverlap,
   getCapacityAvailability,
@@ -443,5 +568,6 @@ module.exports = {
   createRoomBooking,
   cancelRoomBooking,
   rescheduleRoomBooking,
-  checkMultipleRoomsAvailable
+  checkMultipleRoomsAvailable,
+  getRoomsWithReservationStatus
 };

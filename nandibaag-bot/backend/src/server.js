@@ -176,6 +176,7 @@ app.use('/api/chats', chatRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/rooms', require('./routes/roomRoutes'));
+app.use('/api/reservations', require('./routes/reservationRoutes'));
 app.use('/api/numbers', numberRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/dashboard', dashboardRoutes);

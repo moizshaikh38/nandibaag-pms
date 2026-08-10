@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import api from '../utils/api';
-import toast from 'react-hot-toast';
+import { getSessionId } from '../utils/sessionManager';
+import { connectSocket } from '../utils/socket';
 import {
   FileEdit,
   User,
@@ -14,7 +13,9 @@ import {
   Upload,
   Sparkles,
   CheckCircle2,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Clock,
+  Lock
 } from 'lucide-react';
 import '../styles/ManualBookingForm.css';
 
@@ -39,10 +40,12 @@ const ManualBookingForm = () => {
     notes: ''
   });
 
+  const [sessionId] = useState(() => getSessionId());
   const [staffOptions, setStaffOptions] = useState([]);
   const [selectedRooms, setSelectedRooms] = useState([]);
   const [roomsList, setRoomsList] = useState([]);
   const [totalCapacity, setTotalCapacity] = useState(0);
+  const [reservationExpiry, setReservationExpiry] = useState(null);
   const [newStaffName, setNewStaffName] = useState('');
   const [showAddStaff, setShowAddStaff] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -52,7 +55,7 @@ const ManualBookingForm = () => {
   const roomsBySeries = useMemo(() => {
     const map = {};
     for (const room of roomsList) {
-      const num = String(room.number || room.roomNumber || '');
+      const num = String(room.number || room.roomNumber || room._id);
       const series = room.seriesName || (num.startsWith('2') ? 'Series 200 (Deluxe)' : 'Series 100 (Cottages)');
       if (!map[series]) map[series] = [];
       map[series].push(room);
@@ -60,10 +63,22 @@ const ManualBookingForm = () => {
     return map;
   }, [roomsList]);
 
+  // Connect socket and listen for real-time room updates
+  useEffect(() => {
+    connectSocket();
+    const handleRefresh = () => {
+      if (formData.checkInDate && formData.checkOutDate) {
+        fetchRealtimeRooms(formData.checkInDate, formData.checkOutDate);
+      }
+    };
+    window.addEventListener('refresh_availability', handleRefresh);
+    return () => window.removeEventListener('refresh_availability', handleRefresh);
+  }, [formData.checkInDate, formData.checkOutDate]);
+
   // Fetch staff & rooms on load
   useEffect(() => {
     fetchStaffNames();
-    fetchRooms(formData.checkInDate, formData.checkOutDate);
+    fetchRealtimeRooms(formData.checkInDate, formData.checkOutDate);
   }, []);
 
   const fetchStaffNames = async () => {
@@ -77,6 +92,20 @@ const ManualBookingForm = () => {
       }));
     } catch (error) {
       console.error('[ManualBooking] Error fetching staff:', error);
+    }
+  };
+
+  const fetchRealtimeRooms = async (checkIn, checkOut) => {
+    if (!checkIn || !checkOut) return;
+    try {
+      const res = await api.get('/rooms/availability-realtime', {
+        params: { checkInDate: checkIn, checkOutDate: checkOut, sessionId }
+      });
+      const rooms = res.data.rooms || [];
+      setRoomsList(rooms);
+    } catch (err) {
+      console.error('[Form:RealtimeRooms] Error:', err);
+      fetchRooms(checkIn, checkOut);
     }
   };
 
@@ -94,13 +123,15 @@ const ManualBookingForm = () => {
 
   useEffect(() => {
     if (formData.checkInDate && formData.checkOutDate) {
-      fetchRooms(formData.checkInDate, formData.checkOutDate);
+      fetchRealtimeRooms(formData.checkInDate, formData.checkOutDate);
       setSelectedRooms([]);
       setTotalCapacity(0);
+      setReservationExpiry(null);
     }
   }, [formData.checkInDate, formData.checkOutDate]);
 
-  const handleRoomToggle = (roomIdentifier) => {
+  const handleRoomToggle = async (roomObj) => {
+    const roomIdentifier = String(roomObj.number || roomObj.roomNumber || roomObj._id);
     const isSelected = selectedRooms.includes(roomIdentifier);
     const newSelection = isSelected
       ? selectedRooms.filter(r => r !== roomIdentifier)
@@ -109,8 +140,8 @@ const ManualBookingForm = () => {
     setSelectedRooms(newSelection);
 
     const cap = newSelection.reduce((sum, num) => {
-      const roomObj = roomsList.find(r => (r.number || r.roomNumber || String(r._id)) === num);
-      return sum + (roomObj?.capacity || 4);
+      const rObj = roomsList.find(r => String(r.number || r.roomNumber || r._id) === num);
+      return sum + (rObj?.capacity || 4);
     }, 0);
 
     setTotalCapacity(cap);
@@ -118,6 +149,34 @@ const ManualBookingForm = () => {
       ...prev,
       roomId: newSelection.join(', ')
     }));
+
+    // Create 15-minute room reservation lock on backend
+    if (newSelection.length > 0) {
+      try {
+        const res = await api.post('/reservations', {
+          roomIds: newSelection,
+          checkInDate: formData.checkInDate,
+          checkOutDate: formData.checkOutDate,
+          sessionId,
+          userId: formData.bookedBy.name || 'staff'
+        });
+        if (res.data?.expiresAt) {
+          setReservationExpiry(new Date(res.data.expiresAt));
+        }
+      } catch (err) {
+        console.error('[Form:Reservation] Lock error:', err.response?.data?.error || err.message);
+        toast.error(err.response?.data?.error || 'Room locked by another user!');
+      }
+    } else {
+      setReservationExpiry(null);
+      try {
+        await api.post('/reservations/cancel', {
+          sessionId,
+          checkInDate: formData.checkInDate,
+          checkOutDate: formData.checkOutDate
+        });
+      } catch (_) {}
+    }
   };
 
   const handleDateChange = (field, value) => {
@@ -237,7 +296,8 @@ const ManualBookingForm = () => {
         roomIds: selectedRooms,
         roomId: selectedRooms.join(', '),
         advancePaid: Number(formData.advancePayment) || 0,
-        adults: formData.guestComposition.adults
+        adults: formData.guestComposition.adults,
+        sessionId
       });
 
       toast.success('✅ Booking created & synced to PMS!');
@@ -490,40 +550,74 @@ const ManualBookingForm = () => {
                 )}
               </div>
 
+              {/* 15-Minute Reservation Lock Banner */}
+              {reservationExpiry && (
+                <div className="p-1.5 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 text-[10px] flex items-center justify-between font-medium">
+                  <span className="flex items-center gap-1">
+                    <Clock size={12} className="text-amber-600 animate-pulse" />
+                    Selection reserved for 15 mins
+                  </span>
+                  <span className="font-bold text-amber-800">
+                    Expires at: {reservationExpiry.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+              )}
+
               {roomsList.length > 0 ? (
-                <div className="max-h-40 overflow-y-auto space-y-2 p-1.5 bg-white border border-slate-200 rounded-lg">
+                <div className="max-h-48 overflow-y-auto space-y-2 p-1.5 bg-white border border-slate-200 rounded-lg">
                   {Object.entries(roomsBySeries).map(([seriesName, rooms]) => (
                     <div key={seriesName} className="space-y-1">
                       <div className="text-[10px] font-extrabold text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/80 flex items-center justify-between">
                         <span>🏷️ {seriesName}</span>
-                        <span className="text-[9px] text-emerald-700 font-bold">{rooms.length} available</span>
+                        <span className="text-[9px] text-emerald-700 font-bold">{rooms.filter(r => r.status === 'available' || r.status === 'reserved_by_you').length} available</span>
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                         {rooms.map((room) => {
-                          const num = room.number || room.roomNumber || String(room._id);
+                          const num = String(room.number || room.roomNumber || room._id);
                           const cap = room.capacity || 4;
                           const isChecked = selectedRooms.includes(num);
+
+                          const isAvailable = room.status === 'available';
+                          const isReservedByYou = room.status === 'reserved_by_you';
+                          const isReservedByOther = room.status === 'reserved_by_other';
+                          const isBooked = room.status === 'booked';
+                          const isDisabled = isBooked || isReservedByOther;
+
+                          let cardStyle = 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 cursor-pointer';
+                          if (isChecked || isReservedByYou) {
+                            cardStyle = 'bg-emerald-700 text-white border-emerald-700 font-bold shadow-2xs cursor-pointer';
+                          } else if (isReservedByOther) {
+                            cardStyle = 'bg-rose-50 text-rose-800 border-rose-300 opacity-60 cursor-not-allowed';
+                          } else if (isBooked) {
+                            cardStyle = 'bg-slate-100 text-slate-400 border-slate-200 opacity-50 cursor-not-allowed';
+                          }
+
                           return (
                             <label
                               key={num}
-                              onClick={() => handleRoomToggle(num)}
-                              className={`p-1.5 rounded-lg border text-left cursor-pointer transition-all flex flex-col justify-between select-none ${
-                                isChecked
-                                  ? 'bg-emerald-700 text-white border-emerald-700 font-bold shadow-2xs'
-                                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                              }`}
+                              onClick={() => !isDisabled && handleRoomToggle(room)}
+                              className={`p-1.5 rounded-lg border text-left transition-all flex flex-col justify-between select-none ${cardStyle}`}
                             >
                               <div className="flex items-center justify-between">
                                 <span className="text-[11px] font-bold">Room {num}</span>
                                 <input
                                   type="checkbox"
-                                  checked={isChecked}
-                                  readOnly
+                                  checked={isChecked || isReservedByYou}
+                                  disabled={isDisabled}
+                                  onChange={() => {}}
                                   className="w-3.5 h-3.5 accent-emerald-600 rounded"
                                 />
                               </div>
-                              <div className={`text-[9px] font-bold mt-1 ${isChecked ? 'text-emerald-100' : 'text-slate-500'}`}>
-                                Cap: <span className="underline">{cap} Guests</span>
+                              <div className="mt-1 flex items-center justify-between text-[9px] font-semibold">
+                                <span className={isChecked || isReservedByYou ? 'text-emerald-100' : 'text-slate-500'}>
+                                  Cap: {cap} Guests
+                                </span>
+                                <span>
+                                  {isAvailable && <span className="text-emerald-600 font-bold">✓ Free</span>}
+                                  {isReservedByYou && <span className="text-amber-200 font-bold">⏱️ Yours</span>}
+                                  {isReservedByOther && <span className="text-rose-700 font-bold">🔒 Locked</span>}
+                                  {isBooked && <span className="text-slate-500 font-bold">📅 {room.bookedBy || 'Booked'}</span>}
+                                </span>
                               </div>
                             </label>
                           );

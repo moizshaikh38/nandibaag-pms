@@ -96,4 +96,42 @@ router.get('/availability', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/rooms/availability-realtime
+ * Returns all rooms with real-time status ('available', 'reserved_by_you', 'reserved_by_other', 'booked')
+ */
+router.get('/availability-realtime', async (req, res) => {
+  try {
+    const { checkInDate, checkOutDate, sessionId } = req.query;
+
+    console.log('[Rooms:RealtimeAvailability] Fetching for:', {
+      checkInDate,
+      checkOutDate,
+      sessionId
+    });
+
+    if (!checkInDate || !checkOutDate) {
+      return res.status(400).json({
+        success: false,
+        error: 'checkInDate and checkOutDate required'
+      });
+    }
+
+    const { getRoomsWithReservationStatus } = require('../services/availabilityService');
+    const rooms = await getRoomsWithReservationStatus(checkInDate, checkOutDate, sessionId);
+
+    res.json({
+      success: true,
+      rooms,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[Rooms:RealtimeAvailability] Error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;

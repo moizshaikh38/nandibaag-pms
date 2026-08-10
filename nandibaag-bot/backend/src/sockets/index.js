@@ -5,12 +5,13 @@ const { User } = require('../models');
 const logger = require('../config/logger');
 
 let io = null;
+const connectedSessions = new Map();
 
 /**
  * Initializes Socket.io on the HTTP server
  * 
- * - Handles auth via JWT passed in socket handshake
- * - Joins authenticated staff users to 'dashboard' room
+ * - Optional JWT auth (allows guest sessions for real-time room availability sync)
+ * - Session registration & room reservation broadcasts
  * - Exports getIO() helper for services to emit events
  * 
  * @param {object} httpServer - HTTP server instance
@@ -23,39 +24,47 @@ function initializeSocket(httpServer) {
     }
   });
 
-  // Authentication middleware for Socket.io
+  // Middleware for Socket.io — optional auth
   io.use(async (socket, next) => {
     try {
-      const token = socket.handshake.auth.token;
+      const token = socket.handshake.auth?.token;
       
-      if (!token) {
-        return next(new Error('Authentication token required'));
+      if (token) {
+        const decoded = jwt.verify(token, jwtSecret);
+        const user = await User.findById(decoded.id);
+        if (user && user.isActive) {
+          socket.user = user;
+        }
       }
-      
-      const decoded = jwt.verify(token, jwtSecret);
-      const user = await User.findById(decoded.id);
-      
-      if (!user || !user.isActive) {
-        return next(new Error('Invalid user'));
-      }
-      
-      socket.user = user;
       next();
     } catch (error) {
-      logger.error(`Socket authentication error: ${error.message}`);
-      next(new Error('Authentication failed'));
+      // Proceed without failing unauthenticated session socket
+      next();
     }
   });
 
   io.on('connection', (socket) => {
-    logger.info(`Staff user connected: ${socket.user.email} (socket: ${socket.id})`);
+    const userLabel = socket.user?.email || 'session_user';
+    logger.info(`Socket connected: ${userLabel} (socket: ${socket.id})`);
     
     // Join dashboard room for real-time updates
     socket.join('dashboard');
+
+    socket.on('register_session', (sessionId) => {
+      if (sessionId) {
+        connectedSessions.set(sessionId, socket.id);
+        socket.sessionId = sessionId;
+        socket.join(`session_${sessionId}`);
+        logger.info(`Registered session ${sessionId} on socket ${socket.id}`);
+      }
+    });
     
     // Handle disconnection
     socket.on('disconnect', () => {
-      logger.info(`Staff user disconnected: ${socket.user.email} (socket: ${socket.id})`);
+      if (socket.sessionId) {
+        connectedSessions.delete(socket.sessionId);
+      }
+      logger.info(`Socket disconnected: ${userLabel} (socket: ${socket.id})`);
     });
   });
 
@@ -70,7 +79,8 @@ function initializeSocket(httpServer) {
  */
 function getIO() {
   if (!io) {
-    throw new Error('Socket.io not initialized');
+    logger.warn('Socket.io not initialized yet');
+    return null;
   }
   return io;
 }

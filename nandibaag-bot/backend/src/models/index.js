@@ -27,5 +27,6 @@ module.exports = {
   BaileysAuth: require('./BaileysAuth'),
   MessageQueue: require('./MessageQueue'),
   FailedMessage: require('./FailedMessage'),
-  Staff: require('./Staff')
+  Staff: require('./Staff'),
+  RoomReservation: require('./RoomReservation')
 };

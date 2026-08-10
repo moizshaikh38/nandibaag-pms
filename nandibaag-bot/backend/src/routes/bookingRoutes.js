@@ -205,7 +205,9 @@ router.post('/manual-booking', async (req, res) => {
     const checkOut = checkOutDate ? new Date(checkOutDate) : new Date(checkIn.getTime() + 86400000);
     const dateStr = checkIn.toISOString().split('T')[0];
 
-    // Multi-room handling
+    const sessionId = req.body.sessionId || null;
+
+    // Multi-room handling & final real-time availability check
     const roomIds = Array.isArray(req.body.roomIds) 
       ? req.body.roomIds.filter(Boolean)
       : (req.body.roomId ? [req.body.roomId] : []);
@@ -215,11 +217,17 @@ router.post('/manual-booking', async (req, res) => {
       const availabilityCheck = await checkMultipleRoomsAvailable(
         roomIds,
         checkIn,
-        checkOut
+        checkOut,
+        sessionId
       );
 
       if (!availabilityCheck.available) {
-        console.warn('[Booking:Manual] Room availability conflict warning:', availabilityCheck.reason);
+        console.warn('[Booking:Manual] ❌ Room availability conflict:', availabilityCheck.reason);
+        return res.status(400).json({
+          success: false,
+          error: availabilityCheck.reason,
+          conflicts: availabilityCheck.conflicts
+        });
       } else {
         console.log('[Booking:Manual] ✅ All selected rooms available:', roomIds.join(', '));
       }
@@ -257,8 +265,33 @@ router.post('/manual-booking', async (req, res) => {
     });
     
     await booking.save();
-    
     console.log('[Booking:Manual] Booking created:', booking._id);
+
+    // Confirm temporary room reservations (convert active -> confirmed)
+    if (sessionId) {
+      try {
+        const { confirmReservation } = require('../services/reservationService');
+        await confirmReservation(sessionId, checkIn, checkOut);
+      } catch (resErr) {
+        console.error('[Booking:Reservation] Error confirming reservation:', resErr.message);
+      }
+    }
+
+    // Broadcast booking_created event to all connected socket clients
+    try {
+      const { getIO } = require('../sockets');
+      const io = getIO();
+      if (io) {
+        io.emit('booking_created', {
+          roomIds,
+          checkInDate: checkIn,
+          checkOutDate: checkOut,
+          customerName,
+          message: `${customerName} booked ${roomIds.length} room(s)`
+        });
+        console.log('[Socket:Broadcast] booking_created event sent');
+      }
+    } catch (_) {}
 
     // ─── AUTO-SEND CONFIRMATION MESSAGES ────────────────────────────
     // Sends formatted booking confirmation to Customer (WhatsApp) and Staff Group
