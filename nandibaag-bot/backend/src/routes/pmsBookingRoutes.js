@@ -359,44 +359,88 @@ router.post('/rooms/:roomId/unbook', verifyToken, async (req, res, next) => {
     const { roomId } = req.params;
     const { checkInDate, checkOutDate } = req.body;
 
-    if (!isValidObjectId(roomId)) {
-      return res.status(400).json({ success: false, message: 'Invalid room ID' });
-    }
-
     const checkIn = new Date(checkInDate || Date.now());
     const checkOut = new Date(checkOutDate || (checkIn.getTime() + 86400000));
 
-    // Find overlapping active RoomBooking for this room
-    const roomBooking = await RoomBooking.findOne({
-      roomId,
+    // Resolve room by ObjectId or string roomNumber
+    let room = null;
+    if (isValidObjectId(roomId)) {
+      room = await Room.findById(roomId);
+    }
+    if (!room) {
+      room = await Room.findOne({ $or: [{ roomNumber: String(roomId) }, { number: String(roomId) }] });
+    }
+
+    const roomIdStr = room ? String(room._id) : String(roomId);
+    const roomNumStr = room ? String(room.roomNumber) : String(roomId);
+
+    let unbookedAny = false;
+
+    // 1. Cancel active RoomBooking records
+    const roomBookingFilter = {
+      $or: [
+        { roomId: roomIdStr },
+        { roomId: roomNumStr }
+      ],
       status: { $in: ['confirmed', 'checked_in'] },
+      checkInDate: { $lt: checkOut },
+      checkOutDate: { $gt: checkIn }
+    };
+    if (isValidObjectId(roomIdStr)) {
+      roomBookingFilter.$or.push({ roomId: new mongoose.Types.ObjectId(roomIdStr) });
+    }
+
+    const roomBookings = await RoomBooking.find(roomBookingFilter);
+    for (const rb of roomBookings) {
+      rb.status = 'cancelled';
+      await rb.save();
+      unbookedAny = true;
+
+      if (rb.bookingId) {
+        await Booking.findByIdAndUpdate(rb.bookingId, { status: 'cancelled' });
+      }
+    }
+
+    // 2. Cancel active main Booking records
+    const mainBookings = await Booking.find({
+      $or: [
+        { roomIds: roomIdStr },
+        { roomIds: roomNumStr },
+        { roomId: roomIdStr },
+        { roomId: roomNumStr }
+      ],
+      status: { $in: ['pending_payment', 'confirmed', 'checked_in'] },
       checkInDate: { $lt: checkOut },
       checkOutDate: { $gt: checkIn }
     });
 
-    if (!roomBooking) {
-      return res.status(404).json({ success: false, message: 'No active booking found for this room' });
+    for (const b of mainBookings) {
+      b.status = 'cancelled';
+      await b.save();
+      unbookedAny = true;
     }
 
-    roomBooking.status = 'cancelled';
-    await roomBooking.save();
-
-    // If linked to main Booking model, update booking status as well
-    if (roomBooking.bookingId) {
-      await Booking.findByIdAndUpdate(roomBooking.bookingId, { status: 'cancelled' });
+    if (!unbookedAny) {
+      return res.status(404).json({
+        success: false,
+        message: `No active booking found for Room ${roomNumStr}`
+      });
     }
 
-    // Broadcast Socket.io real-time update so Availability grid refreshes everywhere
+    // Broadcast Socket.io real-time updates
     try {
-      const { getIO } = require('../sockets');
-      const io = getIO();
-      io.emit('availability:updated', { checkInDate, checkOutDate });
-      io.emit('pms:booking_updated', { roomBookingId: roomBooking._id, status: 'cancelled' });
+      const io = req.app?.get?.('io') || (require('../sockets').getIO ? require('../sockets').getIO() : null);
+      if (io) {
+        const payload = { checkInDate, checkOutDate, roomId: roomIdStr, roomNumber: roomNumStr };
+        io.emit('availability_updated', payload);
+        io.emit('availability:updated', payload);
+        io.emit('pms:booking_updated', { status: 'cancelled' });
+      }
     } catch (socketErr) {
       logger.error(`Socket emit failed for unbook: ${socketErr.message}`);
     }
 
-    res.json({ success: true, message: 'Room unbooked successfully', roomBooking });
+    res.json({ success: true, message: `Room ${roomNumStr} unbooked successfully` });
   } catch (error) {
     next(error);
   }
