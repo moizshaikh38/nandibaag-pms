@@ -56,7 +56,6 @@ const staffMsg1 = formatBookingMessageForStaffGroup(booking1);
 assert('Customer msg has premium header', customerMsg1.includes('✅ BOOKING CONFIRMED ✓'));
 assert('Customer msg shows room count', customerMsg1.includes('Room: 2 Rooms'));
 assert('Customer msg shows pending Nil', customerMsg1.includes('Pending Payment: Nil'));
-assert('Customer msg shows rate', customerMsg1.includes('₹2,000 (Weekday) / ₹3,000 (Weekend)'));
 assert('Customer msg shows Booked by: Priti', customerMsg1.includes('Booked by: Priti'));
 assert('Customer msg shows Thank you', customerMsg1.includes('Thank you for booking with Nandibaag Resort! 🙏'));
 assert('Staff msg has alert header', staffMsg1.includes('🔔 NEW BOOKING ALERT ✅'));
@@ -91,7 +90,6 @@ const customerMsg2 = formatBookingMessageForCustomer(booking2);
 
 assert('Single room shows "Room: 1 Room"', customerMsg2.includes('Room: 1 Room'));
 assert('Pending shows ₹8,000', customerMsg2.includes('Pending Payment: ₹8,000'));
-assert('Rate shows couple rate', customerMsg2.includes('₹5,500 (Weekday) / ₹6,500 (Weekend)'));
 assert('Shows special notes', customerMsg2.includes('Anniversary celebration'));
 
 // ─── TEST 3: No rooms selected ──────────────────────────────────
@@ -159,7 +157,6 @@ const booking5 = {
 const staffMsg5 = formatBookingMessageForStaffGroup(booking5);
 assert('Picnic staff msg shows ONE DAY PICNIC', staffMsg5.includes('ONE DAY PICNIC'));
 assert('Picnic staff msg shows Meal option', staffMsg5.includes('Meal: B->D'));
-assert('Picnic rate display correct', formatBookingMessageForCustomer(booking5).includes('₹1,250 (Weekday) / ₹1,500 (Weekend)'));
 
 // ─── SUMMARY ────────────────────────────────────────────────────
 console.log('\n====================================================');

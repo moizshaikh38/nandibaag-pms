@@ -135,7 +135,6 @@ Room: ${roomDisplay}
 Total Payment: ₹${totalAmount.toLocaleString('en-IN')}
 Advance Payment: ₹${advancePaid.toLocaleString('en-IN')}
 Pending Payment: ${pendingDisplay}
-Rate: ${rateDisplay}
 Contact No.: ${booking.customerPhone}
 Booked by: ${bookedByName}
 
