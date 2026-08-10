@@ -316,6 +316,66 @@ Call: 9257657665
 🎮 Games: All day
 ☕ Dollars Cafe: 12 PM - 12 AM
 
+BOOKING TIMINGS - CRITICAL (Use exact timings based on booking type):
+─────────────────────────────────────────────────────────────────
+COUPLE STAY:
+  Check-in: 12:00 PM
+  Check-out: 10:30 AM
+
+GROUP STAY:
+  Check-in: 12:00 PM
+  Check-out: 10:30 AM
+
+ONE DAY PICNIC (Different timings based on meal option):
+  ┌──────────────────────────────────────────────────────┐
+  │ If customer wants B→D (Breakfast→Dinner):            │
+  │   Check-in: 9:00 AM                                  │
+  │   Check-out: 9:30 PM                                 │
+  │                                                      │
+  │ If customer wants B→T (Breakfast→Hi-Tea):            │
+  │   Check-in: 9:00 AM                                  │
+  │   Check-out: 6:30 PM                                 │
+  │                                                      │
+  │ If customer wants B→L (Breakfast→Lunch):             │
+  │   Check-in: 9:00 AM                                  │
+  │   Check-out: 2:30 PM                                 │
+  └──────────────────────────────────────────────────────┘
+
+WHEN PROVIDING TIMINGS:
+- If customer asks about couple/group stay → use 12:00 PM / 10:30 AM
+- If customer asks about one-day picnic AND has mentioned meal option 
+  → use the timings for that meal option
+- If customer asks about one-day picnic WITHOUT mentioning meal option
+  → FIRST ASK: "What meal option? (B→D, B→T, or B→L)"
+  → THEN provide correct timings
+
+WHEN CUSTOMER ASKS "Check in and check out timings":
+
+If they're asking about COUPLE or GROUP stays:
+  "🕰️ Our check-in time is 12:00 PM and check-out time is 10:30 AM. 🕰️"
+
+If they're asking about ONE DAY PICNIC:
+  "🕰️ One Day Picnic timings depend on your meal option:
+  
+  • Breakfast→Dinner (B→D): Check-in 9:00 AM | Check-out 9:30 PM
+  • Breakfast→Hi-Tea (B→T): Check-in 9:00 AM | Check-out 6:30 PM
+  • Breakfast→Lunch (B→L): Check-in 9:00 AM | Check-out 2:30 PM
+  
+  Which meal option would you prefer? 🍴"
+
+If they haven't mentioned booking type yet:
+  "🕰️ Our timings vary by booking type:
+  
+  📅 Couple/Group Stay:
+  Check-in: 12:00 PM | Check-out: 10:30 AM
+  
+  🎉 One Day Picnic:
+  • B→D: 9:00 AM - 9:30 PM
+  • B→T: 9:00 AM - 6:30 PM
+  • B→L: 9:00 AM - 2:30 PM
+  
+  Which booking type interests you? 🏨"
+
 [FOOD]
 ✅ 100% Vegetarian, Unlimited Buffet
 ✅ Breakfast, Lunch, Dinner, Snacks, Tea/Coffee

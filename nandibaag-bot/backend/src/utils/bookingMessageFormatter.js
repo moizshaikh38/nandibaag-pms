@@ -12,29 +12,63 @@
 
 const { formatDateToDDMMYYYY, getDayName } = require('./dateUtils');
 
-const getDynamicTimings = (packageType, mealOption) => {
-  let checkInTime = '12:00 PM';
-  let checkOutTime = '10:30 AM';
-
-  if (packageType === 'oneDay' || packageType === 'picnic') {
-    checkInTime = '09:00 AM';
-
-    switch (mealOption) {
-      case 'B->D':
-        checkOutTime = '9:30 PM';
-        break;
-      case 'B->T':
-        checkOutTime = '6:30 PM';
-        break;
-      case 'B->L':
-        checkOutTime = '2:30 PM';
-        break;
-      default:
-        checkOutTime = '9:30 PM'; // default for one day
-    }
+const getCheckInCheckOutTimes = (packageType, mealOption) => {
+  switch (packageType) {
+    case 'couple':
+    case 'group':
+      return {
+        checkIn: '12:00 pm',
+        checkOut: '10:30 am',
+        checkInTime: '12:00 PM',
+        checkOutTime: '10:30 AM'
+      };
+    
+    case 'oneDay':
+    case 'picnic':
+      switch (mealOption) {
+        case 'B->D':
+          return {
+            checkIn: '9:00 am',
+            checkOut: '9:30 pm',
+            checkInTime: '09:00 AM',
+            checkOutTime: '9:30 PM'
+          };
+        case 'B->T':
+          return {
+            checkIn: '9:00 am',
+            checkOut: '6:30 pm',
+            checkInTime: '09:00 AM',
+            checkOutTime: '6:30 PM'
+          };
+        case 'B->L':
+          return {
+            checkIn: '9:00 am',
+            checkOut: '2:30 pm',
+            checkInTime: '09:00 AM',
+            checkOutTime: '2:30 PM'
+          };
+        default:
+          return {
+            checkIn: '9:00 am',
+            checkOut: '9:30 pm',
+            checkInTime: '09:00 AM',
+            checkOutTime: '9:30 PM'
+          };
+      }
+    
+    default:
+      return {
+        checkIn: '12:00 pm',
+        checkOut: '10:30 am',
+        checkInTime: '12:00 PM',
+        checkOutTime: '10:30 AM'
+      };
   }
+};
 
-  return { checkInTime, checkOutTime };
+const getDynamicTimings = (packageType, mealOption) => {
+  const times = getCheckInCheckOutTimes(packageType, mealOption);
+  return { checkInTime: times.checkInTime, checkOutTime: times.checkOutTime };
 };
 
 /**
@@ -193,6 +227,8 @@ const formatBookingConfirmationMessage = (booking) => {
 };
 
 module.exports = {
+  getCheckInCheckOutTimes,
+  getDynamicTimings,
   formatBookingMessageForCustomer,
   formatBookingMessageForStaffGroup,
   formatBookingConfirmationMessage
