@@ -481,11 +481,10 @@ const ManualBookingForm = () => {
                   <label className="block text-[10px] font-bold text-sky-900">
                     Meal Option:
                   </label>
-                  <div className="grid grid-cols-3 gap-1.5">
+                  <div className="grid grid-cols-2 gap-1.5">
                     {[
                       { value: 'B->D', label: 'B → D', time: '9am - 9:30pm' },
-                      { value: 'B->T', label: 'B → Tea', time: '9am - 6:30pm' },
-                      { value: 'B->L', label: 'B → Lunch', time: '9am - 2:30pm' }
+                      { value: 'B->T', label: 'B → Tea', time: '9am - 6:30pm' }
                     ].map(opt => (
                       <label
                         key={opt.value}

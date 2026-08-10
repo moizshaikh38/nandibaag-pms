@@ -40,13 +40,6 @@ const getCheckInCheckOutTimes = (packageType, mealOption) => {
             checkInTime: '09:00 AM',
             checkOutTime: '6:30 PM'
           };
-        case 'B->L':
-          return {
-            checkIn: '9:00 am',
-            checkOut: '2:30 pm',
-            checkInTime: '09:00 AM',
-            checkOutTime: '2:30 PM'
-          };
         default:
           return {
             checkIn: '9:00 am',

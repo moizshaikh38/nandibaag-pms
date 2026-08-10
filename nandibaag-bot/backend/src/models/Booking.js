@@ -30,7 +30,7 @@ const bookingSchema = new mongoose.Schema({
   },
   mealOption: {
     type: String,
-    enum: ['B->D', 'B->T', 'B->L', null],
+    enum: ['B->D', 'B->T', null],
     required: false,
     default: null
   },

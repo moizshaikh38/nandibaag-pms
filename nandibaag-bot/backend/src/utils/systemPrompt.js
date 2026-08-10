@@ -335,10 +335,6 @@ ONE DAY PICNIC (Different timings based on meal option):
   │ If customer wants B→T (Breakfast→Hi-Tea):            │
   │   Check-in: 9:00 AM                                  │
   │   Check-out: 6:30 PM                                 │
-  │                                                      │
-  │ If customer wants B→L (Breakfast→Lunch):             │
-  │   Check-in: 9:00 AM                                  │
-  │   Check-out: 2:30 PM                                 │
   └──────────────────────────────────────────────────────┘
 
 WHEN PROVIDING TIMINGS:
@@ -346,7 +342,7 @@ WHEN PROVIDING TIMINGS:
 - If customer asks about one-day picnic AND has mentioned meal option 
   → use the timings for that meal option
 - If customer asks about one-day picnic WITHOUT mentioning meal option
-  → FIRST ASK: "What meal option? (B→D, B→T, or B→L)"
+  → FIRST ASK: "What meal option? (B→D or B→T)"
   → THEN provide correct timings
 
 WHEN CUSTOMER ASKS "Check in and check out timings":
@@ -359,7 +355,6 @@ If they're asking about ONE DAY PICNIC:
   
   • Breakfast→Dinner (B→D): Check-in 9:00 AM | Check-out 9:30 PM
   • Breakfast→Hi-Tea (B→T): Check-in 9:00 AM | Check-out 6:30 PM
-  • Breakfast→Lunch (B→L): Check-in 9:00 AM | Check-out 2:30 PM
   
   Which meal option would you prefer? 🍴"
 
@@ -372,7 +367,6 @@ If they haven't mentioned booking type yet:
   🎉 One Day Picnic:
   • B→D: 9:00 AM - 9:30 PM
   • B→T: 9:00 AM - 6:30 PM
-  • B→L: 9:00 AM - 2:30 PM
   
   Which booking type interests you? 🏨"
 
