@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import api from '../utils/api';
 import { useSocket } from '../hooks/useSocket';
 import toast from 'react-hot-toast';
+import { formatDateDDMMYYYY } from '../utils/dateFormatter';
 import {
   ChevronLeft,
   ChevronRight,
@@ -381,7 +382,7 @@ export default function CalendarPage() {
                       </div>
                       <div>
                         <span className="text-[10px] text-slate-400 block">Stay Dates:</span>
-                        <strong className="text-slate-800">{formatDMY(b.checkInDate)} ➔ {formatDMY(b.checkOutDate)}</strong>
+                        <strong className="text-slate-800">{formatDateDDMMYYYY(b.checkInDate)} ➔ {formatDateDDMMYYYY(b.checkOutDate)}</strong>
                       </div>
                       <div>
                         <span className="text-[10px] text-slate-400 block">Guests:</span>

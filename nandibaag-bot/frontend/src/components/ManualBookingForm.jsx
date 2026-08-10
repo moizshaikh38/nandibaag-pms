@@ -3,6 +3,7 @@ import api from '../utils/api';
 import toast from 'react-hot-toast';
 import { getSessionId } from '../utils/sessionManager';
 import { connectSocket } from '../utils/socket';
+import { formatDateDDMMYYYY, getDayName, formatDateWithDay } from '../utils/dateFormatter';
 import {
   FileEdit,
   User,
@@ -407,6 +408,13 @@ const ManualBookingForm = () => {
                   />
                 </div>
               </div>
+
+              {formData.checkInDate && formData.checkOutDate && (
+                <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-200/80 text-[11px] font-bold text-emerald-900 flex flex-wrap items-center justify-between gap-1 shadow-2xs">
+                  <span>📅 Check In: <strong>{formatDateDDMMYYYY(formData.checkInDate)}</strong> ({getDayName(formData.checkInDate)})</span>
+                  <span>📅 Check Out: <strong>{formatDateDDMMYYYY(formData.checkOutDate)}</strong> ({getDayName(formData.checkOutDate)})</span>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-2">
                 <div>

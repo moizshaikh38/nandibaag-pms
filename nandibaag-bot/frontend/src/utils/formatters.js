@@ -123,11 +123,14 @@ export function formatDMY(date) {
   return `${day}/${month}/${year}`;
 }
 
+export const formatDateDDMMYYYY = formatDMY;
+
 export default {
   formatPhoneDisplay,
   formatRelativeTime,
   formatCurrency,
   getLanguageBadgeColor,
   truncateText,
-  formatDMY
+  formatDMY,
+  formatDateDDMMYYYY
 };
