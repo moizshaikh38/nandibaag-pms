@@ -123,8 +123,12 @@ class Fast2SmsService {
     try {
       const url = new URL(this.apiUrl);
       url.searchParams.set('to', number);
-      if (phoneNumberId) {
-        url.searchParams.set('phone_number_id', phoneNumberId);
+      if (this.phoneNumberId) {
+        url.searchParams.set('phone_number_id', this.phoneNumberId);
+      } else {
+        const displayNum = (this.senderNumbers[0] || env.resortContact1 || '9257657665').replace(/\D/g, '');
+        const cleanDisplay = displayNum.length === 12 && displayNum.startsWith('91') ? displayNum.slice(2) : displayNum;
+        url.searchParams.set('display_number', cleanDisplay);
       }
 
       const response = await fetch(url.toString(), {
