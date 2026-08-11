@@ -231,20 +231,20 @@ export default function ChatsPage() {
   const selectedChat = chats.find(c => c._id === selectedChatId);
 
   return (
-    <div className="h-[calc(100vh-7rem)] min-h-[600px] flex flex-col md:flex-row glass-card rounded-2xl overflow-hidden border border-slate-200 shadow-xl">
+    <div className="h-[calc(100dvh-85px)] md:h-[calc(100vh-7rem)] flex flex-col md:flex-row glass-card rounded-2xl overflow-hidden border border-slate-200/90 shadow-xl mb-16 lg:mb-0">
       
       {/* Chat List Panel */}
       <div className={`${selectedChat ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 flex-col bg-white border-r border-slate-200 shrink-0`}>
         
         {/* Header & Tabs */}
-        <div className="p-4 border-b border-slate-100 space-y-3 bg-slate-50/50">
+        <div className="p-3.5 border-b border-slate-100 space-y-2.5 bg-slate-50/60">
           <div className="flex items-center justify-between">
-            <h1 className="text-lg font-display font-bold text-slate-800 flex items-center gap-2">
+            <h1 className="text-base sm:text-lg font-display font-extrabold text-slate-800 flex items-center gap-2">
               <MessageSquare size={20} className="text-emerald-600" />
-              <span>Resort WhatsApp Inbox</span>
+              <span>WhatsApp Inbox</span>
             </h1>
-            <span className="text-xs font-semibold px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full border border-slate-200 font-mono">
-              {filteredChats.length} Conversations
+            <span className="text-[11px] font-bold px-2.5 py-0.5 bg-emerald-50 text-emerald-800 rounded-full border border-emerald-200 font-mono">
+              {filteredChats.length} Chats
             </span>
           </div>
 
