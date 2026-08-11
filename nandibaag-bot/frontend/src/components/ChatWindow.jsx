@@ -241,9 +241,9 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
 
   const fetchAvailableRooms = async (checkIn, checkOut) => {
     if (!checkIn || !checkOut) return;
+    setIsLoadingRooms(true);
     try {
-      setIsLoadingRooms(true);
-      const res = await api.get('/availability/rooms', {
+      const res = await api.get('/rooms/availability-realtime', {
         params: { checkInDate: checkIn, checkOutDate: checkOut }
       });
       setAvailableRooms(res.data.rooms || []);
@@ -271,17 +271,48 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
       ...prev,
       checkInDate: inDate,
       checkOutDate: outDate,
+      packageType: 'couple',
+      mealOption: 'B->D',
       adults: chat?.bookingDraft?.adults || 2,
+      children: 0,
       guestName: chat?.customerName || '',
       guestPhone: chat?.customerPhone || '+91',
-      roomId: ''
+      bookedByName: '',
+      guestIdProofType: 'aadhaar',
+      notes: '',
+      roomId: '',
+      selectedRooms: [],
+      totalAmount: 3500,
+      advanceAmount: 0,
+      remainingAmount: 3500,
+      isFullPaid: false
     }));
     fetchAvailableRooms(inDate, outDate);
   };
 
-  const handleAssignRoomSubmit = async () => {
-    if (!assignForm.roomId) {
-      toast.error('Please select an available cottage room');
+  const handleRoomChipToggle = (room) => {
+    const num = String(room.number || room.roomNumber || room._id || room.roomId);
+    setAssignForm(prev => {
+      const current = prev.selectedRooms;
+      let updated;
+      if (current.includes(num)) {
+        updated = current.filter(r => r !== num);
+      } else {
+        updated = [...current, num];
+      }
+      return {
+        ...prev,
+        selectedRooms: updated,
+        roomId: updated.join(', ')
+      };
+    });
+  };
+
+  const handleAssignRoomSubmit = async (e) => {
+    if (e) e.preventDefault();
+    const roomsToBook = assignForm.selectedRooms.length > 0 ? assignForm.selectedRooms : (assignForm.roomId ? [assignForm.roomId] : []);
+    if (roomsToBook.length === 0) {
+      toast.error('Please select at least one available cottage room!');
       return;
     }
     setIsAssigning(true);
@@ -291,25 +322,28 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
       const rem = assignForm.isFullPaid ? 0 : Math.max(0, total - adv);
       const pStatus = assignForm.isFullPaid || adv >= total ? 'paid' : adv > 0 ? 'partially_paid' : 'unpaid';
 
-      await api.post('/pms/bookings/manual', {
-        guestName: assignForm.guestName || chat.customerName || 'Guest',
-        guestPhone: assignForm.guestPhone || chat.customerPhone,
-        bookingType: 'couple',
+      await api.post('/bookings/manual-booking', {
+        customerName: assignForm.guestName || chat.customerName || 'Guest',
+        customerPhone: assignForm.guestPhone || chat.customerPhone,
+        packageType: assignForm.packageType,
+        mealOption: assignForm.mealOption,
         checkInDate: assignForm.checkInDate,
         checkOutDate: assignForm.checkOutDate,
-        adults: parseInt(assignForm.adults) || 2,
+        guestComposition: { adults: parseInt(assignForm.adults) || 2, children: parseInt(assignForm.children) || 0 },
+        bookedBy: { name: assignForm.bookedByName || 'Front Desk' },
         totalAmount: total,
-        advancePayment: adv,
+        advancePaid: adv,
         remainingPayment: rem,
         paymentStatus: pStatus,
-        roomId: assignForm.roomId,
-        roomIds: [assignForm.roomId]
+        roomId: roomsToBook.join(', '),
+        roomIds: roomsToBook,
+        notes: assignForm.notes
       });
 
-      toast.success('🎉 Cottage Room Assigned & Synced Successfully!');
+      toast.success('🎉 Cottage Room Assigned & Synced to PMS!');
       setShowAssignModal(false);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to assign room');
+      toast.error(err.response?.data?.error || err.response?.data?.message || 'Failed to assign room');
     } finally {
       setIsAssigning(false);
     }
@@ -545,175 +579,339 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
         </button>
       </div>
 
-      {/* Room Assign Modal */}
+      {/* Room Assign Modal (Full Mobile-Optimized Manual Booking Form Style) */}
       {showAssignModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="glass-card rounded-2xl max-w-md w-full p-6 space-y-4 bg-white animate-fade-in shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="font-display font-bold text-base text-slate-800 flex items-center gap-2">
-                <PlusCircle size={18} className="text-emerald-600" />
-                <span>Assign Cottage Room to {chat.customerName || 'Guest'}</span>
-              </h3>
-              <button onClick={() => setShowAssignModal(false)} className="text-slate-400 hover:text-slate-700">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-xl w-full my-auto overflow-hidden animate-fade-in shadow-2xl border border-slate-200/90 text-slate-800">
+            
+            {/* Header Banner */}
+            <div className="bg-gradient-to-r from-emerald-950 via-emerald-900 to-teal-900 px-4 py-3.5 sm:px-6 sm:py-4 text-white flex items-center justify-between gap-2 border-b border-emerald-800">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-xs shrink-0">
+                  <Bed size={18} className="text-emerald-300" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-display font-extrabold leading-none tracking-tight">
+                    Assign Cottage Room
+                  </h3>
+                  <p className="text-[11px] text-emerald-200/90 font-medium mt-1">
+                    Guest: <strong>{chat.customerName || formatPhoneDisplay(chat.customerPhone)}</strong> • Direct PMS Sync
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAssignModal(false)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white font-bold flex items-center justify-center transition-all text-sm shrink-0"
+              >
                 ✕
               </button>
             </div>
 
-            <div className="space-y-3">
-              {/* Check-In & Check-Out Date Selection */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Check-In Date</label>
-                  <input
-                    type="date"
-                    value={assignForm.checkInDate}
-                    onChange={(e) => setAssignForm(prev => ({ ...prev, checkInDate: e.target.value, roomId: '' }))}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-medium"
-                  />
+            <form onSubmit={handleAssignRoomSubmit} className="p-4 space-y-3.5 max-h-[80vh] overflow-y-auto custom-scrollbar">
+              
+              {/* 1. Stay Dates */}
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                  <Calendar size={14} className="text-emerald-600" /> Stay Dates & Guest Info
+                </h4>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Check-in Date *</label>
+                    <input
+                      type="date"
+                      value={assignForm.checkInDate}
+                      onChange={(e) => setAssignForm(prev => ({ ...prev, checkInDate: e.target.value, roomId: '', selectedRooms: [] }))}
+                      required
+                      className="w-full px-3 py-2 text-xs sm:text-sm font-semibold border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-emerald-500 shadow-2xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Check-out Date *</label>
+                    <input
+                      type="date"
+                      value={assignForm.checkOutDate}
+                      onChange={(e) => setAssignForm(prev => ({ ...prev, checkOutDate: e.target.value, roomId: '', selectedRooms: [] }))}
+                      required
+                      className="w-full px-3 py-2 text-xs sm:text-sm font-semibold border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-emerald-500 shadow-2xs"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Check-Out Date</label>
-                  <input
-                    type="date"
-                    value={assignForm.checkOutDate}
-                    onChange={(e) => setAssignForm(prev => ({ ...prev, checkOutDate: e.target.value, roomId: '' }))}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-medium"
-                  />
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Guest Full Name *</label>
+                    <input
+                      type="text"
+                      value={assignForm.guestName}
+                      onChange={(e) => setAssignForm(prev => ({ ...prev, guestName: e.target.value }))}
+                      required
+                      className="w-full px-3 py-2 text-xs font-semibold border border-slate-300 rounded-xl bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Guest WhatsApp Phone *</label>
+                    <input
+                      type="text"
+                      value={assignForm.guestPhone}
+                      onChange={(e) => setAssignForm(prev => ({ ...prev, guestPhone: e.target.value }))}
+                      required
+                      className="w-full px-3 py-2 text-xs font-semibold border border-slate-300 rounded-xl bg-white font-mono"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
-                  <span>Select Available Cottage Room</span>
-                  {isLoadingRooms && <span className="text-[11px] text-emerald-600 font-medium animate-pulse">Checking availability...</span>}
-                </label>
-                <select
-                  value={assignForm.roomId}
-                  onChange={(e) => setAssignForm(prev => ({ ...prev, roomId: e.target.value }))}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-semibold text-slate-800"
-                  disabled={isLoadingRooms}
-                >
-                  <option value="">
-                    {isLoadingRooms
-                      ? '⏳ Searching available cottages...'
-                      : availableRooms.length === 0
-                      ? '❌ No cottages available for selected dates'
-                      : `-- Choose Available Cottage (${availableRooms.length} available) --`}
-                  </option>
-                  {Object.entries(roomsBySeries).map(([series, rooms]) => (
-                    <optgroup key={series} label={`🏡 ${series}`}>
-                      {rooms.map(r => (
-                        <option key={r.roomId} value={r.roomId}>
-                          Room {r.roomNumber} ({r.seriesName} • Capacity: {r.capacity} Guests)
-                        </option>
-                      ))}
-                    </optgroup>
+              {/* 2. Package Type Selection */}
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5">
+                <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                  <Package size={14} className="text-emerald-600" /> Package Type & Guest Count
+                </h4>
+
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'couple', label: 'Couple Stay', sub: '2 Adults' },
+                    { id: 'group', label: 'Group Stay', sub: 'Family/Group' },
+                    { id: 'oneDay', label: 'One Day', sub: 'Picnic' }
+                  ].map((pkg) => (
+                    <button
+                      type="button"
+                      key={pkg.id}
+                      onClick={() => setAssignForm(prev => ({ ...prev, packageType: pkg.id }))}
+                      className={`p-2 text-left rounded-xl border transition-all ${
+                        assignForm.packageType === pkg.id
+                          ? 'border-emerald-600 bg-emerald-600 text-white font-bold shadow-xs'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                      }`}
+                    >
+                      <span className="text-xs font-extrabold block">{pkg.label}</span>
+                      <span className={`text-[9px] block ${assignForm.packageType === pkg.id ? 'text-emerald-100' : 'text-slate-400'}`}>
+                        {pkg.sub}
+                      </span>
+                    </button>
                   ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Total Guests</label>
-                  <input
-                    type="number"
-                    value={assignForm.adults}
-                    onChange={(e) => setAssignForm(prev => ({ ...prev, adults: e.target.value }))}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg"
-                  />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Total Package (₹)</label>
-                  <input
-                    type="number"
-                    value={assignForm.totalAmount}
-                    onChange={(e) => {
-                      const total = parseFloat(e.target.value) || 0;
-                      setAssignForm(prev => ({
-                        ...prev,
-                        totalAmount: e.target.value,
-                        advanceAmount: prev.isFullPaid ? total : prev.advanceAmount,
-                        remainingAmount: prev.isFullPaid ? 0 : Math.max(0, total - (parseFloat(prev.advanceAmount) || 0))
-                      }));
-                    }}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg"
-                  />
-                </div>
-              </div>
-
-              {/* Full Paid Checkbox & Payment Breakdown */}
-              <div className="space-y-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="assignFullPaid"
-                    checked={assignForm.isFullPaid}
-                    onChange={(e) => {
-                      const isChecked = e.target.checked;
-                      const total = parseFloat(assignForm.totalAmount) || 0;
-                      setAssignForm(prev => ({
-                        ...prev,
-                        isFullPaid: isChecked,
-                        advanceAmount: isChecked ? total : 0,
-                        remainingAmount: isChecked ? 0 : total
-                      }));
-                    }}
-                    className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
-                  />
-                  <label htmlFor="assignFullPaid" className="text-xs font-bold text-emerald-900 cursor-pointer">
-                    ✓ Mark as Full Paid (₹{assignForm.totalAmount || 0})
-                  </label>
-                </div>
-
-                {!assignForm.isFullPaid && (
-                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200">
-                    <div>
-                      <label className="block text-[10px] font-semibold text-emerald-800 mb-0.5">Advance Paid (₹)</label>
-                      <input
-                        type="number"
-                        value={assignForm.advanceAmount}
-                        onChange={(e) => {
-                          const adv = parseFloat(e.target.value) || 0;
-                          const total = parseFloat(assignForm.totalAmount) || 0;
-                          setAssignForm(prev => ({
-                            ...prev,
-                            advanceAmount: e.target.value,
-                            remainingAmount: Math.max(0, total - adv)
-                          }));
-                        }}
-                        className="w-full px-2.5 py-1 text-xs border border-emerald-300 rounded-lg bg-white font-semibold"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-semibold text-amber-800 mb-0.5">Remaining Balance (₹)</label>
-                      <input
-                        type="number"
-                        readOnly
-                        value={Math.max(0, (parseFloat(assignForm.totalAmount) || 0) - (parseFloat(assignForm.advanceAmount) || 0))}
-                        className="w-full px-2.5 py-1 text-xs border border-amber-300 bg-amber-50 text-amber-900 rounded-lg font-bold"
-                      />
+                {/* Meal Options for One Day Picnic */}
+                {assignForm.packageType === 'oneDay' && (
+                  <div className="p-2.5 rounded-xl bg-sky-50 border border-sky-200 space-y-1.5">
+                    <label className="block text-xs font-extrabold text-sky-950">Meal Option:</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { value: 'B->D', label: 'B → D', time: '9am - 9:30pm' },
+                        { value: 'B->T', label: 'B → Tea', time: '9am - 6:30pm' }
+                      ].map(opt => (
+                        <button
+                          type="button"
+                          key={opt.value}
+                          onClick={() => setAssignForm(prev => ({ ...prev, mealOption: opt.value }))}
+                          className={`p-2 rounded-xl border text-center font-bold text-xs ${
+                            assignForm.mealOption === opt.value
+                              ? 'bg-sky-600 text-white border-sky-600 shadow-2xs'
+                              : 'bg-white text-slate-700 border-slate-200'
+                          }`}
+                        >
+                          <div>{opt.label}</div>
+                          <div className="text-[9px] opacity-80">{opt.time}</div>
+                        </button>
+                      ))}
                     </div>
                   </div>
                 )}
-              </div>
-            </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-              <button
-                onClick={() => setShowAssignModal(false)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAssignRoomSubmit}
-                disabled={isAssigning}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl disabled:opacity-50"
-              >
-                {isAssigning ? 'Assigning...' : 'Confirm Room Booking'}
-              </button>
-            </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Adults (12+ Yrs)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={assignForm.adults}
+                      onChange={(e) => setAssignForm(prev => ({ ...prev, adults: e.target.value }))}
+                      className="w-full px-3 py-2 text-xs font-bold border border-slate-300 rounded-xl bg-white text-center"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Children (&lt;12 Yrs)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={assignForm.children}
+                      onChange={(e) => setAssignForm(prev => ({ ...prev, children: e.target.value }))}
+                      className="w-full px-3 py-2 text-xs font-bold border border-slate-300 rounded-xl bg-white text-center"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Multi-Room Interactive Selection Grid */}
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                    <Building size={14} className="text-emerald-600" /> Select Cottage Rooms
+                  </h4>
+                  {isLoadingRooms && <span className="text-[10px] text-emerald-700 font-bold animate-pulse">Checking...</span>}
+                </div>
+
+                {availableRooms.length > 0 ? (
+                  <div className="max-h-48 overflow-y-auto space-y-2 p-1.5 bg-white border border-slate-200 rounded-xl no-scrollbar">
+                    {Object.entries(roomsBySeries).map(([seriesName, rooms]) => (
+                      <div key={seriesName} className="space-y-1.5">
+                        <div className="text-[11px] font-extrabold text-emerald-950 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center justify-between">
+                          <span>🏡 {seriesName}</span>
+                          <span className="text-[10px] text-emerald-700 font-bold">{rooms.filter(r => r.status === 'available' || r.status === 'reserved_by_you').length} available</span>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {rooms.map((room) => {
+                            const num = String(room.number || room.roomNumber || room._id || room.roomId);
+                            const cap = room.capacity || 4;
+                            const isChecked = assignForm.selectedRooms.includes(num);
+
+                            const isAvailable = room.status === 'available';
+                            const isReservedByYou = room.status === 'reserved_by_you';
+                            const isReservedByOther = room.status === 'reserved_by_other';
+                            const isBooked = room.status === 'booked';
+                            const isMaintenance = room.status === 'maintenance';
+                            const isDisabled = isBooked || isReservedByOther || isMaintenance;
+
+                            let cardStyle = 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 cursor-pointer';
+                            if (isChecked || isReservedByYou) {
+                              cardStyle = 'bg-emerald-700 text-white border-emerald-700 font-bold shadow-xs cursor-pointer';
+                            } else if (isMaintenance) {
+                              cardStyle = 'bg-amber-100 text-amber-950 border-amber-300 font-semibold opacity-90 cursor-not-allowed';
+                            } else if (isReservedByOther) {
+                              cardStyle = 'bg-rose-50 text-rose-900 border-rose-300 opacity-60 cursor-not-allowed';
+                            } else if (isBooked) {
+                              cardStyle = 'bg-slate-100 text-slate-400 border-slate-200 opacity-50 cursor-not-allowed';
+                            }
+
+                            return (
+                              <label
+                                key={num}
+                                onClick={() => !isDisabled && handleRoomChipToggle(room)}
+                                className={`p-2 rounded-xl border text-left transition-all flex flex-col justify-between select-none active:scale-95 ${cardStyle}`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-extrabold">Room {num}</span>
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked || isReservedByYou}
+                                    disabled={isDisabled}
+                                    onChange={() => {}}
+                                    className="w-4 h-4 accent-emerald-600 rounded"
+                                  />
+                                </div>
+                                <div className="flex items-center justify-between text-[10px] mt-1 opacity-90">
+                                  <span>Cap: {cap}</span>
+                                  <span className="font-extrabold uppercase">
+                                    {isMaintenance ? '🔧 LOCK' : isBooked ? 'Booked' : isReservedByOther ? 'Held' : isChecked ? 'Selected' : 'Available'}
+                                  </span>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500 bg-slate-100 p-3 rounded-xl border border-slate-200 text-center font-medium">
+                    {isLoadingRooms ? '⏳ Fetching available rooms...' : 'No available rooms for selected dates.'}
+                  </p>
+                )}
+
+                {assignForm.selectedRooms.length > 0 && (
+                  <div className="p-2 rounded-xl bg-sky-50 border border-sky-200 text-sky-950 text-xs font-bold flex items-center justify-between">
+                    <span>Selected: {assignForm.selectedRooms.join(', ')}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* 4. Payment Breakdown Card */}
+              <div className="p-4 rounded-2xl bg-slate-950 text-white space-y-3 shadow-xl border border-slate-800">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                    <CreditCard size={14} /> Payment Summary
+                  </h4>
+
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={assignForm.isFullPaid}
+                      onChange={(e) => {
+                        const isChecked = e.target.checked;
+                        const total = parseFloat(assignForm.totalAmount) || 0;
+                        setAssignForm(prev => ({
+                          ...prev,
+                          isFullPaid: isChecked,
+                          advanceAmount: isChecked ? total : 0,
+                          remainingAmount: isChecked ? 0 : total
+                        }));
+                      }}
+                      className="w-4 h-4 text-emerald-500 rounded accent-emerald-500 cursor-pointer"
+                    />
+                    <span className="text-xs font-bold text-emerald-300">✓ Mark Full Paid</span>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-extrabold text-slate-300 mb-1">Total (₹) *</label>
+                    <input
+                      type="number"
+                      value={assignForm.totalAmount}
+                      onChange={(e) => {
+                        const total = parseFloat(e.target.value) || 0;
+                        setAssignForm(prev => ({
+                          ...prev,
+                          totalAmount: e.target.value,
+                          advanceAmount: prev.isFullPaid ? total : prev.advanceAmount,
+                          remainingAmount: prev.isFullPaid ? 0 : Math.max(0, total - (parseFloat(prev.advanceAmount) || 0))
+                        }));
+                      }}
+                      required
+                      className="w-full px-2.5 py-2 text-sm font-extrabold border border-slate-700 rounded-xl bg-slate-900 text-white text-center shadow-inner"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold text-emerald-400 mb-1">Advance (₹)</label>
+                    <input
+                      type="number"
+                      value={assignForm.advanceAmount}
+                      onChange={(e) => {
+                        const adv = parseFloat(e.target.value) || 0;
+                        const total = parseFloat(assignForm.totalAmount) || 0;
+                        setAssignForm(prev => ({
+                          ...prev,
+                          advanceAmount: e.target.value,
+                          remainingAmount: Math.max(0, total - adv)
+                        }));
+                      }}
+                      className="w-full px-2.5 py-2 text-sm font-extrabold border border-emerald-800 rounded-xl bg-emerald-950 text-emerald-300 text-center shadow-inner"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-extrabold text-amber-400 mb-1">Balance (₹)</label>
+                    <input
+                      type="number"
+                      readOnly
+                      value={Math.max(0, (parseFloat(assignForm.totalAmount) || 0) - (parseFloat(assignForm.advanceAmount) || 0))}
+                      className="w-full px-2.5 py-2 text-sm font-extrabold border border-amber-800 bg-amber-950 text-amber-300 rounded-xl text-center shadow-inner"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isAssigning}
+                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-[0.99] text-white font-display font-extrabold text-xs sm:text-sm shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isAssigning ? 'Assigning Cottage...' : '✓ Assign & Confirm Reservation'}
+                </button>
+              </div>
+
+            </form>
           </div>
         </div>
       )}
