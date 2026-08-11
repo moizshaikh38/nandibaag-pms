@@ -215,36 +215,19 @@ export default function LoginPage() {
                   <Lock size={18} className="absolute left-3.5 text-slate-500 pointer-events-none z-10" />
                   <input
                     id="password"
-                    type={showPassword ? 'text' : 'password'}
+                    type="password"
                     name="password"
                     autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    onFocus={(e) => e.currentTarget.focus()}
                     placeholder="Enter your password"
                     required
                     disabled={isLoading}
                     aria-label="Password"
-                    className={`w-full pl-10 pr-12 py-3 min-h-[44px] text-base sm:text-xs font-medium bg-slate-950/90 border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white placeholder-slate-500 transition-all pointer-events-auto select-text appearance-none ${
+                    className={`w-full pl-10 pr-4 py-3 min-h-[44px] text-base sm:text-xs font-medium bg-slate-950/90 border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white placeholder-slate-500 transition-none ${
                       errors.password ? 'border-rose-500' : 'border-slate-800'
                     }`}
                   />
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setShowPassword(!showPassword);
-                    }}
-                    onTouchStart={(e) => {
-                      e.preventDefault();
-                    }}
-                    className="absolute right-1 p-2 min-w-[44px] min-h-[44px] text-slate-400 hover:text-white active:scale-95 transition-all z-20 touch-manipulation flex items-center justify-center rounded-lg cursor-pointer select-none pointer-events-auto"
-                    aria-label="Toggle password visibility"
-                    title={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
                 </div>
                 {errors.password && (
                   <p className="text-rose-400 text-[11px] font-medium mt-1">{errors.password}</p>
