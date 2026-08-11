@@ -19,14 +19,25 @@ const StaffLeaderboard = ({ stats = [], onSelectStaff }) => {
           className={`leaderboard-item rank-${idx + 1}`}
           onClick={() => onSelectStaff && onSelectStaff(staff)}
         >
-          <div className="rank">
-            <span className="medal">{medals[idx] || `#${idx + 1}`}</span>
-            <span className="rank-number">#{idx + 1}</span>
-          </div>
+          <div className="leaderboard-header-row flex items-center justify-between w-full">
+            <div className="flex items-center gap-3">
+              <div className="rank">
+                <span className="medal">{medals[idx] || `#${idx + 1}`}</span>
+                <span className="rank-number">#{idx + 1}</span>
+              </div>
 
-          <div className="staff-info">
-            <h4>{staff.name}</h4>
-            <p className="role">{staff.role || 'Booking Manager'}</p>
+              <div className="staff-info">
+                <h4>{staff.name}</h4>
+                <p className="role">{staff.role || 'Booking Manager'}</p>
+              </div>
+            </div>
+
+            <div className="trend">
+              <span className={`direction ${staff.trend > 0 ? 'up' : staff.trend < 0 ? 'down' : 'flat'}`}>
+                {staff.trendDirection}
+              </span>
+              <span className="percent">{Math.abs(staff.trendPercent)}%</span>
+            </div>
           </div>
 
           <div className="stats-display">
@@ -44,14 +55,9 @@ const StaffLeaderboard = ({ stats = [], onSelectStaff }) => {
             </div>
           </div>
 
-          <div className="trend">
-            <span className={`direction ${staff.trend > 0 ? 'up' : staff.trend < 0 ? 'down' : 'flat'}`}>
-              {staff.trendDirection}
-            </span>
-            <span className="percent">{Math.abs(staff.trendPercent)}%</span>
+          <div className="text-right w-full pt-1">
+            <span className="view-btn">View Profile →</span>
           </div>
-
-          <span className="view-btn">View Details →</span>
         </div>
       ))}
     </div>
