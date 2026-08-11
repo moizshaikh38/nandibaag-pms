@@ -1,25 +1,26 @@
 /* Modern Responsive & Mobile-Optimized Manual Booking Form Styles */
 
 .manual-booking-container {
-  max-width: 800px;
+  max-width: 900px;
   margin: 16px auto;
-  padding: 16px;
+  padding: 20px;
   background: #ffffff;
-  border-radius: 20px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  border-radius: 24px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
 }
 
 /* Mobile: Full width, stack inputs and cards */
 @media (max-width: 768px) {
   .manual-booking-container {
     margin: 4px;
-    padding: 10px;
-    border-radius: 14px;
+    padding: 12px;
+    border-radius: 18px;
   }
 
   .form-section {
-    padding: 12px;
-    margin-bottom: 12px;
+    padding: 14px;
+    margin-bottom: 14px;
+    border-radius: 16px;
   }
 
   /* Form inputs - full width & touch friendly */
@@ -31,10 +32,10 @@
   select,
   textarea {
     width: 100% !important;
-    padding: 10px 12px;
+    padding: 12px 14px;
     font-size: 16px !important; /* Prevents auto-zoom on iOS */
-    border-radius: 8px;
-    min-height: 44px;
+    border-radius: 12px;
+    min-height: 48px;
   }
 
   /* Touch-friendly buttons */
@@ -42,21 +43,28 @@
   .submit-btn,
   .cancel-btn {
     width: 100%;
-    min-height: 46px;
-    font-size: 14px;
-    border-radius: 10px;
-    font-weight: 700;
+    min-height: 48px;
+    font-size: 15px;
+    border-radius: 14px;
+    font-weight: 800;
   }
 
   .guest-composition {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
   }
 
   .rooms-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
     gap: 8px;
+  }
+}
+
+/* Small mobile devices <= 380px */
+@media (max-width: 380px) {
+  .rooms-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -74,7 +82,7 @@
   }
 }
 
-/* Smooth Scrolling for Modal Containers */
+/* Smooth Scrolling for Containers */
 .overflow-y-auto {
   -webkit-overflow-scrolling: touch;
 }

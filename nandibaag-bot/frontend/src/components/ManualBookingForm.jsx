@@ -343,87 +343,87 @@ const ManualBookingForm = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-lg border border-slate-200/90 overflow-hidden animate-fade-in text-slate-800">
+    <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-xl border border-slate-200/90 overflow-hidden animate-fade-in text-slate-800 mb-16 lg:mb-4">
       
       {/* Top Banner Header */}
-      <div className="bg-gradient-to-r from-emerald-900 via-emerald-800 to-teal-900 px-3.5 py-2.5 sm:px-5 sm:py-3 text-white flex items-center justify-between gap-2 border-b border-emerald-700/50">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-white/15 backdrop-blur-md flex items-center justify-center border border-white/20">
-            <FileEdit size={16} className="text-emerald-200" />
+      <div className="bg-gradient-to-r from-emerald-950 via-emerald-900 to-teal-900 px-3.5 py-3 sm:px-6 sm:py-4 text-white flex items-center justify-between gap-2 border-b border-emerald-800">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-sm shrink-0">
+            <FileEdit size={18} className="text-emerald-300" />
           </div>
           <div>
-            <h2 className="text-sm sm:text-base font-display font-extrabold leading-none tracking-tight">
+            <h2 className="text-base sm:text-lg font-display font-extrabold leading-none tracking-tight">
               Add Manual Reservation
             </h2>
-            <p className="text-[10px] text-emerald-200/90 font-medium mt-0.5">
-              Front Desk Entry • Single Page PMS Direct Sync
+            <p className="text-[11px] text-emerald-200/90 font-medium mt-1">
+              Front Desk Entry • Instant Availability & PMS Sync
             </p>
           </div>
         </div>
         
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-100 text-[10px] font-bold border border-emerald-400/30">
-          <Sparkles size={10} className="text-emerald-300" /> Live Sync
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-100 text-xs font-bold border border-emerald-400/30 shrink-0">
+          <Sparkles size={12} className="text-emerald-300 animate-pulse" /> Live Sync
         </span>
       </div>
 
       {message && (
-        <div className="mx-3 mt-2 p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold text-xs flex items-center gap-2">
-          <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+        <div className="mx-3.5 mt-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 font-bold text-xs flex items-center gap-2 shadow-2xs">
+          <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
           <span>{message}</span>
         </div>
       )}
 
       {/* SINGLE-PAGE COMPACT FORM GRID */}
-      <form onSubmit={handleSubmit} className="p-2.5 sm:p-4">
+      <form onSubmit={handleSubmit} className="p-3 sm:p-5">
         
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 sm:gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 sm:gap-4">
           
           {/* LEFT SECTION (Col 1-7): Guest Info, Package & Rooms */}
-          <div className="md:col-span-7 space-y-2.5">
+          <div className="md:col-span-7 space-y-3">
             
             {/* 1. DATES & GUEST CONTACT */}
-            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/90 space-y-2">
-              <h3 className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1">
-                <Calendar size={13} /> Dates & Guest Contact
+            <div className="p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200 space-y-3 shadow-2xs">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                <Calendar size={14} className="text-emerald-600" /> Stay Dates & Guest Info
               </h3>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">Check-in *</label>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Check-in Date *</label>
                   <input
                     type="date"
                     name="checkInDate"
                     value={formData.checkInDate}
                     onChange={(e) => handleDateChange('checkInDate', e.target.value)}
                     required
-                    className="w-full px-2 py-1 text-xs font-semibold border border-slate-300 rounded-lg bg-white focus:ring-1 focus:ring-emerald-500"
+                    className="w-full px-3 py-2 text-sm font-semibold border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-emerald-500 shadow-2xs"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">Check-out *</label>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Check-out Date *</label>
                   <input
                     type="date"
                     name="checkOutDate"
                     value={formData.checkOutDate}
                     onChange={(e) => handleDateChange('checkOutDate', e.target.value)}
                     required
-                    className="w-full px-2 py-1 text-xs font-semibold border border-slate-300 rounded-lg bg-white focus:ring-1 focus:ring-emerald-500"
+                    className="w-full px-3 py-2 text-sm font-semibold border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-emerald-500 shadow-2xs"
                   />
                 </div>
               </div>
 
               {formData.checkInDate && formData.checkOutDate && (
-                <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-200/80 text-[11px] font-bold text-emerald-900 flex flex-wrap items-center justify-between gap-1 shadow-2xs">
-                  <span>📅 Check In: <strong>{formatDateDDMMYYYY(formData.checkInDate)}</strong> ({getDayName(formData.checkInDate)})</span>
-                  <span>📅 Check Out: <strong>{formatDateDDMMYYYY(formData.checkOutDate)}</strong> ({getDayName(formData.checkOutDate)})</span>
+                <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-950 flex flex-wrap items-center justify-between gap-1.5 shadow-2xs">
+                  <span>In: <strong>{formatDateDDMMYYYY(formData.checkInDate)}</strong> ({getDayName(formData.checkInDate)})</span>
+                  <span>Out: <strong>{formatDateDDMMYYYY(formData.checkOutDate)}</strong> ({getDayName(formData.checkOutDate)})</span>
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">Guest Name *</label>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Guest Full Name *</label>
                   <div className="relative">
-                    <User size={12} className="absolute left-2 top-2 text-slate-400" />
+                    <User size={14} className="absolute left-3 top-3 text-slate-400" />
                     <input
                       type="text"
                       name="customerName"
@@ -431,14 +431,14 @@ const ManualBookingForm = () => {
                       value={formData.customerName}
                       onChange={handleInputChange}
                       required
-                      className="w-full pl-7 pr-2 py-1 text-xs font-semibold border border-slate-300 rounded-lg bg-white focus:ring-1 focus:ring-emerald-500"
+                      className="w-full pl-9 pr-3 py-2 text-sm font-semibold border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-emerald-500 shadow-2xs"
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">Guest Phone *</label>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">WhatsApp Phone Number *</label>
                   <div className="relative">
-                    <Phone size={12} className="absolute left-2 top-2 text-slate-400" />
+                    <Phone size={14} className="absolute left-3 top-3 text-slate-400" />
                     <input
                       type="text"
                       name="customerPhone"
@@ -446,7 +446,7 @@ const ManualBookingForm = () => {
                       value={formData.customerPhone}
                       onChange={handleInputChange}
                       required
-                      className="w-full pl-7 pr-2 py-1 text-xs font-semibold border border-slate-300 rounded-lg bg-white focus:ring-1 focus:ring-emerald-500"
+                      className="w-full pl-9 pr-3 py-2 text-sm font-semibold border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-emerald-500 shadow-2xs font-mono"
                     />
                   </div>
                 </div>
@@ -454,12 +454,12 @@ const ManualBookingForm = () => {
             </div>
 
             {/* 2. PACKAGE TYPE & GUEST COUNT */}
-            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/90 space-y-2">
-              <h3 className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1">
-                <Package size={13} /> Package Type & Guest Count
+            <div className="p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200 space-y-3 shadow-2xs">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                <Package size={14} className="text-emerald-600" /> Package Type & Guest Count
               </h3>
 
-              <div className="grid grid-cols-3 gap-1.5">
+              <div className="grid grid-cols-3 gap-2">
                 {[
                   { id: 'couple', label: 'Couple Stay', sub: '2 Adults' },
                   { id: 'group', label: 'Group Stay', sub: 'Family/Group' },
@@ -469,17 +469,17 @@ const ManualBookingForm = () => {
                     type="button"
                     key={pkg.id}
                     onClick={() => setFormData(prev => ({ ...prev, packageType: pkg.id }))}
-                    className={`p-1.5 text-left rounded-lg border transition-all ${
+                    className={`p-2.5 text-left rounded-xl border transition-all select-none ${
                       formData.packageType === pkg.id
-                        ? 'border-emerald-600 bg-emerald-600 text-white font-bold shadow-2xs'
+                        ? 'border-emerald-600 bg-emerald-600 text-white font-bold shadow-md scale-[1.02]'
                         : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] leading-none font-bold">{pkg.label}</span>
-                      {formData.packageType === pkg.id && <Check size={10} />}
+                      <span className="text-xs font-extrabold">{pkg.label}</span>
+                      {formData.packageType === pkg.id && <Check size={12} />}
                     </div>
-                    <span className={`text-[9px] block mt-0.5 ${formData.packageType === pkg.id ? 'text-emerald-100' : 'text-slate-400'}`}>
+                    <span className={`text-[10px] block mt-0.5 ${formData.packageType === pkg.id ? 'text-emerald-100' : 'text-slate-400'}`}>
                       {pkg.sub}
                     </span>
                   </button>
@@ -488,21 +488,21 @@ const ManualBookingForm = () => {
 
               {/* Meal Options for One Day Picnic */}
               {formData.packageType === 'oneDay' && (
-                <div className="p-2 rounded-lg bg-sky-50 border border-sky-200 space-y-1">
-                  <label className="block text-[10px] font-bold text-sky-900">
-                    Meal Option:
+                <div className="p-3 rounded-xl bg-sky-50 border border-sky-200 space-y-2">
+                  <label className="block text-xs font-extrabold text-sky-950">
+                    Meal Option Timing:
                   </label>
-                  <div className="grid grid-cols-2 gap-1.5">
+                  <div className="grid grid-cols-2 gap-2">
                     {[
-                      { value: 'B->D', label: 'B → D', time: '9am - 9:30pm' },
-                      { value: 'B->T', label: 'B → Tea', time: '9am - 6:30pm' }
+                      { value: 'B->D', label: 'B → D (Breakfast to Dinner)', time: '9:00 am - 9:30 pm' },
+                      { value: 'B->T', label: 'B → Tea (Breakfast to Hi-Tea)', time: '9:00 am - 6:30 pm' }
                     ].map(opt => (
                       <label
                         key={opt.value}
-                        className={`p-1.5 rounded-md border text-center cursor-pointer transition-all ${
+                        className={`p-2 rounded-xl border text-center cursor-pointer transition-all ${
                           formData.mealOption === opt.value
-                            ? 'bg-sky-600 text-white border-sky-600 font-bold shadow-2xs'
-                            : 'bg-white text-slate-700 border-slate-200'
+                            ? 'bg-sky-600 text-white border-sky-600 font-bold shadow-xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-sky-50'
                         }`}
                       >
                         <input
@@ -513,8 +513,8 @@ const ManualBookingForm = () => {
                           onChange={(e) => setFormData(prev => ({ ...prev, mealOption: e.target.value }))}
                           className="sr-only"
                         />
-                        <span className="text-[10px] font-bold block">{opt.label}</span>
-                        <span className={`text-[8px] block ${formData.mealOption === opt.value ? 'text-sky-100' : 'text-slate-400'}`}>
+                        <span className="text-xs font-extrabold block">{opt.label}</span>
+                        <span className={`text-[10px] block mt-0.5 ${formData.mealOption === opt.value ? 'text-sky-100' : 'text-slate-500'}`}>
                           {opt.time}
                         </span>
                       </label>
@@ -524,40 +524,40 @@ const ManualBookingForm = () => {
               )}
 
               {/* Guest Counts */}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">Adults (12+ Yrs)</label>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Adults (12+ Yrs)</label>
                   <input
                     type="number"
                     min="1"
                     name="guestComposition.adults"
                     value={formData.guestComposition.adults}
                     onChange={handleInputChange}
-                    className="w-full px-2 py-1 text-xs font-bold border border-slate-300 rounded-lg bg-white text-center"
+                    className="w-full px-3 py-2 text-sm font-bold border border-slate-300 rounded-xl bg-white text-center shadow-2xs"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">Children (&lt;12 Yrs)</label>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Children (&lt;12 Yrs)</label>
                   <input
                     type="number"
                     min="0"
                     name="guestComposition.children"
                     value={formData.guestComposition.children}
                     onChange={handleInputChange}
-                    className="w-full px-2 py-1 text-xs font-bold border border-slate-300 rounded-lg bg-white text-center"
+                    className="w-full px-3 py-2 text-sm font-bold border border-slate-300 rounded-xl bg-white text-center shadow-2xs"
                   />
                 </div>
               </div>
             </div>
 
             {/* 3. MULTI-ROOM SELECTION GRID */}
-            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/90 space-y-1.5">
+            <div className="p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200 space-y-2 shadow-2xs">
               <div className="flex items-center justify-between">
-                <h3 className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1">
-                  <Building size={13} /> Select Cottage Rooms
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                  <Building size={14} className="text-emerald-600" /> Select Cottage Rooms
                 </h3>
                 {selectedRooms.length > 0 && (
-                  <span className="text-[9px] text-emerald-800 bg-emerald-100 px-2 py-0.2 rounded-full font-bold border border-emerald-300">
+                  <span className="text-xs text-emerald-900 bg-emerald-100 px-2.5 py-0.5 rounded-full font-bold border border-emerald-300 shadow-2xs">
                     Cap: {totalCapacity} ({selectedRooms.length} {selectedRooms.length === 1 ? 'room' : 'rooms'})
                   </span>
                 )}
@@ -565,10 +565,10 @@ const ManualBookingForm = () => {
 
               {/* Overall Availability Message Banner */}
               {availabilityMessage && (
-                <div className={`p-2 rounded-lg text-[11px] font-bold border flex items-center justify-between shadow-2xs ${
+                <div className={`p-2.5 rounded-xl text-xs font-bold border flex items-center justify-between shadow-2xs ${
                   availabilityMessage.includes('✅')
-                    ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
-                    : 'bg-amber-50 text-amber-900 border-amber-300'
+                    ? 'bg-emerald-50 text-emerald-950 border-emerald-200'
+                    : 'bg-amber-50 text-amber-950 border-amber-300'
                 }`}>
                   <span>{availabilityMessage}</span>
                 </div>
@@ -576,26 +576,26 @@ const ManualBookingForm = () => {
 
               {/* 15-Minute Reservation Lock Banner */}
               {reservationExpiry && (
-                <div className="p-1.5 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 text-[10px] flex items-center justify-between font-medium">
-                  <span className="flex items-center gap-1">
-                    <Clock size={12} className="text-amber-600 animate-pulse" />
-                    Selection reserved for 15 mins
+                <div className="p-2 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 text-xs flex items-center justify-between font-semibold shadow-2xs">
+                  <span className="flex items-center gap-1.5">
+                    <Clock size={14} className="text-amber-600 animate-pulse" />
+                    Rooms locked for 15 mins
                   </span>
-                  <span className="font-bold text-amber-800">
-                    Expires at: {reservationExpiry.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  <span className="font-extrabold text-amber-900">
+                    Expires at {reservationExpiry.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
               )}
 
               {roomsList.length > 0 ? (
-                <div className="max-h-48 overflow-y-auto space-y-2 p-1.5 bg-white border border-slate-200 rounded-lg">
+                <div className="max-h-56 overflow-y-auto space-y-2.5 p-2 bg-white border border-slate-200 rounded-xl no-scrollbar">
                   {Object.entries(roomsBySeries).map(([seriesName, rooms]) => (
-                    <div key={seriesName} className="space-y-1">
-                      <div className="text-[10px] font-extrabold text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/80 flex items-center justify-between">
-                        <span>🏷️ {seriesName}</span>
-                        <span className="text-[9px] text-emerald-700 font-bold">{rooms.filter(r => r.status === 'available' || r.status === 'reserved_by_you').length} available</span>
+                    <div key={seriesName} className="space-y-1.5">
+                      <div className="text-xs font-extrabold text-emerald-950 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center justify-between">
+                        <span>🏡 {seriesName}</span>
+                        <span className="text-[10px] text-emerald-700 font-bold">{rooms.filter(r => r.status === 'available' || r.status === 'reserved_by_you').length} available</span>
                       </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {rooms.map((room) => {
                           const num = String(room.number || room.roomNumber || room._id);
                           const cap = room.capacity || 4;
@@ -610,11 +610,11 @@ const ManualBookingForm = () => {
 
                           let cardStyle = 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 cursor-pointer';
                           if (isChecked || isReservedByYou) {
-                            cardStyle = 'bg-emerald-700 text-white border-emerald-700 font-bold shadow-2xs cursor-pointer';
+                            cardStyle = 'bg-emerald-700 text-white border-emerald-700 font-bold shadow-xs cursor-pointer';
                           } else if (isMaintenance) {
-                            cardStyle = 'bg-amber-100 text-amber-900 border-amber-300 font-semibold opacity-85 cursor-not-allowed';
+                            cardStyle = 'bg-amber-100 text-amber-950 border-amber-300 font-semibold opacity-90 cursor-not-allowed';
                           } else if (isReservedByOther) {
-                            cardStyle = 'bg-rose-50 text-rose-800 border-rose-300 opacity-60 cursor-not-allowed';
+                            cardStyle = 'bg-rose-50 text-rose-900 border-rose-300 opacity-60 cursor-not-allowed';
                           } else if (isBooked) {
                             cardStyle = 'bg-slate-100 text-slate-400 border-slate-200 opacity-50 cursor-not-allowed';
                           }
@@ -623,23 +623,23 @@ const ManualBookingForm = () => {
                             <label
                               key={num}
                               onClick={() => !isDisabled && handleRoomToggle(room)}
-                              className={`p-1.5 rounded-lg border text-left transition-all flex flex-col justify-between select-none ${cardStyle}`}
+                              className={`p-2 rounded-xl border text-left transition-all flex flex-col justify-between select-none active:scale-95 ${cardStyle}`}
                             >
                               <div className="flex items-center justify-between">
-                                <span className="text-[11px] font-bold">Room {num}</span>
+                                <span className="text-xs font-extrabold">Room {num}</span>
                                 <input
                                   type="checkbox"
                                   checked={isChecked || isReservedByYou}
                                   disabled={isDisabled}
                                   onChange={() => {}}
-                                  className="w-3.5 h-3.5 accent-emerald-600 rounded"
+                                  className="w-4 h-4 accent-emerald-600 rounded"
                                 />
                               </div>
-                              <div className="flex items-center justify-between text-[9px] mt-1 opacity-90">
+                              <div className="flex items-center justify-between text-[10px] mt-1.5 opacity-90">
                                 <span>Cap: {cap}</span>
-                                <span className="font-bold uppercase">
+                                <span className="font-extrabold uppercase">
                                   {isMaintenance
-                                    ? `🔧 ${room.maintenanceType || 'LOCK'}`
+                                    ? `🔧 LOCK`
                                     : isBooked
                                     ? 'Booked'
                                     : isReservedByOther
@@ -657,16 +657,16 @@ const ManualBookingForm = () => {
                   ))}
                 </div>
               ) : (
-                <p className="text-[10px] text-slate-500 bg-slate-100 p-1.5 rounded-lg border border-slate-200">
+                <p className="text-xs text-slate-500 bg-slate-100 p-3 rounded-xl border border-slate-200 text-center font-medium">
                   No available rooms for selected dates.
                 </p>
               )}
 
               {selectedRooms.length > 0 && (
-                <div className="p-1.5 rounded-lg bg-sky-50 border border-sky-200 text-sky-900 text-[10px] flex items-center justify-between">
-                  <span>Selected: <strong>{selectedRooms.join(', ')}</strong></span>
+                <div className="p-2.5 rounded-xl bg-sky-50 border border-sky-200 text-sky-950 text-xs flex items-center justify-between font-semibold shadow-2xs">
+                  <span>Selected Rooms: <strong>{selectedRooms.join(', ')}</strong></span>
                   {formData.guestComposition.adults + formData.guestComposition.children > totalCapacity && (
-                    <span className="text-rose-700 font-bold">⚠️ Exceeds capacity!</span>
+                    <span className="text-rose-700 font-extrabold">⚠️ Exceeds capacity!</span>
                   )}
                 </div>
               )}
@@ -675,22 +675,22 @@ const ManualBookingForm = () => {
           </div>
 
           {/* RIGHT SECTION (Col 8-12): Staff Handover, ID Proof & Payment */}
-          <div className="md:col-span-5 space-y-2.5">
+          <div className="md:col-span-5 space-y-3">
             
             {/* 4. STAFF HANDOVER */}
-            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/90 space-y-2">
-              <h3 className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1">
-                <Users size={13} /> Staff Handover
+            <div className="p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200 space-y-2.5 shadow-2xs">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                <Users size={14} className="text-emerald-600" /> Staff Member (Booked By)
               </h3>
 
               <div>
-                <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">Booked By (Staff) *</label>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">Select Staff Member *</label>
                 <select
                   name="bookedByName"
                   value={formData.bookedBy.name}
                   onChange={handleInputChange}
                   required
-                  className="w-full px-2 py-1 text-xs font-semibold border border-slate-300 rounded-lg bg-white focus:ring-1 focus:ring-emerald-500"
+                  className="w-full px-3 py-2 text-sm font-semibold border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-emerald-500 shadow-2xs"
                 >
                   <option value="">-- Select Staff Member --</option>
                   {formData.staffNames.map(staff => (
@@ -702,123 +702,144 @@ const ManualBookingForm = () => {
               </div>
 
               {/* Roster Badges */}
-              <div className="flex flex-wrap items-center gap-1">
-                <span className="text-[9px] font-bold text-slate-400">Roster:</span>
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                <span className="text-[10px] font-extrabold text-slate-400 uppercase">Roster:</span>
                 {formData.staffNames.map(staff => (
                   <span
                     key={staff.id}
-                    className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-semibold ${
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold ${
                       formData.bookedBy.name === staff.name
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-white text-slate-600 border border-slate-200'
+                        ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                        : 'bg-white text-slate-700 border border-slate-200'
                     }`}
                   >
                     {staff.name}
-                    <button type="button" onClick={() => handleDeleteStaff(staff.id)} className="hover:text-rose-300">×</button>
+                    <button type="button" onClick={() => handleDeleteStaff(staff.id)} className="hover:text-rose-300 ml-0.5 font-bold">×</button>
                   </span>
                 ))}
                 {!showAddStaff ? (
                   <button
                     type="button"
                     onClick={() => setShowAddStaff(true)}
-                    className="text-[9px] font-bold text-emerald-700 px-1 py-0.2 rounded bg-emerald-50 border border-emerald-200"
+                    className="text-xs font-extrabold text-emerald-700 px-2 py-0.5 rounded-lg bg-emerald-50 border border-emerald-200 hover:bg-emerald-100"
                   >
-                    + Add
+                    + Add Staff
                   </button>
                 ) : (
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1.5">
                     <input
                       type="text"
                       placeholder="Name..."
                       value={newStaffName}
                       onChange={(e) => setNewStaffName(e.target.value)}
-                      className="px-1 py-0.2 text-[9px] border border-slate-300 rounded bg-white w-16"
+                      className="px-2 py-1 text-xs border border-slate-300 rounded-lg bg-white w-24 font-semibold"
                     />
-                    <button type="button" onClick={handleAddStaff} className="px-1 py-0.2 bg-emerald-600 text-white text-[9px] font-bold rounded">Save</button>
-                    <button type="button" onClick={() => setShowAddStaff(false)} className="px-1 py-0.2 bg-slate-200 text-slate-700 text-[9px] font-bold rounded">✕</button>
+                    <button type="button" onClick={handleAddStaff} className="px-2 py-1 bg-emerald-600 text-white text-xs font-bold rounded-lg shadow-xs">Save</button>
+                    <button type="button" onClick={() => setShowAddStaff(false)} className="px-2 py-1 bg-slate-200 text-slate-700 text-xs font-bold rounded-lg">✕</button>
                   </div>
                 )}
               </div>
             </div>
 
             {/* 5. ID PROOF & NOTES */}
-            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/90 space-y-2">
-              <div className="grid grid-cols-2 gap-2">
+            <div className="p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200 space-y-2.5 shadow-2xs">
+              <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">ID Type</label>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">ID Proof Type</label>
                   <select
                     name="guestIdProofType"
                     value={formData.guestIdProofType}
                     onChange={handleInputChange}
-                    className="w-full px-2 py-1 text-xs font-semibold border border-slate-300 rounded-lg bg-white"
+                    className="w-full px-3 py-2 text-xs font-semibold border border-slate-300 rounded-xl bg-white shadow-2xs"
                   >
                     <option value="aadhaar">Aadhaar Card</option>
                     <option value="pan">PAN Card</option>
-                    <option value="license">License</option>
+                    <option value="license">Driver License</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">Upload ID</label>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Upload ID Photo</label>
                   <input
                     type="file"
                     accept="image/*"
                     onChange={handleFileUpload}
-                    className="w-full text-[9px] text-slate-500 file:mr-1 file:py-0.5 file:px-1 file:rounded file:border-0 file:text-[9px] file:font-semibold file:bg-emerald-100 file:text-emerald-800 cursor-pointer"
+                    className="w-full text-xs text-slate-500 file:mr-1 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-emerald-100 file:text-emerald-900 cursor-pointer"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-[10px] font-semibold text-slate-700 mb-0.5">Notes / Special Requests (Optional)</label>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">Notes / Special Requests (Optional)</label>
                 <textarea
                   name="notes"
-                  placeholder="Extra mattress, Jain meal..."
+                  placeholder="Extra mattress, Jain meal preference..."
                   value={formData.notes}
                   onChange={handleInputChange}
                   rows={2}
                   maxLength={500}
-                  className="w-full p-1.5 text-xs font-medium border border-slate-300 rounded-lg bg-white resize-none"
+                  className="w-full p-2.5 text-xs font-medium border border-slate-300 rounded-xl bg-white resize-none focus:ring-2 focus:ring-emerald-500 shadow-2xs"
                 />
               </div>
             </div>
 
             {/* 6. PAYMENT SUMMARY & SUBMIT BUTTON */}
-            <div className="p-3 rounded-xl bg-slate-900 text-white space-y-2.5 shadow-md">
-              <h3 className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1">
-                <CreditCard size={13} /> Payment Breakdown
-              </h3>
+            <div className="p-4 rounded-2xl bg-slate-950 text-white space-y-3 shadow-xl border border-slate-800">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                  <CreditCard size={14} /> Payment Breakdown
+                </h3>
 
-              <div className="grid grid-cols-3 gap-1.5">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.isFullPaid}
+                    onChange={(e) => {
+                      const isChecked = e.target.checked;
+                      const total = parseFloat(formData.totalAmount) || 0;
+                      setFormData(prev => ({
+                        ...prev,
+                        isFullPaid: isChecked,
+                        advancePayment: isChecked ? total : 0,
+                        remainingPayment: isChecked ? 0 : total
+                      }));
+                    }}
+                    className="w-4 h-4 text-emerald-500 rounded accent-emerald-500 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-emerald-300">✓ Mark Full Paid</span>
+                </label>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="block text-[9px] font-bold text-slate-300 mb-0.5">Total (₹) *</label>
+                  <label className="block text-[10px] font-extrabold text-slate-300 mb-1">Total (₹) *</label>
                   <input
                     type="number"
                     name="totalAmount"
                     value={formData.totalAmount}
                     onChange={handleInputChange}
                     required
-                    className="w-full px-2 py-1 text-xs font-bold border border-slate-700 rounded-lg bg-slate-800 text-white text-center"
+                    className="w-full px-2.5 py-2 text-sm font-extrabold border border-slate-700 rounded-xl bg-slate-900 text-white text-center shadow-inner"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[9px] font-bold text-emerald-300 mb-0.5">Advance (₹)</label>
+                  <label className="block text-[10px] font-extrabold text-emerald-400 mb-1">Advance (₹)</label>
                   <input
                     type="number"
                     name="advancePayment"
                     value={formData.advancePayment}
                     onChange={handleInputChange}
-                    className="w-full px-2 py-1 text-xs font-bold border border-emerald-700/60 rounded-lg bg-emerald-950/80 text-emerald-300 text-center"
+                    className="w-full px-2.5 py-2 text-sm font-extrabold border border-emerald-800 rounded-xl bg-emerald-950 text-emerald-300 text-center shadow-inner"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[9px] font-bold text-amber-300 mb-0.5">Balance (₹)</label>
+                  <label className="block text-[10px] font-extrabold text-amber-400 mb-1">Balance (₹)</label>
                   <input
                     type="number"
                     readOnly
                     value={formData.remainingPayment}
-                    className="w-full px-2 py-1 text-xs font-bold border border-amber-500/50 bg-amber-950/80 text-amber-300 rounded-lg text-center"
+                    className="w-full px-2.5 py-2 text-sm font-extrabold border border-amber-800 bg-amber-950 text-amber-300 rounded-xl text-center shadow-inner"
                   />
                 </div>
               </div>
@@ -826,7 +847,7 @@ const ManualBookingForm = () => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-[0.99] text-white font-display font-extrabold text-xs sm:text-sm shadow-md transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-[0.99] text-white font-display font-extrabold text-xs sm:text-sm shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {loading ? 'Creating Reservation...' : '✓ Create & Confirm Reservation'}
               </button>
