@@ -199,15 +199,17 @@ export default function LoginPage() {
                 <label className="block text-xs font-semibold text-slate-300">
                   Email Address
                 </label>
-                <div className="relative">
-                  <Mail size={16} className="absolute left-3.5 top-3 text-slate-500" />
+                <div className="relative flex items-center">
+                  <Mail size={18} className="absolute left-3.5 text-slate-500 pointer-events-none z-10" />
                   <input
                     type="email"
+                    name="email"
+                    autoComplete="username"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="admin@nandibaag.com"
                     disabled={isLoading}
-                    className={`w-full pl-10 pr-4 py-2.5 text-xs bg-slate-950/80 border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white placeholder-slate-500 transition-all ${
+                    className={`w-full pl-10 pr-4 py-3 text-base sm:text-xs font-medium bg-slate-950/90 border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white placeholder-slate-500 transition-all ${
                       errors.email ? 'border-rose-500' : 'border-slate-800'
                     }`}
                   />
@@ -222,24 +224,27 @@ export default function LoginPage() {
                 <label className="block text-xs font-semibold text-slate-300">
                   Password
                 </label>
-                <div className="relative">
-                  <Lock size={16} className="absolute left-3.5 top-3 text-slate-500" />
+                <div className="relative flex items-center">
+                  <Lock size={18} className="absolute left-3.5 text-slate-500 pointer-events-none z-10" />
                   <input
                     type={showPassword ? 'text' : 'password'}
+                    name="password"
+                    autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     disabled={isLoading}
-                    className={`w-full pl-10 pr-10 py-2.5 text-xs bg-slate-950/80 border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white placeholder-slate-500 transition-all ${
+                    className={`w-full pl-10 pr-12 py-3 text-base sm:text-xs font-medium bg-slate-950/90 border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white placeholder-slate-500 transition-all ${
                       errors.password ? 'border-rose-500' : 'border-slate-800'
                     }`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-3 text-slate-500 hover:text-slate-300"
+                    className="absolute right-2.5 p-1.5 text-slate-400 hover:text-white active:scale-95 transition-all z-10 touch-manipulation flex items-center justify-center rounded-lg"
+                    title={showPassword ? 'Hide password' : 'Show password'}
                   >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
                 {errors.password && (
