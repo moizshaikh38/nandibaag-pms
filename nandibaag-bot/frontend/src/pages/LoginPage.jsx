@@ -180,20 +180,23 @@ export default function LoginPage() {
               
               {/* Email Input */}
               <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-300">
+                <label htmlFor="email" className="block text-xs font-semibold text-slate-300">
                   Email Address
                 </label>
-                <div className="relative flex items-center">
+                <div className="relative flex items-center w-full">
                   <Mail size={18} className="absolute left-3.5 text-slate-500 pointer-events-none z-10" />
                   <input
+                    id="email"
                     type="email"
                     name="email"
-                    autoComplete="username"
+                    autoComplete="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    onFocus={(e) => e.currentTarget.focus()}
                     placeholder="name@nandibaag.com"
+                    required
                     disabled={isLoading}
-                    className={`w-full pl-10 pr-4 py-3 text-base sm:text-xs font-medium bg-slate-950/90 border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white placeholder-slate-500 transition-all ${
+                    className={`w-full pl-10 pr-4 py-3 min-h-[44px] text-base sm:text-xs font-medium bg-slate-950/90 border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white placeholder-slate-500 transition-all pointer-events-auto select-text appearance-none ${
                       errors.email ? 'border-rose-500' : 'border-slate-800'
                     }`}
                   />
@@ -205,27 +208,39 @@ export default function LoginPage() {
 
               {/* Password Input */}
               <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-300">
+                <label htmlFor="password" className="block text-xs font-semibold text-slate-300">
                   Password
                 </label>
-                <div className="relative flex items-center">
+                <div className="relative flex items-center w-full">
                   <Lock size={18} className="absolute left-3.5 text-slate-500 pointer-events-none z-10" />
                   <input
+                    id="password"
                     type={showPassword ? 'text' : 'password'}
                     name="password"
                     autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    onFocus={(e) => e.currentTarget.focus()}
                     placeholder="Enter your password"
+                    required
                     disabled={isLoading}
-                    className={`w-full pl-10 pr-12 py-3 text-base sm:text-xs font-medium bg-slate-950/90 border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white placeholder-slate-500 transition-all ${
+                    aria-label="Password"
+                    className={`w-full pl-10 pr-12 py-3 min-h-[44px] text-base sm:text-xs font-medium bg-slate-950/90 border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white placeholder-slate-500 transition-all pointer-events-auto select-text appearance-none ${
                       errors.password ? 'border-rose-500' : 'border-slate-800'
                     }`}
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-2.5 p-1.5 text-slate-400 hover:text-white active:scale-95 transition-all z-10 touch-manipulation flex items-center justify-center rounded-lg"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setShowPassword(!showPassword);
+                    }}
+                    onTouchStart={(e) => {
+                      e.preventDefault();
+                    }}
+                    className="absolute right-1 p-2 min-w-[44px] min-h-[44px] text-slate-400 hover:text-white active:scale-95 transition-all z-20 touch-manipulation flex items-center justify-center rounded-lg cursor-pointer select-none pointer-events-auto"
+                    aria-label="Toggle password visibility"
                     title={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
