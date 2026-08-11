@@ -19,8 +19,8 @@ import {
 } from 'lucide-react';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('admin@nandibaag.com');
-  const [password, setPassword] = useState('admin12345');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -75,12 +75,6 @@ export default function LoginPage() {
         toast.error(result.message || 'Login failed');
       }
     }
-  };
-
-  const handleQuickDemoFill = () => {
-    setEmail('admin@nandibaag.com');
-    setPassword('admin12345');
-    toast.success('Demo admin credentials filled!');
   };
 
   return (
@@ -169,7 +163,7 @@ export default function LoginPage() {
                 Staff Portal Sign In
               </h3>
               <p className="text-xs text-slate-400">
-                Enter your administrative credentials to access the resort dashboard.
+                Enter your staff credentials to access the resort dashboard.
               </p>
             </div>
 
@@ -180,16 +174,6 @@ export default function LoginPage() {
                 <span className="leading-snug">{sessionAlert}</span>
               </div>
             )}
-
-            {/* Quick Demo Fill Pill */}
-            <button
-              type="button"
-              onClick={handleQuickDemoFill}
-              className="w-full py-2 px-3 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 group"
-            >
-              <Sparkles size={14} className="text-emerald-400 group-hover:scale-110 transition-transform" />
-              <span>Click to Fill Quick Admin Credentials</span>
-            </button>
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -207,7 +191,7 @@ export default function LoginPage() {
                     autoComplete="username"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="admin@nandibaag.com"
+                    placeholder="name@nandibaag.com"
                     disabled={isLoading}
                     className={`w-full pl-10 pr-4 py-3 text-base sm:text-xs font-medium bg-slate-950/90 border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white placeholder-slate-500 transition-all ${
                       errors.email ? 'border-rose-500' : 'border-slate-800'
