@@ -78,7 +78,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-slate-950 flex font-sans text-slate-100 overflow-hidden relative selection:bg-emerald-500 selection:text-white">
+    <div className="min-h-screen w-full bg-slate-950 flex font-sans text-slate-100 relative selection:bg-emerald-500 selection:text-white">
       
       {/* Background Glow Accents */}
       <div className="absolute -top-40 -left-40 w-96 h-96 bg-emerald-600/20 rounded-full blur-3xl pointer-events-none" />

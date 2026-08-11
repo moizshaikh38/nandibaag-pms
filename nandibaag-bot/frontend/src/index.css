@@ -33,7 +33,6 @@ html, body {
   width: 100%;
   max-width: 100%;
   -webkit-tap-highlight-color: transparent;
-  -webkit-touch-callout: none;
   scroll-behavior: smooth;
 }
 
@@ -53,6 +52,22 @@ html, body {
 /* Touch Targets Optimization */
 button, input[type="button"], input[type="submit"], select, a {
   touch-action: manipulation;
+}
+
+/* Ensure mobile inputs always accept text and show keyboard */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="tel"],
+input[type="search"],
+textarea {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  pointer-events: auto !important;
+  -webkit-appearance: none;
+  appearance: none;
+  touch-action: auto;
 }
 
 /* Mobile Safe Bottom Spacing for Fixed Bottom Bar */
@@ -174,8 +189,8 @@ button, input[type="button"], input[type="submit"], select, a {
   animation: pulseGlow 2s infinite ease-in-out;
 }
 
-/* Global transitions */
-* {
+/* Global transitions — exclude form inputs to prevent mobile keyboard/focus lag */
+*:not(input):not(textarea):not(select) {
   transition-property: color, background-color, border-color, box-shadow, transform;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
