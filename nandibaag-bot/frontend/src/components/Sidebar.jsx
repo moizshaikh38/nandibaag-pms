@@ -128,11 +128,13 @@ export default function Sidebar() {
   return (
     <>
       {/* Mobile Top Header */}
-      <div className="lg:hidden sticky top-0 z-40 bg-slate-900 text-white px-4 py-3 flex items-center justify-between shadow-md">
+      <div className="lg:hidden sticky top-0 z-40 bg-slate-900 text-white px-4 py-3 flex items-center justify-between shadow-md border-b border-slate-800">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold">
-            <Building2 size={18} />
-          </div>
+          <img
+            src="https://res.cloudinary.com/dgfwwnn4x/image/upload/v1786444954/IMG_0303_cnuhws.jpg"
+            alt="Nandibaag Resort Logo"
+            className="w-8 h-8 rounded-lg object-cover border border-emerald-400/40 shadow-xs"
+          />
           <div>
             <span className="font-display font-bold text-sm tracking-tight block leading-tight">Nandibaag Resort</span>
             <span className="text-[10px] text-emerald-400 font-semibold block">Pure Veg & Jain • Karjat</span>
@@ -170,9 +172,11 @@ export default function Sidebar() {
         {/* Brand Header */}
         <div className="p-4 border-b border-slate-800 flex items-center justify-between">
           <NavLink to="/" className="flex items-center gap-3 overflow-hidden">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center font-bold shadow-md shadow-emerald-900/30 shrink-0">
-              <Building2 size={22} />
-            </div>
+            <img
+              src="https://res.cloudinary.com/dgfwwnn4x/image/upload/v1786444954/IMG_0303_cnuhws.jpg"
+              alt="Nandibaag Resort Logo"
+              className="w-10 h-10 rounded-xl object-cover border border-emerald-400/40 shadow-md shadow-emerald-950/40 shrink-0"
+            />
 
             {!isCollapsed && (
               <div className="flex flex-col min-w-0">

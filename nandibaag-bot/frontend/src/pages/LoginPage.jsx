@@ -97,9 +97,11 @@ export default function LoginPage() {
           
           {/* Top Brand Logo */}
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-slate-950 flex items-center justify-center font-bold shadow-xl shadow-emerald-500/20">
-              <Building2 size={26} />
-            </div>
+            <img
+              src="https://res.cloudinary.com/dgfwwnn4x/image/upload/v1786444954/IMG_0303_cnuhws.jpg"
+              alt="Nandibaag Resort Logo"
+              className="w-12 h-12 rounded-2xl object-cover border border-emerald-400/40 shadow-xl shadow-emerald-500/20 shrink-0"
+            />
             <div>
               <h1 className="text-2xl font-display font-extrabold text-white tracking-tight">NANDIBAAG RESORT</h1>
               <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-semibold tracking-wide">
@@ -157,9 +159,11 @@ export default function LoginPage() {
             
             {/* Header */}
             <div className="text-center space-y-2">
-              <div className="lg:hidden w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-slate-950 flex items-center justify-center font-bold shadow-lg shadow-emerald-500/20 mx-auto mb-3">
-                <Building2 size={24} />
-              </div>
+              <img
+                src="https://res.cloudinary.com/dgfwwnn4x/image/upload/v1786444954/IMG_0303_cnuhws.jpg"
+                alt="Nandibaag Resort Logo"
+                className="lg:hidden w-12 h-12 rounded-2xl object-cover border border-emerald-400/40 shadow-lg shadow-emerald-500/20 mx-auto mb-3"
+              />
 
               <h3 className="text-2xl font-display font-extrabold text-white tracking-tight">
                 Staff Portal Sign In
