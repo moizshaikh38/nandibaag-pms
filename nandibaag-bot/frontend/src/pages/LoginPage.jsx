@@ -19,8 +19,8 @@ import {
 } from 'lucide-react';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('admin@nandibaag.com');
+  const [password, setPassword] = useState('admin12345');
   const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -232,7 +232,7 @@ export default function LoginPage() {
                     autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
+                    placeholder="Enter your password"
                     disabled={isLoading}
                     className={`w-full pl-10 pr-12 py-3 text-base sm:text-xs font-medium bg-slate-950/90 border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-white placeholder-slate-500 transition-all ${
                       errors.password ? 'border-rose-500' : 'border-slate-800'
