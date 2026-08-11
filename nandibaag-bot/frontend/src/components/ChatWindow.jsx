@@ -30,7 +30,10 @@ import {
   DollarSign,
   ShieldAlert,
   Loader,
-  AlertCircle
+  AlertCircle,
+  CreditCard,
+  Building,
+  Package
 } from 'lucide-react';
 
 const QUICK_REPLIES = [
