@@ -58,8 +58,30 @@ button, input[type="button"], input[type="submit"], select, a {
 /* Mobile Safe Bottom Spacing for Fixed Bottom Bar */
 @media (max-width: 1024px) {
   main, .page-container {
-    padding-bottom: 80px !important;
+    padding-bottom: 84px !important;
   }
+}
+
+.safe-pb {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0.5rem));
+}
+
+/* Hide Scrollbar for Horizontal Touch Bars */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Dynamic Mobile Viewport Height Utilities */
+.h-dvh {
+  height: 100dvh;
+}
+
+.min-h-dvh {
+  min-height: 100dvh;
 }
 
 /* Typography Utility */
@@ -69,10 +91,10 @@ button, input[type="button"], input[type="submit"], select, a {
 
 /* Custom Glassmorphism Classes */
 .glass-card {
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.8);
   box-shadow: 0 4px 24px -2px rgba(0, 0, 0, 0.05);
 }
 

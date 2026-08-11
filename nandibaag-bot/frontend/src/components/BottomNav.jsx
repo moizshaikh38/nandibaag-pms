@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { LayoutDashboard, QrCode, MessageSquare, Settings, MoreVertical, Home, Clock, BookOpen, Mail, CalendarDays, Grid3x3, ShieldCheck, FileText } from 'lucide-react';
+import { LayoutDashboard, QrCode, MessageSquare, Settings, MoreVertical, Home, Clock, BookOpen, Mail, CalendarDays, Grid3x3, ShieldCheck, FileText, Wrench } from 'lucide-react';
 import api from '../utils/api';
 import { useSocket } from '../hooks/useSocket';
 import { useAuth } from '../context/AuthContext';
@@ -15,6 +15,7 @@ const navItems = [
 const baseMoreMenuItems = [
   { path: '/pms/manual-booking', label: 'Manual Booking', icon: FileText },
   { path: '/availability', label: 'Availability', icon: Grid3x3 },
+  { path: '/maintenance', label: 'Maintenance', icon: Wrench },
   { path: '/inventory', label: 'Inventory', icon: Home },
   { path: '/pms/pending', label: 'Pending Bookings', icon: Clock },
   { path: '/pms/bookings', label: 'Bookings', icon: BookOpen },
@@ -86,8 +87,8 @@ export default function BottomNav() {
   const isMoreActive = moreMenuItems.some((item) => location.pathname === item.path);
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-lg z-50 lg:hidden">
-      <div className="flex justify-around items-center h-16">
+    <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200/80 shadow-2xl z-50 lg:hidden safe-pb">
+      <div className="flex justify-around items-center h-16 px-1">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path;
@@ -98,69 +99,76 @@ export default function BottomNav() {
               key={item.path}
               to={item.path}
               className={({ isActive: linkIsActive }) =>
-                `flex flex-col items-center justify-center w-full h-full text-sm transition-colors ${
+                `flex flex-col items-center justify-center w-full h-full text-[11px] font-medium transition-all active:scale-95 ${
                   linkIsActive
-                    ? 'text-whatsapp font-semibold'
-                    : 'text-gray-600 hover:text-whatsapp'
+                    ? 'text-emerald-700 font-bold'
+                    : 'text-slate-500 hover:text-emerald-600'
                 }`
               }
             >
-              <div className="relative mb-1">
-                <Icon size={24} strokeWidth={isActive ? 2.5 : 2} />
+              <div className={`relative p-1 rounded-xl transition-all ${isActive ? 'bg-emerald-50 text-emerald-700' : ''}`}>
+                <Icon size={22} strokeWidth={isActive ? 2.5 : 2} />
                 {showBadge && (
-                  <span className="absolute -top-1 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
+                  <span className="absolute -top-1 -right-2 bg-gradient-to-r from-red-500 to-rose-600 text-white text-[10px] rounded-full h-4 min-w-[16px] px-1 flex items-center justify-center font-bold shadow-xs animate-pulse">
                     {hotLeadCount}
                   </span>
                 )}
               </div>
-              <span>{item.label}</span>
+              <span className="mt-0.5">{item.label}</span>
             </NavLink>
           );
         })}
 
         {/* More Menu */}
-        <div className="relative">
+        <div className="relative w-full h-full flex flex-col items-center justify-center">
           <button
             onClick={() => setShowMoreMenu(!showMoreMenu)}
-            className={`flex flex-col items-center justify-center w-full h-full text-sm transition-colors ${
+            className={`flex flex-col items-center justify-center w-full h-full text-[11px] font-medium transition-all active:scale-95 ${
               isMoreActive
-                ? 'text-whatsapp font-semibold'
-                : 'text-gray-600 hover:text-whatsapp'
+                ? 'text-emerald-700 font-bold'
+                : 'text-slate-500 hover:text-emerald-600'
             }`}
           >
-            <MoreVertical size={24} strokeWidth={isMoreActive ? 2.5 : 2} />
-            <span>More</span>
+            <div className={`p-1 rounded-xl transition-all ${isMoreActive ? 'bg-emerald-50 text-emerald-700' : ''}`}>
+              <MoreVertical size={22} strokeWidth={isMoreActive ? 2.5 : 2} />
+            </div>
+            <span className="mt-0.5">More</span>
           </button>
 
           {showMoreMenu && (
             <>
               <div
-                className="fixed inset-0 z-40"
+                className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs z-40 animate-fade-in"
                 onClick={() => setShowMoreMenu(false)}
               />
-              <div className="absolute bottom-full right-0 mb-2 bg-white rounded-lg shadow-xl border border-gray-200 py-2 z-50 min-w-[160px]">
-                {moreMenuItems.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = location.pathname === item.path;
-                  return (
-                    <NavLink
-                      key={item.path}
-                      to={item.path}
-                      onClick={() => setShowMoreMenu(false)}
-                      className={`flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors ${
-                        isActive ? 'text-whatsapp font-semibold' : 'text-gray-700'
-                      }`}
-                    >
-                      <Icon size={18} />
-                      <span className="flex-1">{item.label}</span>
-                      {item.path === '/pms/pending' && pendingHandoverCount > 0 && (
-                        <span className="bg-red-500 text-white text-xs rounded-full h-5 min-w-[20px] px-1 flex items-center justify-center font-medium">
-                          {pendingHandoverCount}
-                        </span>
-                      )}
-                    </NavLink>
-                  );
-                })}
+              <div className="absolute bottom-full right-2 mb-3 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-200/90 py-2.5 z-50 min-w-[210px] animate-fade-in divide-y divide-slate-100">
+                <div className="px-3 py-1.5 text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">
+                  Resort Management
+                </div>
+                <div className="py-1">
+                  {moreMenuItems.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = location.pathname === item.path;
+                    return (
+                      <NavLink
+                        key={item.path}
+                        to={item.path}
+                        onClick={() => setShowMoreMenu(false)}
+                        className={`flex items-center gap-3 px-4 py-2.5 hover:bg-emerald-50/80 active:bg-emerald-100 transition-colors text-xs font-medium ${
+                          isActive ? 'text-emerald-700 font-bold bg-emerald-50/60' : 'text-slate-700'
+                        }`}
+                      >
+                        <Icon size={17} className={isActive ? 'text-emerald-600' : 'text-slate-400'} />
+                        <span className="flex-1">{item.label}</span>
+                        {item.path === '/pms/pending' && pendingHandoverCount > 0 && (
+                          <span className="bg-rose-500 text-white text-[10px] rounded-full h-4 min-w-[18px] px-1 flex items-center justify-center font-bold shadow-xs">
+                            {pendingHandoverCount}
+                          </span>
+                        )}
+                      </NavLink>
+                    );
+                  })}
+                </div>
               </div>
             </>
           )}
