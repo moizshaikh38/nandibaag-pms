@@ -392,7 +392,7 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
   }, {});
 
   return (
-    <div className="h-full flex flex-col bg-slate-100 relative overflow-hidden">
+    <div className="h-full min-h-0 flex flex-col bg-slate-100 relative overflow-hidden">
       
       {/* Authentic WhatsApp Top Bar Header */}
       <div className="px-3 py-2.5 sm:px-4 sm:py-3 bg-[#075e54] text-white shadow-md flex items-center justify-between gap-2 z-10">
@@ -468,7 +468,7 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
       <div 
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2.5 whatsapp-bg chat-scrollbar relative"
+        className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 sm:p-4 space-y-2.5 whatsapp-bg chat-scrollbar relative whatsapp-messages-scroll"
       >
         {chat?.messages?.map((msg, index) => {
           const isCustomer = msg.sender === 'customer';
@@ -540,13 +540,13 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
       </div>
 
       {/* Quick Reply Template Chips Bar */}
-      <div className="p-2 bg-[#f0f2f5] border-t border-slate-200/90 overflow-x-auto flex items-center gap-2 no-scrollbar">
-        <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider pl-2 shrink-0">Templates:</span>
+      <div className="px-2 py-2 bg-[#f0f2f5] border-t border-slate-200/90 overflow-x-auto overscroll-x-contain flex items-center gap-2 no-scrollbar whatsapp-quick-replies">
+        <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider pl-1 sm:pl-2 shrink-0">Templates:</span>
         {QUICK_REPLIES.map((qr, idx) => (
           <button
             key={idx}
             onClick={() => handleSendMessage(qr.text)}
-            className="px-3 py-1.5 text-xs bg-white hover:bg-emerald-50 hover:text-emerald-900 border border-slate-200/90 rounded-xl text-slate-800 font-bold shrink-0 transition-all active:scale-95 shadow-2xs"
+            className="min-h-9 px-3 py-1.5 text-xs bg-white hover:bg-emerald-50 hover:text-emerald-900 border border-slate-200/90 rounded-xl text-slate-800 font-bold shrink-0 transition-all active:scale-95 shadow-2xs whitespace-nowrap"
           >
             {qr.label}
           </button>
@@ -554,8 +554,8 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
       </div>
 
       {/* Spacious WhatsApp Input Reply Bar */}
-      <div className="p-2.5 sm:p-3 bg-[#f0f2f5] border-t border-slate-200/90 flex items-end gap-2 safe-pb">
-        <div className="flex-1 bg-white border border-slate-300/80 rounded-2xl shadow-inner flex items-center px-3 py-1.5 focus-within:ring-2 focus-within:ring-emerald-500 focus-within:border-emerald-500 transition-all">
+      <div className="p-2.5 sm:p-3 bg-[#f0f2f5] border-t border-slate-200/90 flex items-end gap-2 safe-pb shrink-0">
+        <div className="flex-1 min-w-0 bg-white border border-slate-300/80 rounded-2xl shadow-inner flex items-center px-3 py-2 sm:py-1.5 focus-within:ring-2 focus-within:ring-emerald-500 focus-within:border-emerald-500 transition-all">
           <textarea
             value={messageText}
             onChange={(e) => setMessageText(e.target.value)}
@@ -567,15 +567,19 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
             }}
             rows={Math.min(5, Math.max(1, messageText.split('\n').length))}
             placeholder="Type WhatsApp message (Enter to send, Shift+Enter for new line)..."
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="sentences"
+            spellCheck={false}
             className="w-full text-base sm:text-sm text-slate-900 placeholder:text-slate-400 bg-transparent focus:outline-none resize-none font-sans leading-normal py-1 custom-scrollbar"
-            style={{ minHeight: '38px', maxHeight: '130px' }}
+            style={{ minHeight: '50px', maxHeight: '150px', fontSize: '16px', lineHeight: '1.5' }}
           />
         </div>
 
         <button
           onClick={() => handleSendMessage()}
           disabled={isSending || !messageText.trim()}
-          className="w-11 h-11 bg-[#00a884] hover:bg-[#06cf9c] active:scale-95 disabled:opacity-40 text-white font-extrabold text-xs rounded-full shadow-md transition-all flex items-center justify-center shrink-0"
+          className="w-12 h-12 sm:w-11 sm:h-11 bg-[#00a884] hover:bg-[#06cf9c] active:scale-95 disabled:opacity-40 text-white font-extrabold text-xs rounded-full shadow-md transition-all flex items-center justify-center shrink-0"
           title="Send WhatsApp Message"
         >
           {isSending ? <Loader size={18} className="animate-spin" /> : <Send size={18} />}

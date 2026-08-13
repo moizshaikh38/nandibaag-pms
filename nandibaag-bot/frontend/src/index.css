@@ -21,6 +21,7 @@
 /* Global Mobile & UI Defaults */
 * {
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html, body {
@@ -149,6 +150,34 @@ textarea {
 .chat-scrollbar::-webkit-scrollbar-thumb:hover,
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(100, 116, 139, 0.7);
+}
+
+.chat-scrollbar,
+.custom-scrollbar,
+.whatsapp-messages-scroll {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.whatsapp-quick-replies {
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+}
+
+.whatsapp-quick-replies > button {
+  scroll-snap-align: start;
+}
+
+@media (max-width: 768px) {
+  .whatsapp-messages-scroll {
+    overscroll-behavior: contain;
+  }
+
+  .whatsapp-quick-replies {
+    padding-bottom: 0.5rem;
+  }
 }
 
 /* WhatsApp-style chat background pattern */

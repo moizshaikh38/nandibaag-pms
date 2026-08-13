@@ -38,6 +38,7 @@ export default function ChatsPage() {
       }
       const params = new URLSearchParams();
       if (search) params.append('search', search);
+      params.set('limit', '100');
       
       const response = await api.get(`/chats?${params.toString()}`);
       setChats(response.data.chats || []);
@@ -231,10 +232,10 @@ export default function ChatsPage() {
   const selectedChat = chats.find(c => c._id === selectedChatId);
 
   return (
-    <div className="h-[calc(100dvh-85px)] md:h-[calc(100vh-7rem)] flex flex-col md:flex-row glass-card rounded-2xl overflow-hidden border border-slate-200/90 shadow-xl mb-16 lg:mb-0">
+    <div className="h-[calc(100dvh-85px)] min-h-0 md:h-[calc(100vh-7rem)] flex flex-col md:flex-row glass-card rounded-2xl overflow-hidden border border-slate-200/90 shadow-xl mb-16 lg:mb-0">
       
       {/* Chat List Panel */}
-      <div className={`${selectedChat ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 flex-col bg-white border-r border-slate-200 shrink-0`}>
+      <div className={`${selectedChat ? 'hidden md:flex' : 'flex'} w-full h-full min-h-0 md:w-80 lg:w-96 flex-col bg-white border-r border-slate-200 shrink-0`}>
         
         {/* Header & Tabs */}
         <div className="p-3.5 border-b border-slate-100 space-y-2.5 bg-slate-50/60">
@@ -317,7 +318,7 @@ export default function ChatsPage() {
         </div>
 
         {/* Chat List Rows */}
-        <div className="flex-1 overflow-y-auto chat-scrollbar divide-y divide-slate-100">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain chat-scrollbar divide-y divide-slate-100">
           {isLoading ? (
             <div className="py-16 text-center space-y-3">
               <RefreshCw size={28} className="animate-spin text-emerald-600 mx-auto" />
@@ -418,7 +419,7 @@ export default function ChatsPage() {
       </div>
 
       {/* Main Workspace Panel */}
-      <div className={`${selectedChat ? 'flex' : 'hidden md:flex'} flex-1 flex-col bg-slate-100 min-w-0`}>
+      <div className={`${selectedChat ? 'flex' : 'hidden md:flex'} flex-1 min-h-0 flex-col bg-slate-100 min-w-0`}>
         {selectedChat ? (
           <ChatWindow
             chat={selectedChat}

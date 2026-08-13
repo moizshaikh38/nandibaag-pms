@@ -13,7 +13,7 @@ const router = express.Router();
  */
 router.get('/', verifyToken, async (req, res, next) => {
   try {
-    const { search, page = 1, limit = 20 } = req.query;
+    const { search, page = 1, limit = 100 } = req.query;
     
     const query = { isArchived: false };
     
@@ -24,13 +24,15 @@ router.get('/', verifyToken, async (req, res, next) => {
       ];
     }
     
-    const skip = (page - 1) * limit;
+    const parsedLimit = Math.min(parseInt(limit, 10) || 100, 100);
+    const parsedPage = parseInt(page, 10) || 1;
+    const skip = (parsedPage - 1) * parsedLimit;
     
     const [chats, total] = await Promise.all([
       Chat.find(query)
         .sort({ lastMessageAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit)),
+        .limit(parsedLimit),
       Chat.countDocuments(query)
     ]);
     
@@ -57,10 +59,10 @@ router.get('/', verifyToken, async (req, res, next) => {
       success: true,
       chats: chatsWithLeads,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: parsedPage,
+        limit: parsedLimit,
         total,
-        pages: Math.ceil(total / limit)
+        pages: Math.ceil(total / parsedLimit)
       }
     });
   } catch (error) {
