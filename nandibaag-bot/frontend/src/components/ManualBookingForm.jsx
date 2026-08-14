@@ -196,19 +196,37 @@ const ManualBookingForm = () => {
   const handleDateChange = (field, value) => {
     setFormData(prev => {
       let updated = { ...prev, [field]: value };
+      const isOneDay = prev.packageType === 'oneDay' || prev.packageType === 'picnic';
+
       if (field === 'checkInDate') {
         const inTime = new Date(value).getTime();
         const outTime = new Date(prev.checkOutDate).getTime();
-        if (isNaN(outTime) || inTime >= outTime) {
-          const nextDay = new Date(inTime + 86400000).toISOString().split('T')[0];
-          updated.checkOutDate = nextDay;
+        if (isOneDay) {
+          // For One Day picnic, default checkout to same day if not set or before check-in
+          if (isNaN(outTime) || outTime < inTime) {
+            updated.checkOutDate = value;
+          }
+        } else {
+          // For Stays, checkout must be at least checkIn + 1 day
+          if (isNaN(outTime) || inTime >= outTime) {
+            const nextDay = new Date(inTime + 86400000).toISOString().split('T')[0];
+            updated.checkOutDate = nextDay;
+          }
         }
       } else if (field === 'checkOutDate') {
         const outTime = new Date(value).getTime();
         const inTime = new Date(prev.checkInDate).getTime();
-        if (isNaN(inTime) || outTime <= inTime) {
-          const prevDay = new Date(outTime - 86400000).toISOString().split('T')[0];
-          updated.checkInDate = prevDay;
+        if (isOneDay) {
+          // For One Day picnic, allow same day (outTime === inTime)
+          if (isNaN(inTime) || outTime < inTime) {
+            updated.checkInDate = value;
+          }
+        } else {
+          // For Stays, checkout cannot be same day or before checkin
+          if (isNaN(inTime) || outTime <= inTime) {
+            const prevDay = new Date(outTime - 86400000).toISOString().split('T')[0];
+            updated.checkInDate = prevDay;
+          }
         }
       }
       return updated;
@@ -492,7 +510,21 @@ const ManualBookingForm = () => {
                   <button
                     type="button"
                     key={pkg.id}
-                    onClick={() => setFormData(prev => ({ ...prev, packageType: pkg.id }))}
+                    onClick={() => {
+                      setFormData(prev => {
+                        let out = prev.checkOutDate;
+                        if (pkg.id === 'oneDay') {
+                          out = prev.checkInDate; // One Day picnic defaults to same day!
+                        } else if (out <= prev.checkInDate) {
+                          out = new Date(new Date(prev.checkInDate).getTime() + 86400000).toISOString().split('T')[0];
+                        }
+                        return {
+                          ...prev,
+                          packageType: pkg.id,
+                          checkOutDate: out
+                        };
+                      });
+                    }}
                     className={`p-2.5 text-left rounded-xl border transition-all select-none ${
                       formData.packageType === pkg.id
                         ? 'border-emerald-600 bg-emerald-600 text-white font-bold shadow-md scale-[1.02]'

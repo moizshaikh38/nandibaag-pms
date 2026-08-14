@@ -632,10 +632,17 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
                         const val = e.target.value;
                         setAssignForm(prev => {
                           let updated = { ...prev, checkInDate: val, roomId: '', selectedRooms: [] };
+                          const isOneDay = prev.packageType === 'oneDay' || prev.packageType === 'picnic';
                           const inTime = new Date(val).getTime();
                           const outTime = new Date(prev.checkOutDate).getTime();
-                          if (isNaN(outTime) || inTime >= outTime) {
-                            updated.checkOutDate = new Date(inTime + 86400000).toISOString().split('T')[0];
+                          if (isOneDay) {
+                            if (isNaN(outTime) || outTime < inTime) {
+                              updated.checkOutDate = val;
+                            }
+                          } else {
+                            if (isNaN(outTime) || inTime >= outTime) {
+                              updated.checkOutDate = new Date(inTime + 86400000).toISOString().split('T')[0];
+                            }
                           }
                           return updated;
                         });
@@ -653,10 +660,17 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
                         const val = e.target.value;
                         setAssignForm(prev => {
                           let updated = { ...prev, checkOutDate: val, roomId: '', selectedRooms: [] };
+                          const isOneDay = prev.packageType === 'oneDay' || prev.packageType === 'picnic';
                           const outTime = new Date(val).getTime();
                           const inTime = new Date(prev.checkInDate).getTime();
-                          if (isNaN(inTime) || outTime <= inTime) {
-                            updated.checkInDate = new Date(outTime - 86400000).toISOString().split('T')[0];
+                          if (isOneDay) {
+                            if (isNaN(inTime) || outTime < inTime) {
+                              updated.checkInDate = val;
+                            }
+                          } else {
+                            if (isNaN(inTime) || outTime <= inTime) {
+                              updated.checkInDate = new Date(outTime - 86400000).toISOString().split('T')[0];
+                            }
                           }
                           return updated;
                         });
@@ -706,7 +720,23 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
                     <button
                       type="button"
                       key={pkg.id}
-                      onClick={() => setAssignForm(prev => ({ ...prev, packageType: pkg.id }))}
+                      onClick={() => {
+                        setAssignForm(prev => {
+                          let out = prev.checkOutDate;
+                          if (pkg.id === 'oneDay') {
+                            out = prev.checkInDate;
+                          } else if (out <= prev.checkInDate) {
+                            out = new Date(new Date(prev.checkInDate).getTime() + 86400000).toISOString().split('T')[0];
+                          }
+                          return {
+                            ...prev,
+                            packageType: pkg.id,
+                            checkOutDate: out,
+                            roomId: '',
+                            selectedRooms: []
+                          };
+                        });
+                      }}
                       className={`p-2 text-left rounded-xl border transition-all ${
                         assignForm.packageType === pkg.id
                           ? 'border-emerald-600 bg-emerald-600 text-white font-bold shadow-xs'

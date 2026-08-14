@@ -551,120 +551,120 @@ const checkMultipleRoomsAvailable = async (roomIds, checkInDate, checkOutDate, s
  */
 const getRoomsWithReservationStatus = async (checkInDate, checkOutDate, sessionId = null) => {
   try {
-    const { Booking, RoomBooking, RoomReservation, Series, RoomMaintenance } = require('../models');
-    const allRooms = await Room.find({ status: { $ne: 'deleted' } }).lean();
-
-    const seriesList = await Series.find({ status: { $ne: 'deleted' } }).lean();
-    const seriesMap = new Map(seriesList.map(s => [s._id.toString(), s.name]));
+    const { Room, Booking, RoomBooking, RoomReservation, Series, RoomMaintenance } = require('../models');
 
     const checkIn = new Date(checkInDate);
     let checkOut = new Date(checkOutDate);
-    if (isNaN(checkOut.getTime()) || checkOut <= checkIn) {
-      checkOut = new Date(checkIn.getTime() + 86400000);
-    }
+    const isSameDay = checkInDate === checkOutDate || (checkOut.getTime() <= checkIn.getTime());
+    const effectiveCheckOut = isSameDay ? new Date(checkIn.getTime() + 86400000) : checkOut;
     const checkInStr = checkIn.toISOString().split('T')[0];
     const now = new Date();
 
-    console.log('[Availability:RoomStatus] Fetching room status for:', {
-      checkIn: checkIn.toISOString(),
-      checkOut: checkOut.toISOString(),
-      sessionId
-    });
+    // ⚡ Execute all DB lookups in 1 single parallel roundtrip
+    const [allRooms, seriesList, activeMaintenance, activeRoomBookings, activeMainBookings, activeReservations] = await Promise.all([
+      Room.find({ status: { $ne: 'deleted' } }).lean(),
+      Series.find({ status: { $ne: 'deleted' } }).lean(),
+      RoomMaintenance.find({
+        startDate: { $lt: effectiveCheckOut },
+        endDate: { $gt: checkIn },
+        status: 'active'
+      }).lean(),
+      RoomBooking.find({
+        status: { $in: ['confirmed', 'checked_in'] },
+        checkInDate: { $lt: effectiveCheckOut },
+        checkOutDate: { $gt: checkIn }
+      }).lean(),
+      Booking.find({
+        status: { $in: ['pending_payment', 'confirmed', 'checked_in'] },
+        $or: [
+          { checkInDate: { $lt: effectiveCheckOut }, checkOutDate: { $gt: checkIn } },
+          { date: checkInStr }
+        ]
+      }).select('customerName roomId roomIds').lean(),
+      RoomReservation.find({
+        checkInDate: { $lt: effectiveCheckOut },
+        checkOutDate: { $gt: checkIn },
+        status: 'active',
+        expiresAt: { $gt: now }
+      }).lean()
+    ]);
 
-    const roomsWithStatus = await Promise.all(
-      allRooms.map(async (room) => {
-        const roomIdStr = room._id.toString();
-        const roomNumStr = String(room.roomNumber);
+    const seriesMap = new Map(seriesList.map(s => [s._id.toString(), s.name]));
 
-        // 1. Check for active maintenance/wellness
-        const maintenance = await RoomMaintenance.findOne({
-          $or: [
-            { roomId: roomIdStr },
-            { roomId: roomNumStr }
-          ],
-          startDate: { $lt: checkOut },
-          endDate: { $gt: checkIn },
-          status: 'active'
-        });
+    // Fast in-memory hash maps for O(1) matching
+    const maintenanceMap = new Map();
+    for (const m of activeMaintenance) {
+      if (m.roomId) maintenanceMap.set(String(m.roomId), m);
+    }
 
-        if (maintenance) {
-          console.log('[Availability:Status] Room', room.roomNumber || roomIdStr, 'under maintenance');
-          return {
-            ...room,
-            seriesName: seriesMap.get(room.seriesId?.toString()) || 'Other Cottages',
-            status: 'maintenance',
-            maintenanceType: maintenance.maintenanceType,
-            maintenanceReason: maintenance.reason,
-            maintenanceUntil: maintenance.endDate
-          };
-        }
+    const roomBookingMap = new Map();
+    for (const rb of activeRoomBookings) {
+      if (rb.roomId) roomBookingMap.set(String(rb.roomId), rb);
+    }
 
-        // 2. Check for confirmed room bookings (PMS room assignments)
-        const roomBooking = await RoomBooking.findOne({
-          roomId: room._id,
-          status: { $in: ['confirmed', 'checked_in'] },
-          checkInDate: { $lt: checkOut },
-          checkOutDate: { $gt: checkIn }
-        });
+    const mainBookingMap = new Map();
+    for (const b of activeMainBookings) {
+      if (b.roomId) mainBookingMap.set(String(b.roomId), b);
+      if (Array.isArray(b.roomIds)) {
+        b.roomIds.forEach(id => mainBookingMap.set(String(id), b));
+      }
+    }
 
-        // 3. Check for confirmed main bookings (Bot, Manual, OTA)
-        const mainBooking = await Booking.findOne({
-          $or: [
-            { roomIds: roomIdStr },
-            { roomIds: roomNumStr },
-            { roomId: roomIdStr },
-            { roomId: roomNumStr }
-          ],
-          status: { $in: ['pending_payment', 'confirmed', 'checked_in'] },
-          $or: [
-            { checkInDate: { $lt: checkOut }, checkOutDate: { $gt: checkIn } },
-            { date: checkInStr }
-          ]
-        });
+    const reservationMap = new Map();
+    for (const r of activeReservations) {
+      if (r.roomId) reservationMap.set(String(r.roomId), r);
+    }
 
-        const activeBooking = roomBooking || mainBooking;
+    const roomsWithStatus = allRooms.map((room) => {
+      const roomIdStr = room._id.toString();
+      const roomNumStr = String(room.roomNumber);
 
-        if (activeBooking) {
-          return {
-            ...room,
-            seriesName: seriesMap.get(room.seriesId?.toString()) || 'Other Cottages',
-            status: 'booked',
-            bookedBy: activeBooking.customerName || 'Confirmed Guest'
-          };
-        }
-
-        // 4. Check for active temporary reservations
-        const reservation = await RoomReservation.findOne({
-          $or: [
-            { roomId: roomIdStr },
-            { roomId: roomNumStr }
-          ],
-          checkInDate: { $lt: checkOut },
-          checkOutDate: { $gt: checkIn },
-          status: 'active',
-          expiresAt: { $gt: now }
-        });
-
-        if (reservation) {
-          const isCurrentSession = sessionId && reservation.sessionId === sessionId;
-          return {
-            ...room,
-            seriesName: seriesMap.get(room.seriesId?.toString()) || 'Other Cottages',
-            status: isCurrentSession ? 'reserved_by_you' : 'reserved_by_other',
-            reservedUntil: reservation.expiresAt,
-            isYourReservation: isCurrentSession
-          };
-        }
-
+      // 1. Check Maintenance
+      const maintenance = maintenanceMap.get(roomIdStr) || maintenanceMap.get(roomNumStr);
+      if (maintenance) {
         return {
           ...room,
           seriesName: seriesMap.get(room.seriesId?.toString()) || 'Other Cottages',
-          status: 'available'
+          status: 'maintenance',
+          maintenanceType: maintenance.maintenanceType,
+          maintenanceReason: maintenance.reason,
+          maintenanceUntil: maintenance.endDate
         };
-      })
-    );
+      }
 
-    // Sort by seriesName and roomNumber
+      // 2. Check Confirmed Bookings (PMS or Main Bookings)
+      const rb = roomBookingMap.get(roomIdStr) || roomBookingMap.get(roomNumStr);
+      const mb = mainBookingMap.get(roomIdStr) || mainBookingMap.get(roomNumStr);
+      const activeBooking = rb || mb;
+      if (activeBooking) {
+        return {
+          ...room,
+          seriesName: seriesMap.get(room.seriesId?.toString()) || 'Other Cottages',
+          status: 'booked',
+          bookedBy: activeBooking.customerName || 'Confirmed Guest'
+        };
+      }
+
+      // 3. Check Temporary Active Reservations
+      const res = reservationMap.get(roomIdStr) || reservationMap.get(roomNumStr);
+      if (res) {
+        const isCurrentSession = sessionId && res.sessionId === sessionId;
+        return {
+          ...room,
+          seriesName: seriesMap.get(room.seriesId?.toString()) || 'Other Cottages',
+          status: isCurrentSession ? 'reserved_by_you' : 'reserved_by_other',
+          reservedUntil: res.expiresAt,
+          isYourReservation: isCurrentSession
+        };
+      }
+
+      return {
+        ...room,
+        seriesName: seriesMap.get(room.seriesId?.toString()) || 'Other Cottages',
+        status: 'available'
+      };
+    });
+
     roomsWithStatus.sort((a, b) => 
       (a.seriesName || '').localeCompare(b.seriesName || '', undefined, { numeric: true }) ||
       (String(a.roomNumber) || '').localeCompare(String(b.roomNumber) || '', undefined, { numeric: true })
