@@ -78,9 +78,16 @@ async function getActiveRoomStructure() {
  * Also returns breakdown by capacity tier for suggestion logic.
  */
 async function getCapacityAvailability(checkInDate, checkOutDate, minCapacity = 1) {
+  const checkInObj = new Date(checkInDate);
+  let checkOutObj = new Date(checkOutDate);
+  if (isNaN(checkOutObj.getTime()) || checkOutObj <= checkInObj) {
+    checkOutObj = new Date(checkInObj.getTime() + 86400000);
+  }
+  const checkInStr = checkInObj.toISOString().split('T')[0];
+
   console.log('[Availability:DEBUG] Input params:', {
-    checkInDate,
-    checkOutDate,
+    checkInDate: checkInObj.toISOString(),
+    checkOutDate: checkOutObj.toISOString(),
     minCapacity
   });
 
@@ -88,15 +95,22 @@ async function getCapacityAvailability(checkInDate, checkOutDate, minCapacity = 
   const eligibleRooms = rooms.filter(r => r.capacity >= minCapacity);
 
   // Fetch all overlapping bookings & active maintenance for this date range in DB queries
+  const { Booking } = require('../models');
   const RoomMaintenance = require('../models/RoomMaintenance');
-  const checkInObj = new Date(checkInDate);
-  const checkOutObj = new Date(checkOutDate);
 
-  const overlappingBookings = await RoomBooking.find({
+  const overlappingRoomBookings = await RoomBooking.find({
     status: { $in: BLOCKING_STATUSES },
     checkInDate: { $lt: checkOutObj },
     checkOutDate: { $gt: checkInObj }
   }).select('roomId').lean();
+
+  const overlappingMainBookings = await Booking.find({
+    status: { $in: ['pending_payment', 'confirmed', 'checked_in'] },
+    $or: [
+      { checkInDate: { $lt: checkOutObj }, checkOutDate: { $gt: checkInObj } },
+      { date: checkInStr }
+    ]
+  }).select('roomId roomIds').lean();
 
   const activeMaintenance = await RoomMaintenance.find({
     status: 'active',
@@ -105,9 +119,16 @@ async function getCapacityAvailability(checkInDate, checkOutDate, minCapacity = 
   }).select('roomId').lean();
 
   const blockedRoomIds = new Set([
-    ...overlappingBookings.map(b => b.roomId.toString()),
+    ...overlappingRoomBookings.map(b => b.roomId ? b.roomId.toString() : ''),
     ...activeMaintenance.map(m => String(m.roomId))
   ]);
+
+  for (const b of overlappingMainBookings) {
+    if (b.roomId) blockedRoomIds.add(String(b.roomId));
+    if (Array.isArray(b.roomIds)) {
+      b.roomIds.forEach(id => blockedRoomIds.add(String(id)));
+    }
+  }
 
   let availableCount = 0;
   const capacityBreakdown = {};
@@ -147,15 +168,29 @@ async function getCapacityAvailability(checkInDate, checkOutDate, minCapacity = 
  */
 async function getDetailedAvailability(checkInDate, checkOutDate, minCapacity = 0) {
   const rooms = await getActiveRoomStructure();
+  const { Booking } = require('../models');
   const RoomMaintenance = require('../models/RoomMaintenance');
-  const checkInObj = new Date(checkInDate);
-  const checkOutObj = new Date(checkOutDate);
 
-  const overlappingBookings = await RoomBooking.find({
+  const checkInObj = new Date(checkInDate);
+  let checkOutObj = new Date(checkOutDate);
+  if (isNaN(checkOutObj.getTime()) || checkOutObj <= checkInObj) {
+    checkOutObj = new Date(checkInObj.getTime() + 86400000);
+  }
+  const checkInStr = checkInObj.toISOString().split('T')[0];
+
+  const overlappingRoomBookings = await RoomBooking.find({
     status: { $in: BLOCKING_STATUSES },
     checkInDate: { $lt: checkOutObj },
     checkOutDate: { $gt: checkInObj }
   }).select('roomId').lean();
+
+  const overlappingMainBookings = await Booking.find({
+    status: { $in: ['pending_payment', 'confirmed', 'checked_in'] },
+    $or: [
+      { checkInDate: { $lt: checkOutObj }, checkOutDate: { $gt: checkInObj } },
+      { date: checkInStr }
+    ]
+  }).select('roomId roomIds').lean();
 
   const activeMaintenance = await RoomMaintenance.find({
     status: 'active',
@@ -164,9 +199,16 @@ async function getDetailedAvailability(checkInDate, checkOutDate, minCapacity = 
   }).select('roomId').lean();
 
   const blockedRoomIds = new Set([
-    ...overlappingBookings.map(b => b.roomId.toString()),
+    ...overlappingRoomBookings.map(b => b.roomId ? b.roomId.toString() : ''),
     ...activeMaintenance.map(m => String(m.roomId))
   ]);
+
+  for (const b of overlappingMainBookings) {
+    if (b.roomId) blockedRoomIds.add(String(b.roomId));
+    if (Array.isArray(b.roomIds)) {
+      b.roomIds.forEach(id => blockedRoomIds.add(String(id)));
+    }
+  }
 
   return rooms.filter(r => (
     (minCapacity === 0 || r.capacity >= minCapacity) &&
@@ -509,17 +551,25 @@ const checkMultipleRoomsAvailable = async (roomIds, checkInDate, checkOutDate, s
  */
 const getRoomsWithReservationStatus = async (checkInDate, checkOutDate, sessionId = null) => {
   try {
-    console.log('[Availability:RoomStatus] Fetching room status for:', { checkInDate, checkOutDate, sessionId });
-
-    const { Booking, RoomReservation, Series, RoomMaintenance } = require('../models');
+    const { Booking, RoomBooking, RoomReservation, Series, RoomMaintenance } = require('../models');
     const allRooms = await Room.find({ status: { $ne: 'deleted' } }).lean();
 
     const seriesList = await Series.find({ status: { $ne: 'deleted' } }).lean();
     const seriesMap = new Map(seriesList.map(s => [s._id.toString(), s.name]));
 
     const checkIn = new Date(checkInDate);
-    const checkOut = new Date(checkOutDate);
+    let checkOut = new Date(checkOutDate);
+    if (isNaN(checkOut.getTime()) || checkOut <= checkIn) {
+      checkOut = new Date(checkIn.getTime() + 86400000);
+    }
+    const checkInStr = checkIn.toISOString().split('T')[0];
     const now = new Date();
+
+    console.log('[Availability:RoomStatus] Fetching room status for:', {
+      checkIn: checkIn.toISOString(),
+      checkOut: checkOut.toISOString(),
+      sessionId
+    });
 
     const roomsWithStatus = await Promise.all(
       allRooms.map(async (room) => {
@@ -549,29 +599,41 @@ const getRoomsWithReservationStatus = async (checkInDate, checkOutDate, sessionI
           };
         }
 
-        // 2. Check for confirmed bookings
-        const booking = await Booking.findOne({
+        // 2. Check for confirmed room bookings (PMS room assignments)
+        const roomBooking = await RoomBooking.findOne({
+          roomId: room._id,
+          status: { $in: ['confirmed', 'checked_in'] },
+          checkInDate: { $lt: checkOut },
+          checkOutDate: { $gt: checkIn }
+        });
+
+        // 3. Check for confirmed main bookings (Bot, Manual, OTA)
+        const mainBooking = await Booking.findOne({
           $or: [
             { roomIds: roomIdStr },
             { roomIds: roomNumStr },
             { roomId: roomIdStr },
             { roomId: roomNumStr }
           ],
-          checkInDate: { $lt: checkOut },
-          checkOutDate: { $gt: checkIn },
-          status: { $in: ['pending_payment', 'confirmed', 'checked_in'] }
+          status: { $in: ['pending_payment', 'confirmed', 'checked_in'] },
+          $or: [
+            { checkInDate: { $lt: checkOut }, checkOutDate: { $gt: checkIn } },
+            { date: checkInStr }
+          ]
         });
 
-        if (booking) {
+        const activeBooking = roomBooking || mainBooking;
+
+        if (activeBooking) {
           return {
             ...room,
             seriesName: seriesMap.get(room.seriesId?.toString()) || 'Other Cottages',
             status: 'booked',
-            bookedBy: booking.customerName
+            bookedBy: activeBooking.customerName || 'Confirmed Guest'
           };
         }
 
-        // 3. Check for active reservations
+        // 4. Check for active temporary reservations
         const reservation = await RoomReservation.findOne({
           $or: [
             { roomId: roomIdStr },

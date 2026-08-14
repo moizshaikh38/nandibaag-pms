@@ -48,6 +48,7 @@ const ManualBookingForm = () => {
   const [staffOptions, setStaffOptions] = useState([]);
   const [selectedRooms, setSelectedRooms] = useState([]);
   const [roomsList, setRoomsList] = useState([]);
+  const [isLoadingRooms, setIsLoadingRooms] = useState(false);
   const [totalCapacity, setTotalCapacity] = useState(0);
   const [reservationExpiry, setReservationExpiry] = useState(null);
   const [newStaffName, setNewStaffName] = useState('');
@@ -79,10 +80,9 @@ const ManualBookingForm = () => {
     return () => window.removeEventListener('refresh_availability', handleRefresh);
   }, [formData.checkInDate, formData.checkOutDate]);
 
-  // Fetch staff & rooms on load
+  // Fetch staff on load
   useEffect(() => {
     fetchStaffNames();
-    fetchRealtimeRooms(formData.checkInDate, formData.checkOutDate);
   }, []);
 
   const fetchStaffNames = async () => {
@@ -103,6 +103,7 @@ const ManualBookingForm = () => {
 
   const fetchRealtimeRooms = async (checkIn, checkOut) => {
     if (!checkIn || !checkOut) return;
+    setIsLoadingRooms(true);
     try {
       const res = await api.get('/rooms/availability-realtime', {
         params: { checkInDate: checkIn, checkOutDate: checkOut, sessionId }
@@ -113,11 +114,14 @@ const ManualBookingForm = () => {
     } catch (err) {
       console.error('[Form:RealtimeRooms] Error:', err);
       fetchRooms(checkIn, checkOut);
+    } finally {
+      setIsLoadingRooms(false);
     }
   };
 
   const fetchRooms = async (checkIn, checkOut) => {
     if (!checkIn || !checkOut) return;
+    setIsLoadingRooms(true);
     try {
       const res = await api.get('/rooms/availability', { params: { checkInDate: checkIn, checkOutDate: checkOut } });
       const rooms = res.data.rooms || [];
@@ -125,6 +129,8 @@ const ManualBookingForm = () => {
     } catch (err) {
       console.error('[Form:Rooms] Error:', err);
       setRoomsList([]);
+    } finally {
+      setIsLoadingRooms(false);
     }
   };
 
@@ -134,6 +140,7 @@ const ManualBookingForm = () => {
       setSelectedRooms([]);
       setTotalCapacity(0);
       setReservationExpiry(null);
+      setFormData(prev => ({ ...prev, roomId: '' }));
     }
   }, [formData.checkInDate, formData.checkOutDate]);
 
@@ -187,8 +194,25 @@ const ManualBookingForm = () => {
   };
 
   const handleDateChange = (field, value) => {
-    const updated = { ...formData, [field]: value };
-    setFormData(updated);
+    setFormData(prev => {
+      let updated = { ...prev, [field]: value };
+      if (field === 'checkInDate') {
+        const inTime = new Date(value).getTime();
+        const outTime = new Date(prev.checkOutDate).getTime();
+        if (isNaN(outTime) || inTime >= outTime) {
+          const nextDay = new Date(inTime + 86400000).toISOString().split('T')[0];
+          updated.checkOutDate = nextDay;
+        }
+      } else if (field === 'checkOutDate') {
+        const outTime = new Date(value).getTime();
+        const inTime = new Date(prev.checkInDate).getTime();
+        if (isNaN(inTime) || outTime <= inTime) {
+          const prevDay = new Date(outTime - 86400000).toISOString().split('T')[0];
+          updated.checkInDate = prevDay;
+        }
+      }
+      return updated;
+    });
   };
 
   const handleInputChange = (e) => {
@@ -556,11 +580,18 @@ const ManualBookingForm = () => {
                 <h3 className="text-xs font-extrabold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
                   <Building size={14} className="text-emerald-600" /> Select Cottage Rooms
                 </h3>
-                {selectedRooms.length > 0 && (
-                  <span className="text-xs text-emerald-900 bg-emerald-100 px-2.5 py-0.5 rounded-full font-bold border border-emerald-300 shadow-2xs">
-                    Cap: {totalCapacity} ({selectedRooms.length} {selectedRooms.length === 1 ? 'room' : 'rooms'})
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  {isLoadingRooms && (
+                    <span className="text-[10px] text-emerald-700 font-bold animate-pulse">
+                      ⏳ Syncing availability...
+                    </span>
+                  )}
+                  {selectedRooms.length > 0 && (
+                    <span className="text-xs text-emerald-900 bg-emerald-100 px-2.5 py-0.5 rounded-full font-bold border border-emerald-300 shadow-2xs">
+                      Cap: {totalCapacity} ({selectedRooms.length} {selectedRooms.length === 1 ? 'room' : 'rooms'})
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Overall Availability Message Banner */}

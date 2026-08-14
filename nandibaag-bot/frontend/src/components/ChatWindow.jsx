@@ -628,7 +628,18 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
                     <input
                       type="date"
                       value={assignForm.checkInDate}
-                      onChange={(e) => setAssignForm(prev => ({ ...prev, checkInDate: e.target.value, roomId: '', selectedRooms: [] }))}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setAssignForm(prev => {
+                          let updated = { ...prev, checkInDate: val, roomId: '', selectedRooms: [] };
+                          const inTime = new Date(val).getTime();
+                          const outTime = new Date(prev.checkOutDate).getTime();
+                          if (isNaN(outTime) || inTime >= outTime) {
+                            updated.checkOutDate = new Date(inTime + 86400000).toISOString().split('T')[0];
+                          }
+                          return updated;
+                        });
+                      }}
                       required
                       className="w-full px-3 py-2 text-xs sm:text-sm font-semibold border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-emerald-500 shadow-2xs"
                     />
@@ -638,7 +649,18 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
                     <input
                       type="date"
                       value={assignForm.checkOutDate}
-                      onChange={(e) => setAssignForm(prev => ({ ...prev, checkOutDate: e.target.value, roomId: '', selectedRooms: [] }))}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setAssignForm(prev => {
+                          let updated = { ...prev, checkOutDate: val, roomId: '', selectedRooms: [] };
+                          const outTime = new Date(val).getTime();
+                          const inTime = new Date(prev.checkInDate).getTime();
+                          if (isNaN(inTime) || outTime <= inTime) {
+                            updated.checkInDate = new Date(outTime - 86400000).toISOString().split('T')[0];
+                          }
+                          return updated;
+                        });
+                      }}
                       required
                       className="w-full px-3 py-2 text-xs sm:text-sm font-semibold border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-emerald-500 shadow-2xs"
                     />
