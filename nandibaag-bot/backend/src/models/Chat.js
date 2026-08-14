@@ -81,6 +81,27 @@ const bookingDraftSchema = new mongoose.Schema({
   }
 }, { _id: false });
 
+const modeHistorySchema = new mongoose.Schema({
+  fromMode: {
+    type: String,
+    enum: ['ai', 'human', null],
+    default: null
+  },
+  toMode: {
+    type: String,
+    enum: ['ai', 'human'],
+    required: true
+  },
+  switchedAt: {
+    type: Date,
+    default: Date.now
+  },
+  switchedBy: {
+    type: String,
+    default: 'staff'
+  }
+}, { _id: false });
+
 const chatSchema = new mongoose.Schema({
   customerPhone: {
     type: String,
@@ -111,6 +132,33 @@ const chatSchema = new mongoose.Schema({
     default: 'unknown'
   },
   messages: [messageSchema],
+  modeHistory: [modeHistorySchema],
+  conversationState: {
+    lastStaffMessage: {
+      type: String,
+      default: null
+    },
+    lastStaffMessageTime: {
+      type: Date,
+      default: null
+    },
+    customerLastQuery: {
+      type: String,
+      default: null
+    },
+    context: {
+      type: String,
+      default: null
+    },
+    lastModeSwitchAt: {
+      type: Date,
+      default: null
+    },
+    resumedByAiAt: {
+      type: Date,
+      default: null
+    }
+  },
   lastMessageAt: {
     type: Date,
     index: true

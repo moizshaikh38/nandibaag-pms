@@ -7,6 +7,36 @@ const logger = require('../config/logger');
 
 const router = express.Router();
 
+function detectConversationTopic(text) {
+  const lower = (text || '').toLowerCase();
+  if (/\b(discount|offer|kam|kum|less|negotiate|budget|best price|final price|swast|kami)\b/i.test(lower)) return 'discount_or_price_negotiation';
+  if (/\b(day\s*picnic|one\s*day|picnic|water\s*park)\b/i.test(lower)) return 'day_picnic';
+  if (/\b(couple|husband|wife|anniversary)\b/i.test(lower)) return 'couple_stay';
+  if (/\b(group|family|friends|corporate|team)\b/i.test(lower)) return 'group_stay';
+  if (/\b(price|rate|cost|charge|package|kitn|kiti|kay)\b/i.test(lower)) return 'pricing';
+  if (/\b(available|availability|room|date|check-?in|check-?out|tarikh|tarakh)\b/i.test(lower)) return 'availability';
+  if (/\b(photo|photos|pic|image|gallery)\b/i.test(lower)) return 'photos';
+  if (/\b(location|address|map|maps|kaha|kuth)\b/i.test(lower)) return 'location';
+  if (/\b(payment|advance|upi|cash|card|refund|cancel)\b/i.test(lower)) return 'payment_or_policy';
+  if (/\b(food|breakfast|lunch|dinner|tea|veg|jain|non-veg|nonveg)\b/i.test(lower)) return 'food';
+  return null;
+}
+
+function updateStaffConversationState(chat, text) {
+  if (!chat || !text) return;
+  const cleanText = String(text).trim();
+  if (!cleanText) return;
+
+  chat.conversationState = chat.conversationState || {};
+  chat.conversationState.lastStaffMessage = cleanText.slice(0, 1000);
+  chat.conversationState.lastStaffMessageTime = new Date();
+
+  const topic = detectConversationTopic(cleanText);
+  if (topic) {
+    chat.conversationState.context = topic;
+  }
+}
+
 /**
  * GET /api/chats
  * List all chats with search and pagination
@@ -120,11 +150,7 @@ router.patch('/:id/mode', verifyToken, async (req, res, next) => {
       });
     }
     
-    const chat = await Chat.findByIdAndUpdate(
-      req.params.id,
-      { mode },
-      { new: true }
-    );
+    const chat = await Chat.findById(req.params.id);
     
     if (!chat) {
       return res.status(404).json({
@@ -132,6 +158,28 @@ router.patch('/:id/mode', verifyToken, async (req, res, next) => {
         message: 'Chat not found'
       });
     }
+
+    const previousMode = chat.mode || 'ai';
+    const switchedAt = new Date();
+
+    if (previousMode !== mode) {
+      chat.modeHistory = chat.modeHistory || [];
+      chat.modeHistory.push({
+        fromMode: previousMode,
+        toMode: mode,
+        switchedAt,
+        switchedBy: req.user?.email || req.user?.id || 'staff'
+      });
+
+      chat.conversationState = chat.conversationState || {};
+      chat.conversationState.lastModeSwitchAt = switchedAt;
+      if (previousMode === 'human' && mode === 'ai') {
+        chat.conversationState.resumedByAiAt = switchedAt;
+      }
+    }
+
+    chat.mode = mode;
+    await chat.save();
     
     // If switching to human, cancel pending follow-ups
     if (mode === 'human') {
@@ -209,6 +257,7 @@ const handleStaffSendMessage = async (req, res, next) => {
     
     // Append to chat messages
     chat.messages.push(newMessageObj);
+    updateStaffConversationState(chat, text.trim());
     chat.lastMessageAt = new Date();
     await chat.save();
     

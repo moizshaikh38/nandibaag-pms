@@ -211,12 +211,74 @@ async function callCloudflare(messages, systemPrompt, timeoutMs = 8000) {
  */
 const responseCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const MAX_CONTEXT_MESSAGES = 100;
+const MAX_CONTEXT_CHARS = 12000;
 
 /**
  * Simple hash function for cache key generation
  */
 function hashString(str) {
   return crypto.createHash('md5').update(str).digest('hex');
+}
+
+function normalizeHistoryText(text, maxLength = 900) {
+  return String(text || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLength);
+}
+
+function buildConversationContext(chat) {
+  const messageList = Array.isArray(chat?.messages) ? chat.messages : [];
+  const history = [];
+  let charCount = 0;
+
+  const recentMessages = messageList
+    .filter(msg => msg && msg.text && ['customer', 'bot', 'staff', 'agent'].includes(msg.sender))
+    .slice(-MAX_CONTEXT_MESSAGES);
+
+  for (const msg of recentMessages) {
+    const cleanText = normalizeHistoryText(msg.text);
+    if (!cleanText) continue;
+
+    const label = msg.sender === 'customer'
+      ? 'Customer'
+      : msg.sender === 'bot'
+        ? 'AI Assistant'
+        : 'Staff';
+    const line = `${label}: ${cleanText}`;
+    charCount += line.length + 1;
+    history.push(line);
+
+    while (charCount > MAX_CONTEXT_CHARS && history.length > 20) {
+      charCount -= history.shift().length + 1;
+    }
+  }
+
+  const lastModeSwitch = Array.isArray(chat?.modeHistory) && chat.modeHistory.length
+    ? chat.modeHistory[chat.modeHistory.length - 1]
+    : null;
+  const state = chat?.conversationState || {};
+  const notes = [];
+
+  if (state.lastStaffMessage) {
+    notes.push(`Last staff reply: ${normalizeHistoryText(state.lastStaffMessage, 700)}`);
+  }
+  if (state.customerLastQuery) {
+    notes.push(`Last customer query: ${normalizeHistoryText(state.customerLastQuery, 700)}`);
+  }
+  if (state.context) {
+    notes.push(`Detected topic: ${normalizeHistoryText(state.context, 300)}`);
+  }
+  if (lastModeSwitch?.fromMode === 'human' && lastModeSwitch?.toMode === 'ai') {
+    notes.push('AI was just re-enabled after staff/human handling. Continue from existing staff + customer context. Do not restart the conversation.');
+  }
+
+  return {
+    historyText: history.join('\n'),
+    continuityNotes: notes.join('\n'),
+    lastSavedText: recentMessages.length ? normalizeHistoryText(recentMessages[recentMessages.length - 1].text, 1200) : ''
+  };
 }
 
 /**
@@ -989,18 +1051,25 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
 
   const tPromptStart = Date.now();
  
-  // Trim message history (last 10 messages max to optimize token speed)
+  const conversationContext = buildConversationContext(chat);
   const messageList = Array.isArray(chat?.messages) ? chat.messages : [];
   const messageHistory = messageList
-    .slice(-10)
-    .map(msg => ({
-      role: msg.sender === 'customer' ? 'user' : 'assistant',
-      content: msg.text
-    }));
+    .filter(msg => msg && msg.text && ['customer', 'bot', 'staff', 'agent'].includes(msg.sender))
+    .slice(-30)
+    .map(msg => {
+      if (msg.sender === 'customer') {
+        return { role: 'user', content: msg.text };
+      }
+      const label = msg.sender === 'bot' ? 'AI Assistant' : 'Staff';
+      return {
+        role: 'assistant',
+        content: `[${label}] ${msg.text}`
+      };
+    });
   
   // Add current incoming message only if the handler has not already saved it.
   const lastHistoryMessage = messageHistory[messageHistory.length - 1];
-  if (!lastHistoryMessage || lastHistoryMessage.role !== 'user' || lastHistoryMessage.content !== incomingMessage) {
+  if (!lastHistoryMessage || lastHistoryMessage.role !== 'user' || normalizeHistoryText(lastHistoryMessage.content, 1200) !== normalizeHistoryText(incomingMessage, 1200)) {
     messageHistory.push({
       role: 'user',
       content: incomingMessage
@@ -1021,9 +1090,23 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
   const systemPrompt = buildSystemPrompt(languageToUse, todayDateString, dayOfWeek, resortSettings);
   
   // Append any system-level notes (e.g. availability/pricing results) to system prompt
-  const finalSystemPrompt = systemNotes
-    ? systemPrompt + '\n\n' + systemNotes
-    : systemPrompt;
+  const continuityPrompt = [
+    '[CONVERSATION CONTINUITY RULES]',
+    '- Use the full conversation context below before answering.',
+    '- Staff messages are authoritative. If staff already answered, continue from that answer instead of asking the same details again.',
+    '- Do not say Namaste/welcome repeatedly in an ongoing chat. Greet only if the customer only greeted and there is no useful prior context.',
+    '- If customer asks discount/price negotiation after a quote, answer that rates are already best/final and offer staff call for special approval.',
+    '- Keep WhatsApp replies clean: short paragraphs or numbered lines, no markdown tables, no unnecessary intro.',
+    '',
+    conversationContext.continuityNotes ? `[CURRENT STATE]\n${conversationContext.continuityNotes}` : '',
+    conversationContext.historyText ? `[FULL RECENT CHAT HISTORY]\n${conversationContext.historyText}` : ''
+  ].filter(Boolean).join('\n');
+
+  const finalSystemPrompt = [
+    systemPrompt,
+    continuityPrompt,
+    systemNotes || ''
+  ].filter(Boolean).join('\n\n');
   
   console.log('[AIService:DEBUG] Building prompt with messages:', {
     totalMessages: messageHistory.length,

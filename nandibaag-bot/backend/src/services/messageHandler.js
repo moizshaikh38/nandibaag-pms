@@ -329,6 +329,39 @@ function detectBookingType(text) {
   return null;
 }
 
+function detectConversationTopic(text) {
+  const lower = (text || '').toLowerCase();
+  if (/\b(discount|offer|kam|kum|less|negotiate|budget|best price|final price|swast|kami)\b/i.test(lower)) return 'discount_or_price_negotiation';
+  if (/\b(day\s*picnic|one\s*day|picnic|water\s*park)\b/i.test(lower)) return 'day_picnic';
+  if (/\b(couple|husband|wife|anniversary)\b/i.test(lower)) return 'couple_stay';
+  if (/\b(group|family|friends|corporate|team)\b/i.test(lower)) return 'group_stay';
+  if (/\b(price|rate|cost|charge|package|kitn|kiti|kay)\b/i.test(lower)) return 'pricing';
+  if (/\b(available|availability|room|date|check-?in|check-?out|tarikh|tarakh)\b/i.test(lower)) return 'availability';
+  if (/\b(photo|photos|pic|image|gallery)\b/i.test(lower)) return 'photos';
+  if (/\b(location|address|map|maps|kaha|kuth)\b/i.test(lower)) return 'location';
+  if (/\b(payment|advance|upi|cash|card|refund|cancel)\b/i.test(lower)) return 'payment_or_policy';
+  if (/\b(food|breakfast|lunch|dinner|tea|veg|jain|non-veg|nonveg)\b/i.test(lower)) return 'food';
+  return null;
+}
+
+function updateConversationState(chat, text, sender) {
+  if (!chat || !text) return;
+  const cleanText = String(text).trim();
+  if (!cleanText) return;
+
+  chat.conversationState = chat.conversationState || {};
+  const topic = detectConversationTopic(cleanText);
+
+  if (sender === 'customer') {
+    chat.conversationState.customerLastQuery = cleanText.slice(0, 1000);
+    if (topic) chat.conversationState.context = topic;
+  } else if (sender === 'staff' || sender === 'agent') {
+    chat.conversationState.lastStaffMessage = cleanText.slice(0, 1000);
+    chat.conversationState.lastStaffMessageTime = new Date();
+    if (topic) chat.conversationState.context = topic;
+  }
+}
+
 function isDiscountIntent(text) {
   return /\b(discount|offer|kam|kum|less|negotiate|negotiable|sasta|sasti|cheap|budget|final price|best price|swast|kami|mhag|mahag|mehenga|mehnga|kam karo|price kam)\b/i.test(text || '');
 }
@@ -494,6 +527,7 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
               messageType,
               deliveryStatus: 'sent'
             });
+            updateConversationState(chat, text, 'agent');
             chat.lastMessageAt = new Date();
             try { await chat.save(); } catch (_) {}
 
@@ -567,6 +601,7 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
       mediaUrl,
       deliveryStatus: 'sent'
     });
+    updateConversationState(chat, customerText, senderRole);
     
     chat.lastMessageAt = new Date();
     try { await cancelPendingFollowUps(chat._id, 'customer_replied'); } catch (_) {}
