@@ -29,7 +29,12 @@ const settingsSchema = new mongoose.Schema({
   globalMode: {
     type: String,
     enum: ['ai', 'human'],
-    default: 'ai' // Represents the default mode for brand-new chats going forward. Toggling this via PATCH /global-mode triggers a bulk action that overrides all existing chats' modes. It is NOT checked live per-message.
+    default: 'ai' // Bulk control only. PATCH /global-mode overrides all existing chats.
+  },
+  defaultModeForNewChats: {
+    type: String,
+    enum: ['ai', 'human'],
+    default: 'ai'
   },
   whatsappNumbers: [whatsappNumberSchema],
   openRouterModelOverride: {
@@ -45,5 +50,6 @@ const settingsSchema = new mongoose.Schema({
 });
 
 settingsSchema.index({ globalMode: 1 });
+settingsSchema.index({ defaultModeForNewChats: 1 });
 
 module.exports = mongoose.model('Settings', settingsSchema);

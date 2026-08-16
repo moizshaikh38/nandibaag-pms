@@ -7,6 +7,11 @@ const { logActivity } = require('../utils/activityLogger');
 
 const router = express.Router();
 
+function normalizeChatMode(mode) {
+  if (mode === 'staff') return 'human';
+  return mode;
+}
+
 /**
  * GET /api/settings
  * Get current global settings
@@ -19,10 +24,14 @@ router.get('/', verifyToken, async (req, res, next) => {
     if (!settings) {
       settings = new Settings({
         globalMode: 'ai',
+        defaultModeForNewChats: 'ai',
         whatsappNumbers: [],
         openRouterModelOverride: null,
         followUpEnabled: true
       });
+      await settings.save();
+    } else if (!settings.defaultModeForNewChats) {
+      settings.defaultModeForNewChats = settings.globalMode || 'ai';
       await settings.save();
     }
     
@@ -75,6 +84,52 @@ router.patch('/global-mode', verifyToken, requireAdmin, async (req, res, next) =
     res.json({
       success: true,
       settings
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * PATCH /api/settings/default-new-chat-mode
+ * Set default mode for brand-new chats only (admin only)
+ * Existing chats keep their current mode.
+ */
+router.patch('/default-new-chat-mode', verifyToken, requireAdmin, async (req, res, next) => {
+  try {
+    const requestedMode = normalizeChatMode(req.body.defaultModeForNewChats || req.body.mode || req.body.value);
+
+    if (!requestedMode || !['ai', 'human'].includes(requestedMode)) {
+      return res.status(400).json({
+        success: false,
+        message: 'defaultModeForNewChats must be "ai" or "human"'
+      });
+    }
+
+    const settings = await Settings.findOneAndUpdate(
+      {},
+      { defaultModeForNewChats: requestedMode },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    logActivity(
+      req.user.id,
+      'default_new_chat_mode_changed',
+      `Set new chats default mode to ${requestedMode.toUpperCase()}`,
+      req
+    );
+
+    try {
+      const io = getIO();
+      io.emit('settings:default_new_chat_mode_changed', { defaultModeForNewChats: requestedMode });
+    } catch (err) {
+      logger.error(`Failed to emit socket update after default chat mode change: ${err.message}`);
+    }
+
+    res.json({
+      success: true,
+      settings,
+      message: 'Default mode for new chats updated'
     });
   } catch (error) {
     next(error);

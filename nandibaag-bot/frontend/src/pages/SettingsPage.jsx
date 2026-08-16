@@ -35,6 +35,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [followUpEnabled, setFollowUpEnabled] = useState(true);
+  const [defaultModeForNewChats, setDefaultModeForNewChats] = useState('ai');
   const [isSaving, setIsSaving] = useState(false);
 
   // Password Form
@@ -50,6 +51,7 @@ export default function SettingsPage() {
       const res = await api.get('/settings');
       setSettings(res.data.settings);
       setFollowUpEnabled(res.data.settings.followUpEnabled ?? true);
+      setDefaultModeForNewChats(res.data.settings.defaultModeForNewChats || 'ai');
     } catch (error) {
       toast.error('Failed to load settings');
     } finally {
@@ -64,6 +66,26 @@ export default function SettingsPage() {
       toast.success(`Follow-up sequence ${enabled ? 'enabled' : 'disabled'}`);
     } catch (error) {
       toast.error('Failed to update follow-up settings');
+    }
+  };
+
+  const handleDefaultModeChange = async (mode) => {
+    if (!isAdmin || mode === defaultModeForNewChats) return;
+    const previousMode = defaultModeForNewChats;
+
+    try {
+      setIsSaving(true);
+      setDefaultModeForNewChats(mode);
+      const res = await api.patch('/settings/default-new-chat-mode', {
+        defaultModeForNewChats: mode
+      });
+      setSettings(res.data.settings);
+      toast.success(`New chats will now start in ${mode === 'ai' ? 'AI Auto' : 'Staff Handover'} mode`);
+    } catch (error) {
+      setDefaultModeForNewChats(previousMode);
+      toast.error('Failed to update default mode for new chats');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -131,6 +153,94 @@ export default function SettingsPage() {
       {/* Tab 1: Bot & Follow-ups */}
       {activeTab === 'general' && (
         <div className="space-y-4">
+          <div className="glass-card rounded-2xl p-6 bg-white border border-slate-200 space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Bot size={18} className="text-emerald-600" />
+                <div>
+                  <h3 className="font-display font-bold text-base text-slate-800">Default Mode for New Chats</h3>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Applies only when a brand-new customer messages for the first time.
+                  </p>
+                </div>
+              </div>
+
+              <span className={`text-[11px] font-bold px-3 py-1.5 rounded-full border ${
+                defaultModeForNewChats === 'ai'
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-amber-50 text-amber-700 border-amber-200'
+              }`}>
+                Current: {defaultModeForNewChats === 'ai' ? 'AI Auto' : 'Staff Handover'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <button
+                disabled={!isAdmin || isSaving}
+                onClick={() => handleDefaultModeChange('ai')}
+                className={`text-left p-4 rounded-xl border transition-all ${
+                  defaultModeForNewChats === 'ai'
+                    ? 'bg-emerald-50 border-emerald-300 shadow-xs'
+                    : 'bg-slate-50 border-slate-200 hover:border-emerald-200'
+                } ${!isAdmin ? 'opacity-70 cursor-not-allowed' : ''}`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                      <Bot size={17} />
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm text-slate-800">AI Auto</p>
+                      <p className="text-[11px] text-slate-500">Bot replies automatically for new chats.</p>
+                    </div>
+                  </div>
+                  {defaultModeForNewChats === 'ai' && <Check size={17} className="text-emerald-600" />}
+                </div>
+              </button>
+
+              <button
+                disabled={!isAdmin || isSaving}
+                onClick={() => handleDefaultModeChange('human')}
+                className={`text-left p-4 rounded-xl border transition-all ${
+                  defaultModeForNewChats === 'human'
+                    ? 'bg-amber-50 border-amber-300 shadow-xs'
+                    : 'bg-slate-50 border-slate-200 hover:border-amber-200'
+                } ${!isAdmin ? 'opacity-70 cursor-not-allowed' : ''}`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-9 h-9 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
+                      <Users size={17} />
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm text-slate-800">Staff Handover</p>
+                      <p className="text-[11px] text-slate-500">New chats wait for staff reply first.</p>
+                    </div>
+                  </div>
+                  {defaultModeForNewChats === 'human' && <Check size={17} className="text-amber-600" />}
+                </div>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-600">
+                <strong className="text-slate-800">New chats</strong>
+                <br />
+                Start with this selected default.
+              </div>
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-600">
+                <strong className="text-slate-800">Existing chats</strong>
+                <br />
+                Keep their current AI/Staff mode.
+              </div>
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-600">
+                <strong className="text-slate-800">Manual switch</strong>
+                <br />
+                Staff can still change any chat anytime.
+              </div>
+            </div>
+          </div>
+
           <div className="glass-card rounded-2xl p-6 bg-white border border-slate-200 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">

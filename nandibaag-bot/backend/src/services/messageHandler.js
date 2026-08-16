@@ -362,6 +362,11 @@ function updateConversationState(chat, text, sender) {
   }
 }
 
+function getDefaultModeForNewChat(settings) {
+  const configuredMode = settings?.defaultModeForNewChats || settings?.globalMode || 'ai';
+  return ['ai', 'human'].includes(configuredMode) ? configuredMode : 'ai';
+}
+
 function isDiscountIntent(text) {
   return /\b(discount|offer|kam|kum|less|negotiate|negotiable|sasta|sasti|cheap|budget|final price|best price|swast|kami|mhag|mahag|mehenga|mehnga|kam karo|price kam)\b/i.test(text || '');
 }
@@ -558,12 +563,13 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
     chat = await Chat.findOne({ customerPhone });
     
     if (!chat) {
+      const defaultMode = getDefaultModeForNewChat(settings);
       chat = new Chat({
         customerPhone,
         customerName: pushName || null,
         whatsappNumberUsed: sessionId,
         channel,
-        mode: settings.globalMode,
+        mode: defaultMode,
         language: 'unknown',
         messages: [],
         bookingStage: 'none',
@@ -572,7 +578,7 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
         isArchived: false
       });
       try { await chat.save(); } catch (_) {}
-      logger.info(`Created new chat for ${customerPhone} (Name: ${pushName || 'N/A'})`);
+      logger.info(`Created new chat for ${customerPhone} in ${defaultMode} mode (Name: ${pushName || 'N/A'})`);
     } else if (pushName && (!chat.customerName || chat.customerName !== pushName)) {
       chat.customerName = pushName;
     }

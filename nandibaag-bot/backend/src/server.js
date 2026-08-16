@@ -240,11 +240,17 @@ const startServer = async () => {
       logger.info('Creating default settings');
       const settings = new Settings({
         globalMode: 'ai',
+        defaultModeForNewChats: 'ai',
         whatsappNumbers: [],
         openRouterModelOverride: null,
         followUpEnabled: true
       });
       await settings.save();
+    } else {
+      await Settings.updateOne(
+        { defaultModeForNewChats: { $exists: false } },
+        { $set: { defaultModeForNewChats: 'ai' } }
+      );
     }
 
     // Ensure room inventory exists
