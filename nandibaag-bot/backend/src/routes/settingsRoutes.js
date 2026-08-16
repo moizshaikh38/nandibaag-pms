@@ -46,39 +46,38 @@ router.get('/', verifyToken, async (req, res, next) => {
 
 /**
  * PATCH /api/settings/global-mode
- * Toggle all-AI vs all-human mode (admin only)
- * Performs bulk action updating all existing chats and emits real-time updates
+ * Update default mode for NEW chats only (admin only)
+ * DOES NOT touch existing chats — only new incoming chats use this mode
  */
 router.patch('/global-mode', verifyToken, requireAdmin, async (req, res, next) => {
   try {
-    const { globalMode } = req.body;
+    const requestedMode = normalizeChatMode(req.body.globalMode || req.body.mode);
     
-    if (!globalMode || !['ai', 'human'].includes(globalMode)) {
+    if (!requestedMode || !['ai', 'human'].includes(requestedMode)) {
       return res.status(400).json({
         success: false,
-        message: 'globalMode must be "ai" or "human"'
+        message: 'Mode must be "ai" or "human"'
       });
     }
     
-    // 1. Update Settings
+    // Update ONLY the settings document — NOT any chats
     const settings = await Settings.findOneAndUpdate(
       {},
-      { globalMode },
+      { globalMode: requestedMode, defaultModeForNewChats: requestedMode },
       { new: true, upsert: true }
     );
 
-    // 2. Bulk update all Chat documents
-    await Chat.updateMany({}, { mode: globalMode });
-    logger.info(`Bulk updated all chats mode to: ${globalMode}`);
-    logActivity(req.user.id, 'global_mode_changed', `Toggled global bot mode to ${globalMode.toUpperCase()}`, req);
+    // ⚠️ REMOVED: Chat.updateMany({}, { mode }) — this was overwriting ALL existing chats
+    logger.info(`[Settings] Default mode for new chats set to: ${requestedMode} (existing chats NOT touched)`);
+    logActivity(req.user.id, 'default_mode_changed', `Set default mode for new chats to ${requestedMode.toUpperCase()} (existing chats unchanged)`, req);
 
-    // 3. Emit real-time Socket.io event to clients
+    // Emit real-time Socket.io event to clients
     try {
       const io = getIO();
-      io.emit('chats:bulk_mode_updated', { mode: globalMode });
-      io.emit('settings:global_mode_changed', { globalMode }); // Keep in sync dashboard if needed
+      io.emit('settings:default_new_chat_mode_changed', { defaultModeForNewChats: requestedMode });
+      io.emit('settings:global_mode_changed', { globalMode: requestedMode });
     } catch (err) {
-      logger.error(`Failed to emit socket updates after global mode toggle: ${err.message}`);
+      logger.error(`Failed to emit socket updates after mode setting change: ${err.message}`);
     }
     
     res.json({

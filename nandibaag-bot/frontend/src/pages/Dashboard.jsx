@@ -80,7 +80,7 @@ export default function Dashboard() {
   const fetchSettings = useCallback(async () => {
     try {
       const response = await api.get('/settings');
-      setGlobalMode(response.data.settings.globalMode);
+      setGlobalMode(response.data.settings.defaultModeForNewChats || response.data.settings.globalMode || 'ai');
       setFollowUpEnabled(response.data.settings.followUpEnabled ?? true);
     } catch (error) {
       console.error('Failed to fetch settings:', error);
@@ -132,17 +132,16 @@ export default function Dashboard() {
       fetchStats();
     };
 
-    const handleBulkModeUpdated = ({ mode }) => {
-      setGlobalMode(mode);
-      fetchStats();
+    const handleDefaultModeChanged = ({ defaultModeForNewChats }) => {
+      setGlobalMode(defaultModeForNewChats);
     };
 
     socket.on('hot_lead', handleHotLead);
-    socket.on('chats:bulk_mode_updated', handleBulkModeUpdated);
+    socket.on('settings:default_new_chat_mode_changed', handleDefaultModeChanged);
 
     return () => {
       socket.off('hot_lead', handleHotLead);
-      socket.off('chats:bulk_mode_updated', handleBulkModeUpdated);
+      socket.off('settings:default_new_chat_mode_changed', handleDefaultModeChanged);
     };
   }, [socket, fetchStats]);
 
@@ -151,10 +150,9 @@ export default function Dashboard() {
     try {
       await api.patch('/settings/global-mode', { globalMode: pendingModeChange });
       setGlobalMode(pendingModeChange);
-      toast.success(`Switched all chats to ${pendingModeChange.toUpperCase()} mode`);
-      fetchStats();
+      toast.success(`New chats will now start in ${pendingModeChange === 'ai' ? 'AI Auto' : 'Staff'} mode`);
     } catch (error) {
-      toast.error('Failed to update global mode');
+      toast.error('Failed to update default mode');
     } finally {
       setPendingModeChange(null);
     }
@@ -207,7 +205,7 @@ export default function Dashboard() {
             <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-xl border border-slate-200">
               <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 pl-2">
                 <Bot size={15} className="text-emerald-600" />
-                <span>Global Bot Mode:</span>
+                <span>New Chats Mode:</span>
               </span>
 
               <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-xs">
@@ -249,9 +247,9 @@ export default function Dashboard() {
               <AlertTriangle size={20} />
             </div>
             <div className="text-center space-y-1">
-              <h3 className="font-bold text-slate-800 text-base">Switch Global Mode?</h3>
+              <h3 className="font-bold text-slate-800 text-base">Change Default Mode?</h3>
               <p className="text-xs text-slate-500">
-                This will override all active customer chats to <strong>{pendingModeChange.toUpperCase()}</strong> mode instantly.
+                New incoming chats will start in <strong>{pendingModeChange === 'ai' ? 'AI Auto' : 'Staff'}</strong> mode. Existing chats will keep their current mode.
               </p>
             </div>
             <div className="flex gap-2 pt-2">
