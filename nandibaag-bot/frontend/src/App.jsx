@@ -39,6 +39,25 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
+// Admin-only route — staff gets redirected to dashboard
+function AdminRoute({ children }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
+      </div>
+    );
+  }
+
+  if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+}
+
 // Protected layout that includes vertical Sidebar & BottomNav for mobile
 function ProtectedLayout({ children }) {
   return (
@@ -170,7 +189,9 @@ function App() {
           path="/team-security"
           element={
             <ProtectedLayout>
-              <TeamSecurityPage />
+              <AdminRoute>
+                <TeamSecurityPage />
+              </AdminRoute>
             </ProtectedLayout>
           }
         />

@@ -199,7 +199,7 @@ export default function InventoryPage() {
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           </button>
 
-          {isAdmin && (
+          {true && (
             <button
               onClick={() => setShowAddSeries(true)}
               className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-md shadow-emerald-600/20 transition-all hover:scale-105"
@@ -273,7 +273,7 @@ export default function InventoryPage() {
                   </div>
 
                   <div className="flex items-center gap-3">
-                    {isAdmin && (
+                    {true && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -314,7 +314,7 @@ export default function InventoryPage() {
                                 >
                                   <Edit size={13} />
                                 </button>
-                                {isAdmin && (
+                                {true && (
                                   <button
                                     onClick={() => handleDeleteRoom(room._id, s._id)}
                                     className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 text-slate-500 hover:text-rose-600 transition-opacity p-1"

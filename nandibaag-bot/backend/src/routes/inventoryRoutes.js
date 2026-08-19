@@ -110,7 +110,7 @@ router.get('/series', verifyToken, async (req, res, next) => {
 /**
  * POST /api/inventory/series
  */
-router.post('/series', verifyToken, requireAdmin, async (req, res, next) => {
+router.post('/series', verifyToken, async (req, res, next) => {
   try {
     const { error, value } = validateBody(createSeriesSchema, req.body);
     if (error) {
@@ -142,7 +142,7 @@ router.post('/series', verifyToken, requireAdmin, async (req, res, next) => {
 /**
  * PATCH /api/inventory/series/:id
  */
-router.patch('/series/:id', verifyToken, requireAdmin, async (req, res, next) => {
+router.patch('/series/:id', verifyToken, async (req, res, next) => {
   try {
     if (!isValidObjectId(req.params.id)) {
       return res.status(400).json({ success: false, message: 'Invalid series ID' });
@@ -191,7 +191,7 @@ router.patch('/series/:id', verifyToken, requireAdmin, async (req, res, next) =>
  * DELETE /api/inventory/series/:id
  * Soft-delete series and cascade to all rooms.
  */
-router.delete('/series/:id', verifyToken, requireAdmin, async (req, res, next) => {
+router.delete('/series/:id', verifyToken, async (req, res, next) => {
   try {
     if (!isValidObjectId(req.params.id)) {
       return res.status(400).json({ success: false, message: 'Invalid series ID' });
@@ -282,7 +282,7 @@ router.get('/rooms', verifyToken, async (req, res, next) => {
 /**
  * POST /api/inventory/rooms
  */
-router.post('/rooms', verifyToken, requireAdmin, async (req, res, next) => {
+router.post('/rooms', verifyToken, async (req, res, next) => {
   try {
     const { error, value } = validateBody(createRoomSchema, req.body);
     if (error) {
@@ -330,7 +330,7 @@ router.post('/rooms', verifyToken, requireAdmin, async (req, res, next) => {
 /**
  * PATCH /api/inventory/rooms/:id
  */
-router.patch('/rooms/:id', verifyToken, requireAdmin, async (req, res, next) => {
+router.patch('/rooms/:id', verifyToken, async (req, res, next) => {
   try {
     if (!isValidObjectId(req.params.id)) {
       return res.status(400).json({ success: false, message: 'Invalid room ID' });
@@ -366,7 +366,7 @@ router.patch('/rooms/:id', verifyToken, requireAdmin, async (req, res, next) => 
 /**
  * POST /api/inventory/series/:id/rooms (Alias for room creation)
  */
-router.post('/series/:id/rooms', verifyToken, requireAdmin, async (req, res, next) => {
+router.post('/series/:id/rooms', verifyToken, async (req, res, next) => {
   try {
     const seriesId = req.params.id;
     const { roomNumber, capacity } = req.body;
@@ -401,7 +401,7 @@ router.post('/series/:id/rooms', verifyToken, requireAdmin, async (req, res, nex
 /**
  * DELETE /api/inventory/rooms/:id
  */
-router.delete('/rooms/:id', verifyToken, requireAdmin, async (req, res, next) => {
+router.delete('/rooms/:id', verifyToken, async (req, res, next) => {
   try {
     if (!isValidObjectId(req.params.id)) {
       return res.status(400).json({ success: false, message: 'Invalid room ID' });
@@ -433,7 +433,7 @@ router.delete('/rooms/:id', verifyToken, requireAdmin, async (req, res, next) =>
 /**
  * PATCH /api/inventory/rooms/:id/status
  */
-router.patch('/rooms/:id/status', verifyToken, requireAdmin, async (req, res, next) => {
+router.patch('/rooms/:id/status', verifyToken, async (req, res, next) => {
   try {
     if (!isValidObjectId(req.params.id)) {
       return res.status(400).json({ success: false, message: 'Invalid room ID' });
@@ -588,7 +588,7 @@ router.get('/availability-by-date', verifyToken, async (req, res, next) => {
  * POST /api/inventory/seed
  * Seed / re-seed default 57 cottage rooms inventory across 4 series
  */
-router.post('/seed', verifyToken, requireAdmin, async (req, res, next) => {
+router.post('/seed', verifyToken, async (req, res, next) => {
   try {
     const { seed } = require('../scripts/seedRoomInventory');
     await seed();

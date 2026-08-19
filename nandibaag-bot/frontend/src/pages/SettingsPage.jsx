@@ -248,7 +248,7 @@ export default function SettingsPage() {
                 <h3 className="font-display font-bold text-base text-slate-800">Automated Follow-up Sequences</h3>
               </div>
 
-              {isAdmin && (
+              {user && (
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
                     type="checkbox"

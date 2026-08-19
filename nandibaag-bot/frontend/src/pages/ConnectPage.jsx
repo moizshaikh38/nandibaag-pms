@@ -274,7 +274,7 @@ export default function ConnectPage() {
               <span>Active Sessions: <strong>{activeCount}</strong></span>
             </div>
 
-            {isAdmin && (
+            {true && (
               <button
                 onClick={() => { setShowAddModal(true); setConnState('idle'); }}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-xs rounded-xl shadow-lg shadow-emerald-500/20 transition-all hover:scale-105"
@@ -313,7 +313,7 @@ export default function ConnectPage() {
             <p className="text-xs text-slate-500 max-w-sm mx-auto">
               No numbers are currently paired. Click below to generate a QR code or pairing code.
             </p>
-            {isAdmin && (
+            {true && (
               <button
                 onClick={() => setShowAddModal(true)}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs rounded-xl transition-all"
@@ -345,7 +345,7 @@ export default function ConnectPage() {
                       </div>
                     </div>
 
-                    {isAdmin && (
+                    {true && (
                       <div className="flex items-center gap-1">
                         {status !== 'connected' && (
                           <button

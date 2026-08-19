@@ -139,7 +139,7 @@ router.patch('/default-new-chat-mode', verifyToken, async (req, res, next) => {
  * PATCH /api/settings/follow-ups
  * Enable/disable follow-up system (admin only)
  */
-router.patch('/follow-ups', verifyToken, requireAdmin, async (req, res, next) => {
+router.patch('/follow-ups', verifyToken, async (req, res, next) => {
   try {
     const { followUpEnabled } = req.body;
     
@@ -170,7 +170,7 @@ router.patch('/follow-ups', verifyToken, requireAdmin, async (req, res, next) =>
  * PUT /api/settings/whatsapp-numbers
  * Update WhatsApp numbers configuration (admin only)
  */
-router.put('/whatsapp-numbers', verifyToken, requireAdmin, async (req, res, next) => {
+router.put('/whatsapp-numbers', verifyToken, async (req, res, next) => {
   try {
     const { whatsappNumbers } = req.body;
     

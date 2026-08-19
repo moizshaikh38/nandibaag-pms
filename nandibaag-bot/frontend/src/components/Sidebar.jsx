@@ -120,7 +120,7 @@ export default function Sidebar() {
       items: [
         { path: '/connect', label: 'WhatsApp Hub', icon: QrCode },
         { path: '/settings', label: 'System Settings', icon: Settings },
-        ...(user?.role === 'super_admin' ? [{ path: '/team-security', label: 'Team & Security', icon: ShieldCheck }] : [])
+        ...(user?.role === 'admin' || user?.role === 'super_admin' ? [{ path: '/team-security', label: 'Team & Security', icon: ShieldCheck }] : [])
       ]
     }
   ];

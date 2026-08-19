@@ -63,7 +63,7 @@ router.get('/sessions', verifyToken, async (req, res, next) => {
  * and immediately returns 200. The frontend should listen for socket events
  * ('whatsapp:qr', 'whatsapp:ready', 'whatsapp:init_failed') to drive the UI.
  */
-router.post('/sessions', verifyToken, requireAdmin, async (req, res, next) => {
+router.post('/sessions', verifyToken, async (req, res, next) => {
   try {
     const { sessionId, cleanStart } = req.body;
     
@@ -122,7 +122,7 @@ router.post('/:id/pairing-code', verifyToken, async (req, res, next) => {
  * Destroy a WhatsApp session (admin only).
  * Also deletes the on-disk session folder to allow clean re-initialization.
  */
-router.delete('/:id', verifyToken, requireAdmin, async (req, res, next) => {
+router.delete('/:id', verifyToken, async (req, res, next) => {
   try {
     const { id: sessionId } = req.params;
     
