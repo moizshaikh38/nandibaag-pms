@@ -33,12 +33,21 @@ async function routeIncomingMessage(message, channel) {
 }
 
 /**
- * Send a message back to the customer via the correct channel.
- *
+ * Send a message back to the customer across all available WhatsApp channels.
+ * 
+ * Baileys and Fast2SMS WhatsApp are TWO INDEPENDENT WhatsApp channels:
+ * 1. If Baileys is connected -> Send through Baileys.
+ * 2. If Fast2SMS WhatsApp is configured -> Send through Fast2SMS WhatsApp.
+ * 3. If BOTH are connected -> Send through BOTH channels independently.
+ * 4. If ONLY Baileys is connected -> Send through Baileys only.
+ * 5. If ONLY Fast2SMS WhatsApp is connected -> Send through Fast2SMS WhatsApp only.
+ * 6. If neither is connected -> Return false / queue; NEVER send normal cellular SMS.
+ * 
  * @param {string} chatId  chatId format (e.g. "919876543210@s.whatsapp.net" or raw number)
  * @param {string} text
- * @param {'whatsapp-web' | 'fast2sms'} channel
- * @param {string} [sessionId] Baileys session id — only used by whatsapp-web
+ * @param {'whatsapp-web' | 'fast2sms'} [channel]
+ * @param {string} [sessionId] Baileys session id — default 'primary' / 'resort_primary'
+ * @returns {Promise<boolean>} true if at least one WhatsApp channel succeeded
  */
 async function sendMessageViaChannel(chatId, text, channel, sessionId = 'primary') {
   const finalText = (text || '')
@@ -48,48 +57,62 @@ async function sendMessageViaChannel(chatId, text, channel, sessionId = 'primary
 
   console.log('[Send:Attempt]', {
     to: chatId,
-    channel,
+    channel: channel || 'all',
     text: finalText.slice(0, 50)
   });
 
-  console.log('[Send:DEBUG] Character breakdown:');
-  console.log('Text length:', finalText.length);
-  console.log('Newline count:', (finalText.match(/\n/g) || []).length);
-  console.log('First 200 chars:\n' + finalText.substring(0, 200));
+  const results = {
+    baileys: false,
+    fast2sms: false
+  };
 
-  try {
-    let success = false;
+  // ── 1. Baileys WhatsApp Channel ─────────────────────────────────────
+  const targetSessionStatus = whatsappService.getSessionStatus(sessionId);
+  const allStatuses = whatsappService.getAllSessionsStatus();
+  const isBaileysConnected = targetSessionStatus === 'connected' || Object.values(allStatuses).some(s => s === 'connected');
 
-    // Check if the requested Baileys session or any Baileys session is connected using whatsappService helpers
-    const targetSessionStatus = whatsappService.getSessionStatus(sessionId);
-    const allStatuses = whatsappService.getAllSessionsStatus();
-    const isBaileysConnected = targetSessionStatus === 'connected' || Object.values(allStatuses).some(s => s === 'connected');
-
-    // 1. WhatsApp-First: If a connected Baileys session exists or whatsapp-web is requested, use Baileys
-    if (isBaileysConnected || channel === 'whatsapp-web') {
-      success = await whatsappService.sendMessage(sessionId, chatId, finalText);
-      if (success) {
-        console.log('[Send:SUCCESS] WhatsApp Web (Baileys) message sent');
-        return true;
+  if (isBaileysConnected) {
+    console.log(`[Send:Baileys] Attempting send to ${chatId} (sessionId: ${sessionId})...`);
+    try {
+      const baileysSent = await whatsappService.sendMessage(sessionId, chatId, finalText);
+      if (baileysSent) {
+        console.log(`[Send:Baileys] ✅ Success for ${chatId}`);
+        results.baileys = true;
+      } else {
+        console.log(`[Send:Baileys] ❌ Failed/Queued for ${chatId}`);
       }
-      console.log(`[ChannelManager] WhatsApp Web (Baileys) send returned false for ${chatId}. Checking Fast2SMS WhatsApp...`);
+    } catch (baileysErr) {
+      console.error(`[Send:Baileys] ❌ Error: ${baileysErr.message}`);
     }
-
-    // 2. Fallback to Fast2SMS WhatsApp API only if Baileys was unavailable/failed and channel is fast2sms
-    if (!success && channel === 'fast2sms') {
-      success = await fast2smsService.sendMessage(chatId, finalText);
-      if (success) {
-        console.log('[Send:SUCCESS] Fast2SMS WhatsApp message sent');
-        return true;
-      }
-      console.log(`[ChannelManager] Fast2SMS WhatsApp send failed for ${chatId}.`);
-    }
-
-    return success;
-  } catch (error) {
-    console.error('[Send:FAILED] Error:', error.message);
-    return false;
+  } else {
+    console.log(`[Send:Baileys] ⏭️ Skipped (Baileys not connected)`);
   }
+
+  // ── 2. Fast2SMS WhatsApp Channel (Independent) ─────────────────────
+  const env = require('../config/env');
+  const isFast2SmsAvailable = env.fast2smsEnabled && fast2smsService.getStatus() === 'connected';
+
+  if (isFast2SmsAvailable) {
+    console.log(`[Send:Fast2SMS:WhatsApp] Attempting send to ${chatId}...`);
+    try {
+      const fast2smsSent = await fast2smsService.sendMessage(chatId, finalText);
+      if (fast2smsSent) {
+        console.log(`[Send:Fast2SMS:WhatsApp] ✅ Success for ${chatId}`);
+        results.fast2sms = true;
+      } else {
+        console.log(`[Send:Fast2SMS:WhatsApp] ❌ Failed for ${chatId}`);
+      }
+    } catch (fast2smsErr) {
+      console.error(`[Send:Fast2SMS:WhatsApp] ❌ Error: ${fast2smsErr.message}`);
+    }
+  } else {
+    console.log(`[Send:Fast2SMS:WhatsApp] ⏭️ Skipped (Fast2SMS not enabled/configured)`);
+  }
+
+  const atLeastOneSuccess = results.baileys || results.fast2sms;
+  console.log(`[Send:Summary] to=${chatId} baileys=${results.baileys} fast2sms=${results.fast2sms} overall=${atLeastOneSuccess}`);
+
+  return atLeastOneSuccess;
 }
 
 module.exports = {

@@ -357,85 +357,17 @@ router.post('/manual-booking', async (req, res) => {
       // ─── SEND TO CUSTOMER ──────────────────────────────────────
       console.log('[Booking:MSG] ─── Sending to CUSTOMER ───');
       
-      // Strategy: Try WhatsApp Web (Baileys) first → fast2sms → direct Baileys
-      // Baileys is the primary connected channel for this bot
-      
-      // Attempt 1: WhatsApp Web via channelManager
+      // Send to customer via available WhatsApp channels (Baileys and Fast2SMS WhatsApp)
       try {
         const sent = await sendMessageViaChannel(booking.customerPhone, customerMessage, 'whatsapp-web');
         if (sent) {
           customerMsgSent = true;
-          console.log('[Booking:MSG] ✅ ATTEMPT 1 SUCCESS: WhatsApp Web sent to customer:', booking.customerPhone);
+          console.log('[Booking:MSG] ✅ WhatsApp booking confirmation sent to customer:', booking.customerPhone);
         } else {
-          console.log('[Booking:MSG] ⚠️ ATTEMPT 1: WhatsApp Web returned false (session may not be ready)');
+          console.log('[Booking:MSG] ⚠️ WhatsApp booking confirmation failed / queued for customer:', booking.customerPhone);
         }
-      } catch (wa1Error) {
-        console.error('[Booking:MSG] ❌ ATTEMPT 1 WhatsApp Web error:', wa1Error.message);
-      }
-
-      // Attempt 2: fast2sms channel (if FAST2SMS_API_KEY configured)
-      if (!customerMsgSent) {
-        try {
-          const fast2smsApiKey = (process.env.FAST2SMS_API_KEY || '').trim();
-          if (fast2smsApiKey) {
-            console.log('[Booking:MSG] Trying Fast2SMS channel with configured API Key...');
-            const sent = await sendMessageViaChannel(booking.customerPhone, customerMessage, 'fast2sms');
-            if (sent) {
-              customerMsgSent = true;
-              console.log('[Booking:MSG] ✅ ATTEMPT 2 SUCCESS: Fast2SMS sent to customer:', booking.customerPhone);
-            } else {
-              // Direct Fast2SMS Bulk SMS fallback call
-              console.log('[Booking:MSG] Trying direct Fast2SMS Bulk SMS API endpoint (route=q)...');
-              const digits = (booking.customerPhone || '').replace(/\D/g, '');
-              const phoneDigits = digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits;
-              const senderId = (process.env.FAST2SMS_SENDER_ID || 'NBAAG').trim();
-
-              const bulkUrl = new URL('https://www.fast2sms.com/dev/bulksms');
-              bulkUrl.searchParams.set('authorization', fast2smsApiKey);
-              bulkUrl.searchParams.set('route', 'q');
-              bulkUrl.searchParams.set('message', customerMessage);
-              bulkUrl.searchParams.set('language', 'english');
-              bulkUrl.searchParams.set('flash', '0');
-              bulkUrl.searchParams.set('numbers', phoneDigits);
-              if (senderId) bulkUrl.searchParams.set('sender_id', senderId);
-
-              const smsRes = await fetch(bulkUrl.toString(), { method: 'GET' });
-              const smsJson = await smsRes.json();
-              console.log('[Booking:MSG] Fast2SMS Bulk SMS API response:', smsJson);
-              if (smsJson && (smsJson.return === true || smsJson.status_code === 200)) {
-                customerMsgSent = true;
-                console.log('[Booking:MSG] ✅ ATTEMPT 2 SUCCESS: Fast2SMS Bulk SMS sent to:', phoneDigits);
-              } else {
-                console.log('[Booking:MSG] ⚠️ Fast2SMS Bulk SMS returned:', smsJson?.message || smsJson);
-              }
-            }
-          } else {
-            console.log('[Booking:MSG] ⚠️ ATTEMPT 2 SKIPPED: FAST2SMS_API_KEY is not set in .env');
-          }
-        } catch (sms2Error) {
-          console.error('[Booking:MSG] ❌ ATTEMPT 2 Fast2SMS error:', sms2Error.message);
-        }
-      }
-
-      // Attempt 3: Direct Baileys sendMessage (last resort — tries ANY active session)
-      if (!customerMsgSent) {
-        try {
-          const sent = await whatsappService.sendMessage('primary', booking.customerPhone, customerMessage);
-          if (sent) {
-            customerMsgSent = true;
-            console.log('[Booking:MSG] ✅ ATTEMPT 3 SUCCESS: Direct Baileys sent to customer');
-          } else {
-            console.log('[Booking:MSG] ❌ ATTEMPT 3: Direct Baileys also failed (no active WhatsApp session — message queued)');
-          }
-        } catch (wa3Error) {
-          console.error('[Booking:MSG] ❌ ATTEMPT 3 Direct Baileys error:', wa3Error.message);
-        }
-      }
-
-      if (!customerMsgSent) {
-        console.error('[Booking:MSG] ❌❌❌ ALL 3 ATTEMPTS FAILED for customer:', booking.customerPhone);
-        console.error('[Booking:MSG] DIAGNOSIS: Check if WhatsApp Web (Baileys) QR code has been scanned and session is active.');
-        console.error('[Booking:MSG] DIAGNOSIS: Check if FAST2SMS_API_KEY is set in .env');
+      } catch (waError) {
+        console.error('[Booking:MSG] ❌ WhatsApp send error for customer:', waError.message);
       }
 
       // ─── SEND TO STAFF GROUP ───────────────────────────────────
@@ -450,14 +382,7 @@ router.post('/manual-booking', async (req, res) => {
             staffGroupSent = true;
             console.log('[Booking:MSG] ✅ Sent to staff group via WhatsApp');
           } else {
-            // Try fast2sms fallback
-            const groupSent2 = await sendMessageViaChannel(staffGroupNumber, staffGroupMessage, 'fast2sms');
-            if (groupSent2) {
-              staffGroupSent = true;
-              console.log('[Booking:MSG] ✅ Sent to staff group via Fast2SMS');
-            } else {
-              console.log('[Booking:MSG] ⚠️ Staff group message failed both channels');
-            }
+            console.log('[Booking:MSG] ⚠️ Staff group message delivery failed / pending');
           }
         } catch (groupError) {
           console.error('[Booking:MSG] ❌ Failed to send staff group message:', groupError.message);
