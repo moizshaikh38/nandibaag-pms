@@ -108,7 +108,9 @@ class Fast2SmsService {
   }
 
   /**
-   * Send WhatsApp message via Fast2SMS, with automatic Bulk SMS fallback
+   * Send WhatsApp message via Fast2SMS WhatsApp API.
+   * Returns true on success, or false on failure (allowing caller to use Baileys).
+   * Does NOT automatically fall back to Bulk SMS, preventing accidental cellular SMS.
    */
   async sendMessage(to, text) {
     this.apiKey = (env.fast2smsApiKey || process.env.FAST2SMS_API_KEY || '').trim();
@@ -126,7 +128,7 @@ class Fast2SmsService {
     const cleanedText = (text || '').replace(/\\n\\n/g, '\n\n').replace(/\\n/g, '\n');
     const truncatedText = cleanedText.length > MAX_MESSAGE_LENGTH ? `${cleanedText.slice(0, MAX_MESSAGE_LENGTH)}…` : cleanedText;
 
-    // 1. Try Fast2SMS WhatsApp API endpoint
+    // Try Fast2SMS WhatsApp API endpoint
     try {
       const url = new URL(this.apiUrl);
       url.searchParams.set('to', number);
@@ -162,14 +164,12 @@ class Fast2SmsService {
         return false;
       }
 
-      console.log(`[Fast2SMS:WhatsApp] WhatsApp send returned: ${responseText.slice(0, 200)} — falling back to Fast2SMS Bulk SMS...`);
-
+      console.log(`[Fast2SMS:WhatsApp] WhatsApp send returned error: ${responseText.slice(0, 200)}`);
+      return false;
     } catch (error) {
-      console.error(`[Fast2SMS:WhatsApp] Error: ${error.message} — trying Bulk SMS...`);
+      console.error(`[Fast2SMS:WhatsApp] Error: ${error.message}`);
+      return false;
     }
-
-    // 2. Fallback to Fast2SMS Quick Bulk SMS API
-    return await this.sendSMS(to, text);
   }
 }
 

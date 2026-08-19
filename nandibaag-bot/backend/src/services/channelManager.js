@@ -59,20 +59,32 @@ async function sendMessageViaChannel(chatId, text, channel, sessionId = 'primary
 
   try {
     let success = false;
-    if (channel === 'fast2sms') {
-      success = await fast2smsService.sendMessage(chatId, finalText);
+
+    // Check if the requested Baileys session or any Baileys session is connected using whatsappService helpers
+    const targetSessionStatus = whatsappService.getSessionStatus(sessionId);
+    const allStatuses = whatsappService.getAllSessionsStatus();
+    const isBaileysConnected = targetSessionStatus === 'connected' || Object.values(allStatuses).some(s => s === 'connected');
+
+    // 1. WhatsApp-First: If a connected Baileys session exists or whatsapp-web is requested, use Baileys
+    if (isBaileysConnected || channel === 'whatsapp-web') {
+      success = await whatsappService.sendMessage(sessionId, chatId, finalText);
       if (success) {
-        console.log('[Send:SUCCESS] Fast2SMS message sent');
+        console.log('[Send:SUCCESS] WhatsApp Web (Baileys) message sent');
         return true;
       }
-      console.log(`[ChannelManager] Fast2SMS send failed or not configured for ${chatId}. Attempting WhatsApp Web (Baileys) fallback...`);
+      console.log(`[ChannelManager] WhatsApp Web (Baileys) send returned false for ${chatId}. Checking Fast2SMS WhatsApp...`);
     }
-    success = await whatsappService.sendMessage(sessionId, chatId, finalText);
-    if (success) {
-      console.log('[Send:SUCCESS] WhatsApp Web (Baileys) message sent');
-    } else {
-      console.log('[Send:FAILED] WhatsApp Web (Baileys) send returned false (queued/pending)');
+
+    // 2. Fallback to Fast2SMS WhatsApp API only if Baileys was unavailable/failed and channel is fast2sms
+    if (!success && channel === 'fast2sms') {
+      success = await fast2smsService.sendMessage(chatId, finalText);
+      if (success) {
+        console.log('[Send:SUCCESS] Fast2SMS WhatsApp message sent');
+        return true;
+      }
+      console.log(`[ChannelManager] Fast2SMS WhatsApp send failed for ${chatId}.`);
     }
+
     return success;
   } catch (error) {
     console.error('[Send:FAILED] Error:', error.message);

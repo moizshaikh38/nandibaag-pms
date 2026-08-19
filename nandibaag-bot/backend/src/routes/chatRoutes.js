@@ -234,13 +234,14 @@ const handleStaffSendMessage = async (req, res, next) => {
     console.log(`[StaffSendMessage] Attempting send to ${chat.customerPhone} (chatId: ${chat._id})`);
     
     const sessionId = chat.whatsappNumberUsed || 'resort_primary';
-    const channel = chat.channel || 'whatsapp-web';
+    // Staff manual replies from dashboard prefer active WhatsApp Web (Baileys) session
+    const channel = 'whatsapp-web';
     let deliveryStatus = 'sent';
     let sendError = null;
 
     try {
       await sendMessageViaChannel(chat.customerPhone, text.trim(), channel, sessionId);
-      console.log(`[StaffSendMessage] Send via ${channel} succeeded for ${chat.customerPhone}`);
+      console.log(`[StaffSendMessage] Send succeeded for ${chat.customerPhone}`);
     } catch (err) {
       deliveryStatus = 'failed';
       sendError = err.message;
