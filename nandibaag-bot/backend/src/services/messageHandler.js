@@ -39,7 +39,10 @@ function isBotReplyFingerprint(text) {
 
 function getMessageHash(from, text, channel = 'default') {
   const timeWindow = Math.floor(Date.now() / 10000) * 10000;
-  const hashInput = `${from}||${(text || '').slice(0, 50)}||${timeWindow}||${channel}`;
+  // NOTE: channel is intentionally NOT included in the hash.
+  // The same message from the same sender must be deduplicated across channels
+  // (e.g. Baileys + Fast2SMS can both deliver the same incoming WhatsApp message).
+  const hashInput = `${from}||${(text || '').slice(0, 50)}||${timeWindow}`;
   return crypto.createHash('sha256').update(hashInput).digest('hex');
 }
 
@@ -458,11 +461,10 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
       return;
     }
 
-    if (msg.key.participant && msg.key.participant.includes('@s.whatsapp.net')) {
-      customerPhone = msg.key.participant.replace('@s.whatsapp.net', '').replace(/\D/g, '');
-    } else {
-      customerPhone = rawJid.split('@')[0].replace(/\D/g, '');
-    }
+    const rawParticipant = (msg.key.participant && msg.key.participant.includes('@s.whatsapp.net'))
+      ? msg.key.participant
+      : (rawJid || '');
+    customerPhone = rawParticipant.split('@')[0].split(':')[0].replace(/\D/g, '');
     
     console.log('[MessageHandler:ENTRY] Processing message');
     console.log('[MessageHandler:ENTRY] From:', customerPhone);
@@ -517,9 +519,15 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
       return;
     }
 
+    const clean10 = customerPhone.length > 10 ? customerPhone.slice(-10) : customerPhone;
+    const phoneQueries = [
+      { customerPhone },
+      ...(clean10 ? [{ customerPhone: clean10 }, { customerPhone: '91' + clean10 }] : [])
+    ];
+
     // Handle outgoing messages sent directly from phone or bot
     if (msg.key.fromMe) {
-      chat = await Chat.findOne({ customerPhone });
+      chat = await Chat.findOne({ $or: phoneQueries });
       if (chat) {
         const text = messageText || (hasMedia ? '[Media]' : '');
         if (text) {
@@ -549,9 +557,6 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
     const sock = channel === 'whatsapp-web'
       ? (whatsappService.activeSockets.get(sessionId)?.sock || null)
       : null;
-    if (sock) {
-      try { await sock.sendPresenceUpdate('composing', msg.key.remoteJid); } catch (_) {}
-    }
     
     const settings = await Settings.findOne();
     if (!settings) {
@@ -560,7 +565,7 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
     }
     
     const pushName = msg.pushName;
-    chat = await Chat.findOne({ customerPhone });
+    chat = await Chat.findOne({ $or: phoneQueries });
     
     if (!chat) {
       const defaultMode = getDefaultModeForNewChat(settings);
@@ -581,6 +586,16 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
       logger.info(`Created new chat for ${customerPhone} in ${defaultMode} mode (Name: ${pushName || 'N/A'})`);
     } else if (pushName && (!chat.customerName || chat.customerName !== pushName)) {
       chat.customerName = pushName;
+    }
+
+    // STRICT HUMAN/STAFF MODE CHECK: If chat is in human mode, DO NOT send typing presence and DO NOT reply!
+    const initialMode = (chat.mode || '').trim().toLowerCase();
+    if (initialMode === 'human' || initialMode === 'staff') {
+      if (sock) {
+        try { await sock.sendPresenceUpdate('paused', msg.key.remoteJid); } catch (_) {}
+      }
+    } else if (sock) {
+      try { await sock.sendPresenceUpdate('composing', msg.key.remoteJid); } catch (_) {}
     }
     
     if (containsOptOutPhrases(messageText)) {
@@ -619,18 +634,18 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
       chat.messages?.slice(-3).map(m => ({ sender: m.sender, text: (m.text || '').slice(0, 50) }))
     );
 
-    const mode = chat.mode;
-    if (mode === 'human') {
+    const mode = (chat.mode || '').trim().toLowerCase();
+    if (mode === 'human' || mode === 'staff') {
       try { await chat.save(); } catch (_) {}
       logger.info(`Chat ${customerPhone} in human mode, message saved, emitting socket event`);
-      emitRealtimeUpdate(chat, messageText || '[Media]', 'customer');
+      emitRealtimeUpdate(chat, customerText, 'customer');
       if (sock) {
         try { await sock.sendPresenceUpdate('paused', msg.key.remoteJid); } catch (_) {}
       }
       return;
     }
 
-    emitRealtimeUpdate(chat, messageText || '[Media]', 'customer');
+    emitRealtimeUpdate(chat, customerText, 'customer');
     
     // Primary Reply Computation Step
     try {
@@ -684,7 +699,7 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
 
       const draft = chat.bookingDraft || {};
 
-      if (draft.availabilityChecked && draft.date && draft.adults) {
+      if (draft.date) {
         const dateChangePatterns = /\d{1,2}\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|may|june|july|august|september|october|november|december)|next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)|tomorrow|today|yesterday|weekend|weekday|this\s+(saturday|sunday|monday|friday)/i;
         const guestChangePatterns = /(\d+)\s*(log|guest|people|person|adult|ladk|ladki|bache)/i;
         if (dateChangePatterns.test(msgLower) || guestChangePatterns.test(msgLower)) {
@@ -693,25 +708,25 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
         }
       }
 
-      if (draft.date && draft.adults && draft.adults > 0 && !draft.availabilityChecked) {
+      // UNIVERSAL LIVE AVAILABILITY CHECK: Whenever a date is identified, check live DB availability immediately
+      if (draft.date) {
         try {
           const checkInDate = new Date(draft.date);
           if (!isNaN(checkInDate.getTime())) {
             const nights = draft.nights && draft.nights > 0 ? draft.nights : 1;
             const checkOutDate = new Date(checkInDate);
             checkOutDate.setDate(checkOutDate.getDate() + nights);
-            const guestCount = draft.adults + (draft.kids?.length || 0);
+            const guestCount = (draft.adults && draft.adults > 0) ? (draft.adults + (draft.kids?.length || 0)) : 1;
 
             const capacityResult = await getCapacityAvailability(checkInDate, checkOutDate, guestCount);
-            if (!capacityResult.available) {
-              console.log('[MessageHandler:AVAILABILITY] ❌ NO ROOMS AVAILABLE');
+            if (!capacityResult.available || capacityResult.availableCount === 0) {
+              console.log('[MessageHandler:AVAILABILITY] ❌ NO ROOMS AVAILABLE for date:', draft.date);
               console.log('[MessageHandler:AVAILABILITY] Result:', capacityResult);
-              addSystemNote('[SYSTEM NOTE: No availability for these dates. Ask customer to try another date.]');
+              addSystemNote(`[SYSTEM NOTE — MANDATORY: ⛔ ALL ROOMS ARE FULLY BOOKED for ${draft.date}. There is ZERO availability on these dates. You MUST tell the customer politely: "Maaf kijiye, ${draft.date} ko humari saari cottages fully booked hain 😔 Kya aap doosri dates try karna chahenge?" DO NOT say rooms are available. DO NOT show pricing. DO NOT proceed with booking. Only suggest trying different dates.]`);
               chat.bookingDraft.availabilityChecked = true;
               chat.bookingDraft.availabilityConfirmed = false;
-            } else {
-              console.log('[MessageHandler:AVAILABILITY] ✅ ROOMS AVAILABLE');
-              console.log('[MessageHandler:AVAILABILITY] Available count:', capacityResult.availableCount);
+            } else if (draft.adults && draft.adults > 0) {
+              console.log('[MessageHandler:AVAILABILITY] ✅ ROOMS AVAILABLE:', capacityResult.availableCount);
               
               // Pass mealOption and mealRate for Day Picnic if set
               const options = {
@@ -737,6 +752,11 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
                 addSystemNote(`[SYSTEM NOTE: Availability & kids status confirmed (${draft.kids?.length || 0} kids).\nPRICING BREAKDOWN:\n${pricingResult.formatted}]`);
               }
 
+              chat.bookingDraft.availabilityChecked = true;
+              chat.bookingDraft.availabilityConfirmed = true;
+            } else {
+              // Date is available, but guest count not given yet
+              console.log('[MessageHandler:AVAILABILITY] Date is available, waiting for guest count:', draft.date);
               chat.bookingDraft.availabilityChecked = true;
               chat.bookingDraft.availabilityConfirmed = true;
             }
@@ -820,6 +840,14 @@ Hamari team aapse jald hi connect karegi for booking 😊]`);
           }
         }
 
+        // Fresh mode check immediately before AI execution to prevent race condition
+        const freshChat = await Chat.findById(chat._id).select('mode');
+        const currentMode = (freshChat?.mode || chat.mode || '').trim().toLowerCase();
+        if (currentMode === 'human' || currentMode === 'staff') {
+          logger.info(`Chat ${customerPhone} is in ${currentMode} mode, cancelling AI reply`);
+          return;
+        }
+
         const systemNotes = systemNotesList.join('\n\n');
         replyToSend = await getAIResponse(chat, messageText, settings, systemNotes);
       }
@@ -840,6 +868,12 @@ Hamari team aapse jald hi connect karegi for booking 😊]`);
   // ─── INDEPENDENT REPLY SEND BLOCK ───────────────────────────────────
   // Runs NO MATTER WHAT — a DB save error or AI crash can NEVER block message sending!
   try {
+    const finalMode = (chat?.mode || '').trim().toLowerCase();
+    if (finalMode === 'human' || finalMode === 'staff') {
+      logger.info(`[MessageHandler] Chat ${customerPhone} in human mode, blocking reply send`);
+      return;
+    }
+
     if (!replyToSend || replyToSend.trim() === '') {
       replyToSend = "Samajh nahi aaya, phir se try karo 😊 Ya call karein: 9257657665";
     }

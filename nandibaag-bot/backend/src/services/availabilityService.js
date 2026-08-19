@@ -14,7 +14,7 @@ const logger = require('../config/logger');
 const { formatDateToISO } = require('../utils/dateUtils');
 
 // Statuses that BLOCK a room (active bookings)
-const BLOCKING_STATUSES = ['confirmed', 'checked_in'];
+const BLOCKING_STATUSES = ['confirmed', 'checked_in', 'pending_payment', 'pending', 'draft'];
 
 /**
  * a) checkOverlap — internal helper
@@ -105,7 +105,7 @@ async function getCapacityAvailability(checkInDate, checkOutDate, minCapacity = 
   }).select('roomId').lean();
 
   const overlappingMainBookings = await Booking.find({
-    status: { $in: ['pending_payment', 'confirmed', 'checked_in'] },
+    status: { $nin: ['cancelled', 'no_show'] },
     $or: [
       { checkInDate: { $lt: checkOutObj }, checkOutDate: { $gt: checkInObj } },
       { date: checkInStr }
