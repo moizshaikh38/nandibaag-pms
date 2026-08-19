@@ -49,7 +49,7 @@ router.get('/', verifyToken, async (req, res, next) => {
  * Update default mode for NEW chats only (admin only)
  * DOES NOT touch existing chats — only new incoming chats use this mode
  */
-router.patch('/global-mode', verifyToken, requireAdmin, async (req, res, next) => {
+router.patch('/global-mode', verifyToken, async (req, res, next) => {
   try {
     const requestedMode = normalizeChatMode(req.body.globalMode || req.body.mode);
     
@@ -94,7 +94,7 @@ router.patch('/global-mode', verifyToken, requireAdmin, async (req, res, next) =
  * Set default mode for brand-new chats only (admin only)
  * Existing chats keep their current mode.
  */
-router.patch('/default-new-chat-mode', verifyToken, requireAdmin, async (req, res, next) => {
+router.patch('/default-new-chat-mode', verifyToken, async (req, res, next) => {
   try {
     const requestedMode = normalizeChatMode(req.body.defaultModeForNewChats || req.body.mode || req.body.value);
 

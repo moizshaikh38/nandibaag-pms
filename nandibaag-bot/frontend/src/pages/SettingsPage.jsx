@@ -70,7 +70,7 @@ export default function SettingsPage() {
   };
 
   const handleDefaultModeChange = async (mode) => {
-    if (!isAdmin || mode === defaultModeForNewChats) return;
+    if (mode === defaultModeForNewChats) return;
     const previousMode = defaultModeForNewChats;
 
     try {
@@ -176,13 +176,13 @@ export default function SettingsPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <button
-                disabled={!isAdmin || isSaving}
+                disabled={isSaving}
                 onClick={() => handleDefaultModeChange('ai')}
                 className={`text-left p-4 rounded-xl border transition-all ${
                   defaultModeForNewChats === 'ai'
                     ? 'bg-emerald-50 border-emerald-300 shadow-xs'
                     : 'bg-slate-50 border-slate-200 hover:border-emerald-200'
-                } ${!isAdmin ? 'opacity-70 cursor-not-allowed' : ''}`}
+                }`}
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
@@ -199,13 +199,13 @@ export default function SettingsPage() {
               </button>
 
               <button
-                disabled={!isAdmin || isSaving}
+                disabled={isSaving}
                 onClick={() => handleDefaultModeChange('human')}
                 className={`text-left p-4 rounded-xl border transition-all ${
                   defaultModeForNewChats === 'human'
                     ? 'bg-amber-50 border-amber-300 shadow-xs'
                     : 'bg-slate-50 border-slate-200 hover:border-amber-200'
-                } ${!isAdmin ? 'opacity-70 cursor-not-allowed' : ''}`}
+                }`}
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
