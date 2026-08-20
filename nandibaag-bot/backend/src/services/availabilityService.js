@@ -728,6 +728,323 @@ const getAvailabilityMessage = async (checkInDate, checkOutDate, sessionId = nul
   }
 };
 
+/**
+ * Check availability for OVERNIGHT stay (Couple/Group).
+ * Check-in 12:00 PM -> Check-out 10:30 AM next day.
+ */
+const checkOvernightAvailability = async (checkInDate, checkOutDate) => {
+  try {
+    console.log('[Availability:Overnight] Checking overnight availability');
+    console.log('[Availability:Overnight] Check-in:', checkInDate);
+    console.log('[Availability:Overnight] Check-out:', checkOutDate);
+
+    const checkIn = new Date(checkInDate);
+    let checkOut = new Date(checkOutDate);
+    if (isNaN(checkOut.getTime()) || checkOut <= checkIn) {
+      checkOut = new Date(checkIn.getTime() + 86400000);
+    }
+    const checkInStr = checkIn.toISOString().split('T')[0];
+
+    const { Booking } = require('../models');
+
+    // Find bookings for OVERNIGHT during this period
+    const overnightBookings = await Booking.find({
+      status: { $nin: ['cancelled', 'no_show'] },
+      $or: [
+        { checkInDate: { $lt: checkOut }, checkOutDate: { $gt: checkIn } },
+        { date: checkInStr }
+      ]
+    }).select('roomIds roomId customerName bookingType packageType').lean();
+
+    const overlappingRoomBookings = await RoomBooking.find({
+      status: { $in: BLOCKING_STATUSES },
+      checkInDate: { $lt: checkOut },
+      checkOutDate: { $gt: checkIn }
+    }).select('roomId').lean();
+
+    const RoomMaintenance = require('../models/RoomMaintenance');
+    const activeMaintenance = await RoomMaintenance.find({
+      status: 'active',
+      startDate: { $lt: checkOut },
+      endDate: { $gt: checkIn }
+    }).select('roomId').lean();
+
+    console.log('[Availability:Overnight] Found bookings:', overnightBookings.length);
+
+    // Get all active rooms
+    const allRooms = await getActiveRoomStructure();
+
+    // Find booked room identifiers
+    const bookedRoomIds = new Set();
+    overnightBookings.forEach(booking => {
+      // Overnight bookings, or any booking that uses a room overnight
+      const isPicnicOnly = (booking.bookingType === 'dayuse' || booking.bookingType === 'picnic' || booking.bookingType === 'oneDay' || booking.packageType === 'one-day-picnic');
+      if (!isPicnicOnly) {
+        if (booking.roomId) bookedRoomIds.add(String(booking.roomId));
+        if (booking.roomIds && Array.isArray(booking.roomIds)) {
+          booking.roomIds.forEach(roomId => bookedRoomIds.add(String(roomId)));
+        }
+      }
+    });
+
+    overlappingRoomBookings.forEach(rb => {
+      if (rb.roomId) bookedRoomIds.add(String(rb.roomId));
+    });
+
+    activeMaintenance.forEach(m => {
+      if (m.roomId) bookedRoomIds.add(String(m.roomId));
+    });
+
+    const availableRooms = allRooms.filter(room => {
+      const idStr = String(room._id);
+      const numStr = String(room.roomNumber || room.number || '');
+      return !bookedRoomIds.has(idStr) && !bookedRoomIds.has(numStr) && room.status !== 'maintenance';
+    });
+
+    console.log('[Availability:Overnight] Available rooms:', availableRooms.length, '/', allRooms.length);
+
+    return {
+      availableRooms,
+      totalRooms: allRooms.length,
+      bookedRoomIds: Array.from(bookedRoomIds)
+    };
+  } catch (error) {
+    console.error('[Availability:Overnight] Error:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * Check availability for ONE-DAY PICNIC.
+ * Day-use: 9:00 AM -> 6:30 PM (B->Tea) or 9:30 PM (B->Dinner).
+ */
+const checkOneDayPicknicAvailability = async (picnicDate, mealOption = 'breakfast-to-dinner') => {
+  try {
+    console.log('[Availability:OneDay] Checking one-day picnic availability');
+    console.log('[Availability:OneDay] Date:', picnicDate);
+    console.log('[Availability:OneDay] Meal option:', mealOption);
+
+    const date = new Date(picnicDate);
+    const dateStr = date.toISOString().split('T')[0];
+    const nextDay = new Date(date);
+    nextDay.setDate(nextDay.getDate() + 1);
+
+    const { Booking } = require('../models');
+
+    // Find OVERNIGHT bookings that block this day
+    const blockingOvernightBookings = await Booking.find({
+      status: { $nin: ['cancelled', 'no_show'] },
+      $or: [
+        { checkInDate: { $lte: date }, checkOutDate: { $gte: date } },
+        { date: dateStr }
+      ]
+    }).select('roomIds roomId bookingType packageType').lean();
+
+    // Find ONE-DAY PICNIC bookings that directly conflict on same day
+    const conflictingDayUseBookings = await Booking.find({
+      status: { $nin: ['cancelled', 'no_show'] },
+      $or: [
+        { bookingType: { $in: ['dayuse', 'picnic', 'oneDay'] } },
+        { packageType: { $in: ['one-day-picnic', 'oneDay', 'picnic'] } }
+      ],
+      $or: [
+        { checkInDate: { $gte: date, $lt: nextDay } },
+        { date: dateStr }
+      ]
+    }).select('roomIds roomId').lean();
+
+    console.log('[Availability:OneDay] Blocking overnight bookings:', blockingOvernightBookings.length);
+    console.log('[Availability:OneDay] Conflicting dayuse bookings:', conflictingDayUseBookings.length);
+
+    const allRooms = await getActiveRoomStructure();
+
+    const blockedRoomIds = new Set();
+    blockingOvernightBookings.forEach(booking => {
+      const isPicnicOnly = (booking.bookingType === 'dayuse' || booking.bookingType === 'picnic' || booking.bookingType === 'oneDay' || booking.packageType === 'one-day-picnic');
+      if (!isPicnicOnly) {
+        if (booking.roomId) blockedRoomIds.add(String(booking.roomId));
+        if (booking.roomIds && Array.isArray(booking.roomIds)) {
+          booking.roomIds.forEach(roomId => blockedRoomIds.add(String(roomId)));
+        }
+      }
+    });
+
+    conflictingDayUseBookings.forEach(booking => {
+      if (booking.roomId) blockedRoomIds.add(String(booking.roomId));
+      if (booking.roomIds && Array.isArray(booking.roomIds)) {
+        booking.roomIds.forEach(roomId => blockedRoomIds.add(String(roomId)));
+      }
+    });
+
+    const availableRooms = allRooms.filter(room => {
+      const idStr = String(room._id);
+      const numStr = String(room.roomNumber || room.number || '');
+      return !blockedRoomIds.has(idStr) && !blockedRoomIds.has(numStr) && room.status !== 'maintenance';
+    });
+
+    console.log('[Availability:OneDay] Available rooms:', availableRooms.length, '/', allRooms.length);
+
+    return {
+      availableRooms,
+      totalRooms: allRooms.length,
+      blockedRoomIds: Array.from(blockedRoomIds)
+    };
+  } catch (error) {
+    console.error('[Availability:OneDay] Error:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * Get detailed availability breakdown and human-friendly message.
+ */
+const getDetailedAvailabilityMessage = async (checkInDate, checkOutDate, packageType = 'couple') => {
+  try {
+    console.log('[Availability:Message] Building detailed message');
+    console.log('[Availability:Message] Package type:', packageType);
+
+    const allRooms = await getActiveRoomStructure();
+    const totalRooms = allRooms.length;
+    const formattedDate = new Date(checkInDate).toLocaleDateString('en-GB');
+
+    if (packageType === 'couple' || packageType === 'group' || packageType === 'overnight') {
+      console.log('[Availability:Message] Checking overnight');
+
+      const overnight = await module.exports.checkOvernightAvailability(checkInDate, checkOutDate);
+      const availableCount = overnight.availableRooms.length;
+      const bookedCount = overnight.bookedRoomIds.length;
+
+      if (availableCount === 0) {
+        // Check if one-day picnic is available as an alternative
+        const dayuse = await module.exports.checkOneDayPicknicAvailability(checkInDate, 'breakfast-to-dinner');
+        const dayuseAvailable = dayuse.availableRooms.length;
+
+        if (dayuseAvailable > 0) {
+          console.log('[Availability:Message] All rooms booked for overnight, offering one-day picnic');
+          return {
+            availableForOvernight: 0,
+            availableForDayuse: dayuseAvailable,
+            totalRooms,
+            bookedRooms: bookedCount,
+            isAvailable: false,
+            message: `❌ Sorry, all rooms are booked for overnight stay on ${formattedDate}.
+
+However, we might have availability for ONE-DAY PICNIC (9:00 AM - 6:30 PM or 9:00 AM - 9:30 PM).
+
+Would you like to book a one-day picnic instead? 🎉`,
+            alternativeOffering: 'one-day-picnic'
+          };
+        } else {
+          console.log('[Availability:Message] All rooms booked for BOTH overnight and one-day picnic');
+          return {
+            availableForOvernight: 0,
+            availableForDayuse: 0,
+            totalRooms,
+            bookedRooms: bookedCount,
+            isAvailable: false,
+            message: `❌ Sorry, all rooms are fully booked on ${formattedDate} for both overnight and one-day picnic.
+
+Please try a different date! 📅`,
+            alternativeOffering: null
+          };
+        }
+      } else if (availableCount <= 2) {
+        return {
+          availableForOvernight: availableCount,
+          totalRooms,
+          bookedRooms: bookedCount,
+          isAvailable: true,
+          message: `⚠️ Limited availability! Only ${availableCount} room(s) available for overnight stay on ${formattedDate}.
+
+Book now before it's fully booked! 🏨`
+        };
+      } else {
+        return {
+          availableForOvernight: availableCount,
+          totalRooms,
+          bookedRooms: bookedCount,
+          isAvailable: true,
+          message: `✅ We have ${availableCount} room(s) available for overnight stay on ${formattedDate}! 🎉`
+        };
+      }
+
+    } else if (packageType === 'one-day-picnic' || packageType === 'oneDay' || packageType === 'picnic' || packageType === 'dayuse') {
+      console.log('[Availability:Message] Checking one-day picnic');
+
+      const dayuse = await module.exports.checkOneDayPicknicAvailability(checkInDate, 'breakfast-to-dinner');
+      const availableCount = dayuse.availableRooms.length;
+      const bookedCount = dayuse.blockedRoomIds.length;
+
+      if (availableCount === 0) {
+        return {
+          availableForDayuse: 0,
+          totalRooms,
+          bookedRooms: bookedCount,
+          isAvailable: false,
+          message: `❌ Sorry, all rooms are booked for ${formattedDate}.
+
+Please try a different date! 📅`
+        };
+      } else {
+        return {
+          availableForDayuse: availableCount,
+          totalRooms,
+          bookedRooms: bookedCount,
+          isAvailable: true,
+          message: `✅ We have ${availableCount} room(s) available for one-day picnic on ${formattedDate}!`
+        };
+      }
+    }
+  } catch (error) {
+    console.error('[Availability:Message] Error:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * Get all rooms mapped with detailed booked/available status for overnight or dayuse.
+ */
+const getRoomsWithDetailedStatus = async (checkInDate, checkOutDate, packageType = 'couple') => {
+  try {
+    console.log('[Availability:Status] Getting detailed room status');
+    const allRooms = await getActiveRoomStructure();
+
+    if (packageType === 'couple' || packageType === 'group' || packageType === 'overnight') {
+      const overnight = await module.exports.checkOvernightAvailability(checkInDate, checkOutDate);
+
+      return allRooms.map(room => {
+        const idStr = String(room._id);
+        const numStr = String(room.roomNumber || room.number || '');
+        const isBooked = overnight.bookedRoomIds.includes(idStr) || overnight.bookedRoomIds.includes(numStr);
+        return {
+          ...room,
+          number: room.roomNumber || room.number || String(room._id),
+          status: isBooked ? 'booked' : 'available',
+          bookingType: 'overnight'
+        };
+      });
+
+    } else {
+      const dayuse = await module.exports.checkOneDayPicknicAvailability(checkInDate);
+
+      return allRooms.map(room => {
+        const idStr = String(room._id);
+        const numStr = String(room.roomNumber || room.number || '');
+        const isBlocked = dayuse.blockedRoomIds.includes(idStr) || dayuse.blockedRoomIds.includes(numStr);
+        return {
+          ...room,
+          number: room.roomNumber || room.number || String(room._id),
+          status: isBlocked ? 'booked' : 'available',
+          bookingType: 'dayuse'
+        };
+      });
+    }
+  } catch (error) {
+    console.error('[Availability:Status] Error:', error.message);
+    throw error;
+  }
+};
+
 module.exports = {
   checkOverlap,
   getCapacityAvailability,
@@ -738,5 +1055,10 @@ module.exports = {
   rescheduleRoomBooking,
   checkMultipleRoomsAvailable,
   getRoomsWithReservationStatus,
-  getAvailabilityMessage
+  getAvailabilityMessage,
+  checkOvernightAvailability,
+  checkOneDayPicknicAvailability,
+  getDetailedAvailabilityMessage,
+  getRoomsWithDetailedStatus
 };
+

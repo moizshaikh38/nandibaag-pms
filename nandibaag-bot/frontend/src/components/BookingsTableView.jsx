@@ -53,6 +53,19 @@ const BookingsTableView = ({ bookings = [] }) => {
       const pending = Math.max(0, totalAmount - advance);
       const bookedByName = booking.bookedBy?.name || booking.bookedBy || 'Staff';
       const pkg = booking.packageType || booking.bookingType || 'couple';
+      const meal = booking.mealOption || (pkg === 'oneDay' || pkg === 'picnic' || pkg === 'one-day-picnic' ? 'B->D' : null);
+
+      const formatPackageType = (p, m) => {
+        if (p === 'one-day-picnic' || p === 'oneDay' || p === 'picnic' || p === 'dayuse') {
+          const mealText = (m === 'breakfast-to-tea' || m === 'B->T') ? 'B→T' : (m === 'B->L' ? 'B→L' : 'B→D');
+          return `🎉 One-Day (${mealText})`;
+        } else if (p === 'couple') {
+          return '👫 Couple';
+        } else if (p === 'group') {
+          return '👥 Group';
+        }
+        return p || '👫 Couple';
+      };
 
       const roomsDisplay = (booking.roomIds && booking.roomIds.length > 0)
         ? booking.roomIds.join(', ')
@@ -77,8 +90,8 @@ const BookingsTableView = ({ bookings = [] }) => {
         bookedByName,
         roomsDisplay,
         roomCount,
-        packageDisplay: pkg === 'oneDay' ? 'One Day' : pkg === 'couple' ? 'Couple' : 'Group',
-        isOneDay: pkg === 'oneDay' ? '✓' : '',
+        packageDisplay: formatPackageType(pkg, meal),
+        isOneDay: (pkg === 'oneDay' || pkg === 'picnic' || pkg === 'one-day-picnic') ? '✓' : '',
         isGroup: pkg === 'group' ? '✓' : '',
         isCouple: pkg === 'couple' ? '✓' : ''
       };

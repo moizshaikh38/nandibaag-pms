@@ -5,7 +5,14 @@ const { scoreMessage } = require('./leadScoring');
 const { scheduleFollowUps, cancelPendingFollowUps, containsOptOutPhrases, markChatAsOptedOut } = require('./followUpService');
 const whatsappService = require('./whatsappService');
 const channelManager = require('./channelManager');
-const { getCapacityAvailability, suggestRoomCombinations } = require('./availabilityService');
+const {
+  getCapacityAvailability,
+  suggestRoomCombinations,
+  checkOvernightAvailability,
+  checkOneDayPicknicAvailability,
+  getDetailedAvailabilityMessage,
+  getRoomsWithDetailedStatus
+} = require('./availabilityService');
 const { formatDateTableForPrompt } = require('./dateHelper');
 const crypto = require('crypto');
 const { sanitizeBookingDraft } = require('../utils/sanitizeBookingDraft');
@@ -718,47 +725,77 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
             checkOutDate.setDate(checkOutDate.getDate() + nights);
             const guestCount = (draft.adults && draft.adults > 0) ? (draft.adults + (draft.kids?.length || 0)) : 1;
 
-            const capacityResult = await getCapacityAvailability(checkInDate, checkOutDate, guestCount);
-            if (!capacityResult.available || capacityResult.availableCount === 0) {
-              console.log('[MessageHandler:AVAILABILITY] ❌ NO ROOMS AVAILABLE for date:', draft.date);
-              console.log('[MessageHandler:AVAILABILITY] Result:', capacityResult);
-              addSystemNote(`[SYSTEM NOTE — MANDATORY: ⛔ ALL ROOMS ARE FULLY BOOKED for ${draft.date}. There is ZERO availability on these dates. You MUST tell the customer politely: "Maaf kijiye, ${draft.date} ko humari saari cottages fully booked hain 😔 Kya aap doosri dates try karna chahenge?" DO NOT say rooms are available. DO NOT show pricing. DO NOT proceed with booking. Only suggest trying different dates.]`);
-              chat.bookingDraft.availabilityChecked = true;
-              chat.bookingDraft.availabilityConfirmed = false;
-            } else if (draft.adults && draft.adults > 0) {
-              console.log('[MessageHandler:AVAILABILITY] ✅ ROOMS AVAILABLE:', capacityResult.availableCount);
-              
-              // Pass mealOption and mealRate for Day Picnic if set
-              const options = {
-                mealOption: draft.mealOption,
-                mealRate: draft.mealRate
-              };
-              const pricingResult = calculatePricing(checkInDate, checkOutDate, draft.adults || 2, draft.kids || [], draft.bookingType || 'auto', options);
+            const isDayPicnic = draft.bookingType === 'picnic' || draft.bookingType === 'dayuse' || draft.packageType === 'one-day-picnic' || /\b(picnic|day\s*use|dayuse|one\s*day|day\s*package)\b/i.test(msgLower);
 
-              const isKidsSpecified = extracted.kidsSpecified || chat.bookingDraft.kidsSpecified || (draft.kids && draft.kids.length > 0);
-              if (draft.bookingType === 'picnic') {
-                if (!draft.mealOption) {
-                  addSystemNote(`[SYSTEM NOTE: Customer interested in DAY PICNIC. Offer two meal options:\n1. Breakfast to Dinner (₹1,250 weekday / ₹1,500 weekend)\n2. Breakfast to High Tea (₹1,000 weekday / ₹1,250 weekend)\nAsk which option they prefer!]`);
-                } else {
-                  addSystemNote(`[SYSTEM NOTE: Day Picnic pricing calculated.\n${pricingResult.formatted}]`);
-                }
-              } else if (!isKidsSpecified) {
-                console.log('[BookingFlow] Kids status NOT specified yet. Asking customer about kids FIRST before displaying pricing breakdown.');
-                chat.bookingDraft.askingAboutKids = true;
-                addSystemNote(`[SYSTEM NOTE: Dates & adults count confirmed (${draft.date}, ${draft.adults} adults). CRITICAL INSTRUCTION: Ask the customer about kids FIRST before showing pricing breakdown:\n"Kya koi kids aa rahe hain? Agar yes, age bataiye 😊"\nDO NOT display the pricing breakdown until customer responds to kids question!]`);
+            if (isDayPicnic) {
+              console.log('[MessageHandler:AVAILABILITY] Checking ONE-DAY PICNIC availability for:', draft.date);
+              const dayuse = await checkOneDayPicknicAvailability(checkInDate, draft.mealOption || 'breakfast-to-dinner');
+              const availableCount = dayuse.availableRooms.length;
+
+              if (availableCount === 0) {
+                console.log('[MessageHandler:AVAILABILITY] ❌ NO ROOMS AVAILABLE for one-day picnic on:', draft.date);
+                addSystemNote(`[SYSTEM NOTE — MANDATORY: ⛔ ALL ROOMS ARE FULLY BOOKED for one-day picnic on ${draft.date}. There is ZERO availability on these dates. You MUST tell the customer politely: "Maaf kijiye, ${draft.date} ko one-day picnic ke liye saari cottages fully booked hain 😔 Kya aap doosri dates try karna chahenge?" DO NOT say rooms are available. DO NOT show pricing. DO NOT proceed with booking. Only suggest trying different dates.]`);
+                chat.bookingDraft.availabilityChecked = true;
+                chat.bookingDraft.availabilityConfirmed = false;
               } else {
-                console.log('[BookingFlow] Kids status confirmed. Showing final pricing breakdown.');
-                chat.bookingDraft.askingAboutKids = false;
-                addSystemNote(`[SYSTEM NOTE: Availability & kids status confirmed (${draft.kids?.length || 0} kids).\nPRICING BREAKDOWN:\n${pricingResult.formatted}]`);
-              }
+                console.log('[MessageHandler:AVAILABILITY] ✅ ONE-DAY PICNIC AVAILABLE:', availableCount);
+                const options = {
+                  mealOption: draft.mealOption,
+                  mealRate: draft.mealRate
+                };
+                const pricingResult = calculatePricing(checkInDate, checkOutDate, draft.adults || 2, draft.kids || [], 'picnic', options);
 
-              chat.bookingDraft.availabilityChecked = true;
-              chat.bookingDraft.availabilityConfirmed = true;
+                if (!draft.mealOption) {
+                  addSystemNote(`[SYSTEM NOTE: ONE-DAY PICNIC is AVAILABLE on ${draft.date} (${availableCount} cottage(s) available). Offer two meal options:\n1. Breakfast to Dinner (₹1,250 weekday / ₹1,500 weekend)\n2. Breakfast to High Tea (₹1,000 weekday / ₹1,250 weekend)\nAsk which option they prefer!]`);
+                } else {
+                  addSystemNote(`[SYSTEM NOTE: ONE-DAY PICNIC pricing calculated (${availableCount} cottage(s) available).\n${pricingResult.formatted}]`);
+                }
+                chat.bookingDraft.availabilityChecked = true;
+                chat.bookingDraft.availabilityConfirmed = true;
+              }
             } else {
-              // Date is available, but guest count not given yet
-              console.log('[MessageHandler:AVAILABILITY] Date is available, waiting for guest count:', draft.date);
-              chat.bookingDraft.availabilityChecked = true;
-              chat.bookingDraft.availabilityConfirmed = true;
+              // Overnight booking (Couple / Group / Default)
+              console.log('[MessageHandler:AVAILABILITY] Checking OVERNIGHT availability for:', draft.date, 'to', checkOutDate.toISOString().split('T')[0]);
+              const overnight = await checkOvernightAvailability(checkInDate, checkOutDate);
+              const availableCount = overnight.availableRooms.length;
+
+              if (availableCount === 0) {
+                console.log('[MessageHandler:AVAILABILITY] ❌ ALL OVERNIGHT ROOMS BOOKED for:', draft.date);
+                // Check if one-day picnic is available on this date as alternative
+                const dayuse = await checkOneDayPicknicAvailability(checkInDate, 'breakfast-to-dinner');
+                const dayuseAvailable = dayuse.availableRooms.length;
+
+                if (dayuseAvailable > 0) {
+                  console.log('[MessageHandler:AVAILABILITY] Offering ONE-DAY PICNIC alternative (available:', dayuseAvailable, ')');
+                  addSystemNote(`[SYSTEM NOTE — MANDATORY: ⛔ ALL ROOMS ARE FULLY BOOKED FOR OVERNIGHT STAY on ${draft.date}. However, ONE-DAY PICNIC IS AVAILABLE (9:00 AM - 6:30 PM or 9:30 PM, ${dayuseAvailable} cottage(s) available). You MUST tell the customer: "Maaf kijiye, ${draft.date} ko overnight stay ke liye all cottages fully booked hain 😔 Lekin hamare paas ONE-DAY PICNIC (9:00 AM - 6:30 PM ya 9:30 PM) ke liye availability hai! Kya aap one-day picnic book karna chahenge? 🎉" DO NOT say overnight rooms are available. DO NOT calculate overnight pricing.]`);
+                } else {
+                  console.log('[MessageHandler:AVAILABILITY] ⛔ BOTH OVERNIGHT & PICNIC FULL on:', draft.date);
+                  addSystemNote(`[SYSTEM NOTE — MANDATORY: ⛔ ALL ROOMS ARE FULLY BOOKED for both overnight stay and one-day picnic on ${draft.date}. There is ZERO availability on these dates. You MUST tell the customer politely: "Maaf kijiye, ${draft.date} ko humari saari cottages fully booked hain 😔 Kya aap doosri dates try karna chahenge?" DO NOT say rooms are available. DO NOT show pricing. DO NOT proceed with booking. Only suggest trying different dates.]`);
+                }
+                chat.bookingDraft.availabilityChecked = true;
+                chat.bookingDraft.availabilityConfirmed = false;
+              } else if (draft.adults && draft.adults > 0) {
+                console.log('[MessageHandler:AVAILABILITY] ✅ OVERNIGHT ROOMS AVAILABLE:', availableCount);
+                const pricingResult = calculatePricing(checkInDate, checkOutDate, draft.adults || 2, draft.kids || [], draft.bookingType || 'auto');
+
+                const isKidsSpecified = extracted.kidsSpecified || chat.bookingDraft.kidsSpecified || (draft.kids && draft.kids.length > 0);
+                if (!isKidsSpecified) {
+                  console.log('[BookingFlow] Kids status NOT specified yet. Asking customer about kids FIRST before displaying pricing breakdown.');
+                  chat.bookingDraft.askingAboutKids = true;
+                  addSystemNote(`[SYSTEM NOTE: Dates & adults count confirmed (${draft.date}, ${draft.adults} adults, ${availableCount} cottage(s) available). CRITICAL INSTRUCTION: Ask the customer about kids FIRST before showing pricing breakdown:\n"Kya koi kids aa rahe hain? Agar yes, age bataiye 😊"\nDO NOT display the pricing breakdown until customer responds to kids question!]`);
+                } else {
+                  console.log('[BookingFlow] Kids status confirmed. Showing final pricing breakdown.');
+                  chat.bookingDraft.askingAboutKids = false;
+                  addSystemNote(`[SYSTEM NOTE: Overnight availability (${availableCount} cottage(s) available) & kids status confirmed (${draft.kids?.length || 0} kids).\nPRICING BREAKDOWN:\n${pricingResult.formatted}]`);
+                }
+
+                chat.bookingDraft.availabilityChecked = true;
+                chat.bookingDraft.availabilityConfirmed = true;
+              } else {
+                console.log('[MessageHandler:AVAILABILITY] Overnight date is available, waiting for guest count:', draft.date);
+                chat.bookingDraft.availabilityChecked = true;
+                chat.bookingDraft.availabilityConfirmed = true;
+              }
             }
             try { await chat.save(); } catch (_) {}
           }

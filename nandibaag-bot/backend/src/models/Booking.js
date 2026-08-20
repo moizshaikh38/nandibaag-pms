@@ -20,17 +20,17 @@ const bookingSchema = new mongoose.Schema({
   },
   bookingType: {
     type: String,
-    enum: ['couple', 'group', 'picnic', 'oneDay'],
-    required: true
+    enum: ['overnight', 'dayuse', 'couple', 'group', 'picnic', 'oneDay'],
+    default: 'overnight'
   },
   packageType: {
     type: String,
-    enum: ['couple', 'group', 'oneDay', 'picnic'],
+    enum: ['couple', 'group', 'one-day-picnic', 'oneDay', 'picnic'],
     required: false
   },
   mealOption: {
     type: String,
-    enum: ['B->D', 'B->T', null],
+    enum: ['breakfast-to-tea', 'breakfast-to-dinner', 'B->D', 'B->T', 'B->L', 'none', null],
     required: false,
     default: null
   },

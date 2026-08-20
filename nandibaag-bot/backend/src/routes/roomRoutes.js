@@ -182,4 +182,55 @@ router.get('/availability-realtime', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/rooms/availability-detailed
+ * Returns detailed availability message & room breakdown for overnight vs one-day picnic.
+ */
+router.get('/availability-detailed', async (req, res) => {
+  try {
+    const { checkInDate, checkOutDate, packageType } = req.query;
+
+    console.log('[Rooms:AvailabilityDetailed] Request');
+    console.log('[Rooms:AvailabilityDetailed] Package:', packageType);
+
+    if (!checkInDate || !packageType) {
+      return res.status(400).json({
+        success: false,
+        error: 'checkInDate and packageType required'
+      });
+    }
+
+    const {
+      getDetailedAvailabilityMessage,
+      getRoomsWithDetailedStatus
+    } = require('../services/availabilityService');
+
+    const message = await getDetailedAvailabilityMessage(
+      checkInDate,
+      checkOutDate,
+      packageType
+    );
+
+    const rooms = await getRoomsWithDetailedStatus(
+      checkInDate,
+      checkOutDate,
+      packageType
+    );
+
+    res.json({
+      success: true,
+      packageType,
+      availabilityMessage: message,
+      rooms,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[Rooms:AvailabilityDetailed] Error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;
