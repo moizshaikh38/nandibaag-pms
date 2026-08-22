@@ -112,6 +112,26 @@ const bookingSchema = new mongoose.Schema({
     },
     sentAt: Date
   },
+  smsSent: {
+    type: Boolean,
+    default: false
+  },
+  smsMessageId: {
+    type: String,
+    required: false
+  },
+  smsPhoneNumber: {
+    type: String,
+    required: false
+  },
+  smsSentAt: {
+    type: Date,
+    required: false
+  },
+  smsError: {
+    type: String,
+    required: false
+  },
   paymentStatus: {
     type: String,
     enum: ['unpaid', 'partially_paid', 'paid'],

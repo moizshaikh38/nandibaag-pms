@@ -331,142 +331,20 @@ router.post('/manual-booking', async (req, res) => {
       console.error('[Socket:Broadcast] Error:', ioError.message);
     }
 
-    // ─── AUTO-SEND CONFIRMATION MESSAGES ────────────────────────────
-    // Sends formatted booking confirmation to Customer (WhatsApp) and Staff Group
-    let customerMsgSent = false;
-    let staffGroupSent = false;
-
-    try {
-      const {
-        formatBookingMessageForCustomer,
-        formatBookingMessageForStaffGroup
-      } = require('../utils/bookingMessageFormatter');
-      const { sendMessageViaChannel } = require('../services/channelManager');
-      const whatsappService = require('../services/whatsappService');
-      const { Chat } = require('../models');
-
-      console.log('[Booking:MSG] ══════════════════════════════════════════');
-      console.log('[Booking:MSG] Preparing to send confirmation messages');
-      console.log('[Booking:MSG] Customer phone:', booking.customerPhone);
-      console.log('[Booking:MSG] Booking ID:', booking._id);
-
-      const customerMessage = formatBookingMessageForCustomer(booking);
-      const staffGroupMessage = formatBookingMessageForStaffGroup(booking);
-
-      console.log('[Booking:MSG] ✅ Messages formatted successfully');
-      console.log('[Booking:MSG] Customer message length:', customerMessage.length);
-      console.log('[Booking:MSG] Customer message preview:', customerMessage.substring(0, 150));
-
-      const activeSessionId = sessionId || 'resort_primary';
-
-      // Normalize recipient phone number for WhatsApp
-      let cleanCustomerPhone = String(booking.customerPhone || '').replace(/[^\d]/g, '');
-      if (cleanCustomerPhone.length === 10) cleanCustomerPhone = '91' + cleanCustomerPhone;
-
-      // ─── SEND TO CUSTOMER ──────────────────────────────────────
-      console.log('[Booking:MSG] ─── Sending to CUSTOMER ───');
-      
-      // Send to customer via available WhatsApp channels (Baileys and Fast2SMS WhatsApp)
-      try {
-        const sent = await sendMessageViaChannel(cleanCustomerPhone, customerMessage, 'whatsapp-web', activeSessionId);
-        if (sent) {
-          customerMsgSent = true;
-          console.log('[Booking:MSG] ✅ WhatsApp booking confirmation sent to customer:', cleanCustomerPhone);
-        } else {
-          console.log('[Booking:MSG] ⚠️ WhatsApp booking confirmation queued / pending for customer:', cleanCustomerPhone);
-        }
-      } catch (waError) {
-        console.error('[Booking:MSG] ❌ WhatsApp send error for customer:', waError.message);
-      }
-
-      // Record confirmation message in Chat history for dashboard visibility
-      try {
-        let chat = await Chat.findOne({
-          $or: [
-            { customerPhone: cleanCustomerPhone },
-            { customerPhone: booking.customerPhone },
-            { customerPhone: cleanCustomerPhone.slice(-10) }
-          ]
-        });
-
-        if (!chat) {
-          chat = new Chat({
-            customerPhone: cleanCustomerPhone,
-            customerName: booking.customerName,
-            channel: 'whatsapp-web',
-            bookingStage: 'completed',
-            messages: []
-          });
-        }
-
-        chat.messages.push({
-          sender: 'bot',
-          text: customerMessage,
-          timestamp: new Date(),
-          messageType: 'text',
-          deliveryStatus: customerMsgSent ? 'sent' : 'pending'
-        });
-        chat.bookingStage = 'completed';
-        chat.lastMessageAt = new Date();
-        await chat.save();
-
-        const io = req.app?.get?.('io') || (require('../sockets').getIO ? require('../sockets').getIO() : null);
-        if (io) {
-          io.emit('chat:updated', chat);
-          io.emit('chat:new_message', {
-            chatId: chat._id,
-            customerPhone: cleanCustomerPhone,
-            message: customerMessage,
-            sender: 'bot'
-          });
-        }
-      } catch (chatRecordErr) {
-        console.warn('[Booking:MSG] Could not record confirmation message in Chat model:', chatRecordErr.message);
-      }
-
-      // ─── SEND TO STAFF GROUP ───────────────────────────────────
-      const staffGroupNumber = process.env.STAFF_GROUP_NUMBER;
-      console.log('[Booking:MSG] ─── Sending to STAFF GROUP ───');
-      console.log('[Booking:MSG] Staff group number:', staffGroupNumber || 'NOT SET in .env');
-
-      if (staffGroupNumber) {
-        let cleanGroupNumber = String(staffGroupNumber).trim();
-        try {
-          const groupSent = await sendMessageViaChannel(cleanGroupNumber, staffGroupMessage, 'whatsapp-web', activeSessionId);
-          if (groupSent) {
-            staffGroupSent = true;
-            console.log('[Booking:MSG] ✅ Sent to staff group via WhatsApp');
-          } else {
-            console.log('[Booking:MSG] ⚠️ Staff group message delivery failed / pending');
-          }
-        } catch (groupError) {
-          console.error('[Booking:MSG] ❌ Failed to send staff group message:', groupError.message);
-        }
-      } else {
-        console.warn('[Booking:MSG] ⚠️ STAFF_GROUP_NUMBER not set in .env — skipping staff notification');
-      }
-
-      // Track message status on booking
-      booking.messagesSent = {
-        customerSMS: customerMsgSent,
-        staffGroup: staffGroupSent,
-        sentAt: new Date()
-      };
-      try { await booking.save(); } catch (_) {}
-
-      console.log('[Booking:MSG] ══════════════════════════════════════════');
-      console.log('[Booking:MSG] RESULT: Customer:', customerMsgSent ? '✅ SENT' : '⚠️ PENDING/QUEUED', '| Staff:', staffGroupSent ? '✅ SENT' : '⚠️ PENDING/QUEUED');
-
-    } catch (messageError) {
-      console.error('[Booking:MSG] ❌ FATAL: Error in formatting/sending block:', messageError.message);
-      console.error('[Booking:MSG] Stack:', messageError.stack);
-    }
+    // Initialize message status on booking
+    booking.smsSent = false;
+    booking.smsError = null;
+    booking.messagesSent = {
+      customerSMS: false,
+      staffGroup: false
+    };
+    try { await booking.save(); } catch (_) {}
 
     res.json({
       success: true,
       booking,
-      messagesSent: { customerSMS: customerMsgSent, staffGroup: staffGroupSent },
-      message: customerMsgSent ? 'Booking created and confirmation sent' : 'Booking created (confirmation message queued/pending)'
+      messagesSent: { customerSMS: false, staffGroup: false },
+      message: 'Booking created. SMS / confirmation not sent automatically. Use "Send SMS" button to send confirmation.'
     });
     
   } catch (error) {
@@ -474,5 +352,161 @@ router.post('/manual-booking', async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
+/**
+ * POST /api/bookings/send-confirmation-sms/:bookingId
+ * POST /api/bookings/:bookingId/send-confirmation
+ * Explicit manual trigger by staff to send confirmation message (WhatsApp / SMS)
+ */
+const handleSendConfirmation = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    console.log('[Booking:SendSMS] Explicit send confirmation requested for booking:', bookingId);
+
+    const booking = await Booking.findById(bookingId);
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        error: 'Booking not found'
+      });
+    }
+
+    console.log('[Booking:SendSMS] Booking found:', booking.customerName, 'Phone:', booking.customerPhone);
+
+    const {
+      formatBookingMessageForCustomer,
+      formatBookingMessageForStaffGroup
+    } = require('../utils/bookingMessageFormatter');
+    const { sendMessageViaChannel } = require('../services/channelManager');
+    const { Chat } = require('../models');
+
+    const customerMessage = formatBookingMessageForCustomer(booking);
+    const staffGroupMessage = formatBookingMessageForStaffGroup(booking);
+
+    // Normalize recipient phone number for WhatsApp
+    let cleanCustomerPhone = String(booking.customerPhone || '').replace(/[^\d]/g, '');
+    if (cleanCustomerPhone.length === 10) cleanCustomerPhone = '91' + cleanCustomerPhone;
+
+    const activeSessionId = 'resort_primary';
+    let customerMsgSent = false;
+    let staffGroupSent = false;
+    let sendError = null;
+
+    // ─── 1. SEND TO CUSTOMER ───
+    console.log('[Booking:SendSMS] ─── Sending to CUSTOMER:', cleanCustomerPhone);
+    try {
+      const sent = await sendMessageViaChannel(cleanCustomerPhone, customerMessage, 'whatsapp-web', activeSessionId);
+      if (sent) {
+        customerMsgSent = true;
+        console.log('[Booking:SendSMS] ✅ WhatsApp/SMS confirmation sent to customer:', cleanCustomerPhone);
+      } else {
+        console.log('[Booking:SendSMS] ⚠️ WhatsApp/SMS confirmation queued / pending for customer:', cleanCustomerPhone);
+      }
+    } catch (waError) {
+      console.error('[Booking:SendSMS] ❌ Send error for customer:', waError.message);
+      sendError = waError.message;
+    }
+
+    // ─── 2. RECORD IN CHAT HISTORY ───
+    try {
+      let chat = await Chat.findOne({
+        $or: [
+          { customerPhone: cleanCustomerPhone },
+          { customerPhone: booking.customerPhone },
+          { customerPhone: cleanCustomerPhone.slice(-10) }
+        ]
+      });
+
+      if (!chat) {
+        chat = new Chat({
+          customerPhone: cleanCustomerPhone,
+          customerName: booking.customerName,
+          channel: 'whatsapp-web',
+          bookingStage: 'completed',
+          messages: []
+        });
+      }
+
+      chat.messages.push({
+        sender: 'bot',
+        text: customerMessage,
+        timestamp: new Date(),
+        messageType: 'text',
+        deliveryStatus: customerMsgSent ? 'sent' : 'pending'
+      });
+      chat.bookingStage = 'completed';
+      chat.lastMessageAt = new Date();
+      await chat.save();
+
+      const io = req.app?.get?.('io') || (require('../sockets').getIO ? require('../sockets').getIO() : null);
+      if (io) {
+        io.emit('chat:updated', chat);
+        io.emit('chat:new_message', {
+          chatId: chat._id,
+          customerPhone: cleanCustomerPhone,
+          message: customerMessage,
+          sender: 'bot'
+        });
+      }
+    } catch (chatRecordErr) {
+      console.warn('[Booking:SendSMS] Could not record confirmation message in Chat model:', chatRecordErr.message);
+    }
+
+    // ─── 3. SEND TO STAFF GROUP ───
+    const staffGroupNumber = process.env.STAFF_GROUP_NUMBER;
+    if (staffGroupNumber) {
+      let cleanGroupNumber = String(staffGroupNumber).trim();
+      try {
+        const groupSent = await sendMessageViaChannel(cleanGroupNumber, staffGroupMessage, 'whatsapp-web', activeSessionId);
+        if (groupSent) {
+          staffGroupSent = true;
+          console.log('[Booking:SendSMS] ✅ Sent to staff group via WhatsApp');
+        }
+      } catch (groupError) {
+        console.error('[Booking:SendSMS] ❌ Failed to send staff group message:', groupError.message);
+      }
+    }
+
+    // ─── 4. UPDATE BOOKING MODEL ───
+    booking.smsSent = customerMsgSent;
+    booking.smsPhoneNumber = cleanCustomerPhone;
+    booking.smsSentAt = new Date();
+    booking.smsMessageId = customerMsgSent ? `msg_${Date.now()}` : '';
+    booking.smsError = customerMsgSent ? null : (sendError || 'Pending channel delivery / queued');
+    booking.messagesSent = {
+      customerSMS: customerMsgSent,
+      staffGroup: staffGroupSent,
+      sentAt: new Date()
+    };
+    await booking.save();
+
+    console.log('[Booking:SendSMS] ✅ Booking updated with SMS status. Sent:', customerMsgSent);
+
+    res.json({
+      success: true,
+      message: customerMsgSent ? 'Confirmation message sent successfully!' : 'Confirmation message queued for delivery.',
+      booking,
+      sms: {
+        sent: customerMsgSent,
+        messageId: booking.smsMessageId,
+        phone: cleanCustomerPhone,
+        sentAt: booking.smsSentAt,
+        error: booking.smsError
+      }
+    });
+
+  } catch (error) {
+    console.error('[Booking:SendSMS] Critical error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+};
+
+router.post('/send-confirmation-sms/:bookingId', handleSendConfirmation);
+router.post('/:bookingId/send-confirmation', handleSendConfirmation);
+router.post('/retry-sms/:bookingId', handleSendConfirmation);
+router.post('/resend-sms/:bookingId', handleSendConfirmation);
 
 module.exports = router;

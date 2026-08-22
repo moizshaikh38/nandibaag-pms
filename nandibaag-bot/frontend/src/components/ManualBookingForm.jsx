@@ -19,7 +19,10 @@ import {
   CheckCircle2,
   Image as ImageIcon,
   Clock,
-  Lock
+  Lock,
+  Send,
+  X,
+  MessageSquare
 } from 'lucide-react';
 import '../styles/ManualBookingForm.css';
 
@@ -55,6 +58,8 @@ const ManualBookingForm = () => {
   const [showAddStaff, setShowAddStaff] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [createdBooking, setCreatedBooking] = useState(null);
+  const [sendingSms, setSendingSms] = useState(false);
 
   // Group rooms by Series Name
   const roomsBySeries = useMemo(() => {
@@ -340,7 +345,7 @@ const ManualBookingForm = () => {
     }
 
     try {
-      await api.post('/bookings/manual-booking', {
+      const response = await api.post('/bookings/manual-booking', {
         ...formData,
         roomIds: selectedRooms,
         roomId: selectedRooms.join(', '),
@@ -349,38 +354,64 @@ const ManualBookingForm = () => {
         sessionId
       });
 
+      const newBooking = response.data.booking;
       toast.success('✅ Booking created & synced to PMS!');
-      setMessage('✅ Booking created successfully!');
+      setMessage('✅ Booking created successfully! You can send confirmation below.');
+      setCreatedBooking(newBooking);
 
-      setTimeout(() => {
-        setSelectedRooms([]);
-        setTotalCapacity(0);
-        setFormData({
-          customerName: '',
-          customerPhone: '+91',
-          checkInDate: new Date().toISOString().split('T')[0],
-          checkOutDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
-          packageType: 'couple',
-          mealOption: 'B->D',
-          guestComposition: { adults: 2, children: 0 },
-          bookedBy: { name: '', staffId: '' },
-          staffNames: staffOptions,
-          roomId: '',
-          guestIdProofType: 'aadhaar',
-          guestIdProofPhoto: null,
-          totalAmount: 3500,
-          advancePayment: 0,
-          remainingPayment: 3500,
-          isFullPaid: false,
-          notes: ''
-        });
-        setMessage('');
-      }, 1200);
+      // Reset form fields
+      setSelectedRooms([]);
+      setTotalCapacity(0);
+      setFormData({
+        customerName: '',
+        customerPhone: '+91',
+        checkInDate: new Date().toISOString().split('T')[0],
+        checkOutDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+        packageType: 'couple',
+        mealOption: 'B->D',
+        guestComposition: { adults: 2, children: 0 },
+        bookedBy: { name: '', staffId: '' },
+        staffNames: staffOptions,
+        roomId: '',
+        guestIdProofType: 'aadhaar',
+        guestIdProofPhoto: null,
+        totalAmount: 3500,
+        advancePayment: 0,
+        remainingPayment: 3500,
+        isFullPaid: false,
+        notes: ''
+      });
+
+      window.dispatchEvent(new Event('refresh_bookings'));
     } catch (error) {
       toast.error(error.response?.data?.error || 'Error creating booking');
       setMessage(error.response?.data?.error || 'Error creating booking');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSendSMSNow = async (bookingId) => {
+    if (!bookingId) return;
+    try {
+      setSendingSms(true);
+      toast.loading('Sending WhatsApp/SMS confirmation...', { id: 'sms-now' });
+      const res = await api.post(`/bookings/send-confirmation-sms/${bookingId}`);
+      if (res.data.success) {
+        toast.success('✅ Confirmation message sent successfully!', { id: 'sms-now' });
+        setCreatedBooking(prev => prev ? { ...prev, smsSent: true } : null);
+        window.dispatchEvent(new Event('refresh_bookings'));
+        setTimeout(() => {
+          setCreatedBooking(null);
+        }, 1800);
+      } else {
+        toast.error(`❌ Failed: ${res.data.error || 'Could not send message'}`, { id: 'sms-now' });
+      }
+    } catch (err) {
+      console.error('[Form:SendSMS] Error:', err);
+      toast.error(err.response?.data?.error || err.message || 'Failed to send confirmation', { id: 'sms-now' });
+    } finally {
+      setSendingSms(false);
     }
   };
 
@@ -921,6 +952,79 @@ const ManualBookingForm = () => {
         </div>
 
       </form>
+
+      {/* POST-BOOKING MODAL: SEND CONFIRMATION SMS OPTION */}
+      {createdBooking && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-4 border border-emerald-300 relative text-slate-800">
+            <button
+              type="button"
+              onClick={() => setCreatedBooking(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition-colors"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 shadow-sm border border-emerald-200">
+                <CheckCircle2 size={24} />
+              </div>
+              <div>
+                <h3 className="font-display font-extrabold text-base sm:text-lg text-slate-900 leading-tight">
+                  Reservation Created!
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  Synced to PMS • ID: {String(createdBooking._id).slice(-8)}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-slate-50 rounded-xl space-y-1.5 text-xs text-slate-700 border border-slate-200">
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Guest:</span>
+                <span className="font-bold text-slate-900">{createdBooking.customerName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Phone:</span>
+                <span className="font-bold text-slate-900">{createdBooking.customerPhone}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Check-in:</span>
+                <span className="font-bold text-emerald-800">{createdBooking.date || createdBooking.checkInDate}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Rooms:</span>
+                <span className="font-bold text-slate-900">{createdBooking.roomId || (createdBooking.roomIds?.join(', ')) || 'Assigned'}</span>
+              </div>
+            </div>
+
+            <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-[11px] flex items-center gap-2">
+              <MessageSquare size={14} className="text-amber-600 shrink-0" />
+              <span>Confirmation SMS / WhatsApp has <strong>not</strong> been sent automatically.</span>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => handleSendSMSNow(createdBooking._id)}
+                disabled={sendingSms}
+                className="w-full py-2.5 px-4 bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-[0.99] text-white font-extrabold rounded-xl text-xs sm:text-sm transition-all flex items-center justify-center gap-2 shadow-md disabled:opacity-50"
+              >
+                <Send size={15} />
+                <span>{sendingSms ? 'Sending Confirmation...' : '📱 Send Confirmation Message Now'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCreatedBooking(null)}
+                className="w-full py-2 px-4 bg-slate-100 hover:bg-slate-200 active:scale-[0.99] text-slate-700 font-bold rounded-xl text-xs transition-colors text-center"
+              >
+                Done (Send Later from Dashboard)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

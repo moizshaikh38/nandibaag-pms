@@ -154,7 +154,27 @@ export default function BookingsPage() {
     }
   };
 
-  useEffect(() => { fetchBookings(); }, [filters.status, filters.date]);
+  useEffect(() => { 
+    fetchBookings(); 
+    const handleRefresh = () => fetchBookings();
+    window.addEventListener('refresh_bookings', handleRefresh);
+    return () => window.removeEventListener('refresh_bookings', handleRefresh);
+  }, [filters.status, filters.date]);
+
+  const handleSendSMS = async (bookingId, customerName) => {
+    try {
+      toast.loading(`Sending confirmation to ${customerName}...`, { id: `card-sms-${bookingId}` });
+      const res = await api.post(`/bookings/send-confirmation-sms/${bookingId}`);
+      if (res.data.success) {
+        toast.success(`✅ Confirmation sent to ${customerName}!`, { id: `card-sms-${bookingId}` });
+        fetchBookings();
+      } else {
+        toast.error(`❌ Failed: ${res.data.error || 'Could not send message'}`, { id: `card-sms-${bookingId}` });
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || err.message || 'Error sending confirmation', { id: `card-sms-${bookingId}` });
+    }
+  };
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -563,7 +583,7 @@ export default function BookingsPage() {
           <p className="text-xs font-semibold text-slate-600">Loading guest bookings...</p>
         </div>
       ) : viewMode === 'table' ? (
-        <BookingsTableView bookings={bookings} />
+        <BookingsTableView bookings={bookings} onRefresh={fetchBookings} />
       ) : bookings.length === 0 ? (
         <div className="py-16 text-center space-y-3 glass-card rounded-2xl">
           <BookOpen size={36} className="text-slate-300 mx-auto" />
@@ -595,6 +615,22 @@ export default function BookingsPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="font-display font-bold text-base text-slate-800">{b.customerName}</h3>
                         <StatusBadge status={b.status} />
+                        
+                        {/* SMS Status Badge in Card */}
+                        {b.smsSent === true ? (
+                          <span className="text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold px-2 py-0.5 rounded-full">
+                            ✅ SMS Sent
+                          </span>
+                        ) : (b.smsSent === false && b.smsError) ? (
+                          <span className="text-[10px] bg-rose-50 text-rose-800 border border-rose-200 font-bold px-2 py-0.5 rounded-full" title={b.smsError}>
+                            ❌ SMS Failed
+                          </span>
+                        ) : (
+                          <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 font-bold px-2 py-0.5 rounded-full">
+                            ⏳ SMS Pending
+                          </span>
+                        )}
+
                         <span className="text-[10px] bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded-full capitalize">
                           {b.bookingType || 'Couple'}
                         </span>
@@ -662,15 +698,29 @@ export default function BookingsPage() {
                     {/* Action Buttons */}
                     <div className="flex flex-wrap items-center gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
                       
+                      {/* Send / Resend SMS Confirmation */}
+                      <button
+                        onClick={() => handleSendSMS(b._id, b.customerName)}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-xl transition-all flex items-center gap-1 shadow-xs ${
+                          b.smsSent
+                            ? 'bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200'
+                            : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                        }`}
+                        title={b.smsSent ? 'Resend WhatsApp/SMS Confirmation' : 'Send WhatsApp/SMS Confirmation'}
+                      >
+                        <Send size={13} />
+                        <span>{b.smsSent ? '🔄 Resend SMS' : '📱 Send SMS'}</span>
+                      </button>
+
                       {/* FEATURE #1: 1-Click Settle Balance */}
                       {b.remainingPayment > 0 && (
                         <button
                           onClick={() => handleSettlePayment(b._id, b.remainingPayment)}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-all flex items-center gap-1 hover:scale-105"
+                          className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold rounded-xl shadow-xs transition-all flex items-center gap-1"
                           title="Mark Remaining Balance as Fully Paid"
                         >
                           <CheckCheck size={13} />
-                          <span>Settle Bal (₹{b.remainingPayment})</span>
+                          <span>Settle Bal</span>
                         </button>
                       )}
 

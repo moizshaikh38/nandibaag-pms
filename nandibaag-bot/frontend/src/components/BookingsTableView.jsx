@@ -1,13 +1,38 @@
 import React, { useState, useMemo } from 'react';
 import * as XLSX from 'xlsx';
+import toast from 'react-hot-toast';
+import api from '../utils/api';
 import { groupBookingsWithTotals } from '../utils/bookingGrouper';
 import { formatDateDDMMYYYY } from '../utils/dateFormatter';
 import '../styles/BookingsTableView.css';
 
-const BookingsTableView = ({ bookings = [] }) => {
+const BookingsTableView = ({ bookings = [], onRefresh }) => {
   const [sortColumn, setSortColumn] = useState('rawCheckIn');
   const [sortOrder, setSortOrder] = useState('asc');
   const [filterDate, setFilterDate] = useState('');
+  const [sendingSmsId, setSendingSmsId] = useState(null);
+
+  const handleSendSMS = async (bookingId, customerName) => {
+    try {
+      setSendingSmsId(bookingId);
+      toast.loading(`Sending confirmation to ${customerName}...`, { id: `sms-${bookingId}` });
+      
+      const response = await api.post(`/bookings/send-confirmation-sms/${bookingId}`);
+      
+      if (response.data.success) {
+        toast.success(`✅ Confirmation sent to ${customerName}!`, { id: `sms-${bookingId}` });
+        if (onRefresh) onRefresh();
+        window.dispatchEvent(new Event('refresh_bookings'));
+      } else {
+        toast.error(`❌ Failed: ${response.data.error || 'Failed to send confirmation'}`, { id: `sms-${bookingId}` });
+      }
+    } catch (err) {
+      console.error('[Table:SendSMS] Error:', err);
+      toast.error(err.response?.data?.error || err.message || 'Error sending confirmation', { id: `sms-${bookingId}` });
+    } finally {
+      setSendingSmsId(null);
+    }
+  };
 
   // Format check-in/check-out times based on package type & meal option
   const getCheckTimes = (booking) => {
@@ -315,6 +340,8 @@ const BookingsTableView = ({ bookings = [] }) => {
                 Booked By {getSortIndicator('bookedBy.name')}
               </th>
               <th>Notes</th>
+              <th>SMS Status</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody>
@@ -351,6 +378,44 @@ const BookingsTableView = ({ bookings = [] }) => {
                         <td className="notes-cell" title={booking.notes}>
                           {booking.notes ? (booking.notes.length > 25 ? booking.notes.substring(0, 25) + '...' : booking.notes) : '-'}
                         </td>
+                        <td className="center">
+                          {booking.smsSent === true ? (
+                            <span className="status-sent" title={`Sent at ${booking.smsSentAt ? new Date(booking.smsSentAt).toLocaleTimeString() : ''}`}>
+                              ✅ Sent
+                            </span>
+                          ) : (booking.smsSent === false && booking.smsError) ? (
+                            <span className="status-failed" title={booking.smsError}>
+                              ❌ Failed
+                            </span>
+                          ) : (
+                            <span className="status-pending">
+                              ⏳ Pending
+                            </span>
+                          )}
+                        </td>
+                        <td className="center action-cell">
+                          {booking.smsSent === true ? (
+                            <button
+                              type="button"
+                              className="btn-resend-sms"
+                              onClick={() => handleSendSMS(booking._id, booking.customerName)}
+                              disabled={sendingSmsId === booking._id}
+                              title="Resend confirmation message"
+                            >
+                              {sendingSmsId === booking._id ? '⏳...' : '🔄 Resend'}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn-send-sms"
+                              onClick={() => handleSendSMS(booking._id, booking.customerName)}
+                              disabled={sendingSmsId === booking._id}
+                              title="Send WhatsApp / SMS confirmation"
+                            >
+                              {sendingSmsId === booking._id ? '⏳...' : '📱 Send SMS'}
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     ))}
 
@@ -365,7 +430,7 @@ const BookingsTableView = ({ bookings = [] }) => {
                       <td className="center"><strong>{day.totals.adults}</strong></td>
                       <td className="center"><strong>{day.totals.children}</strong></td>
                       <td className="center"><strong>{day.totals.members}</strong></td>
-                      <td colSpan={6}></td>
+                      <td colSpan={8}></td>
                     </tr>
                   </React.Fragment>
                 ))}
@@ -381,12 +446,12 @@ const BookingsTableView = ({ bookings = [] }) => {
                   <td className="center"><strong>{grandTotal.adults}</strong></td>
                   <td className="center"><strong>{grandTotal.children}</strong></td>
                   <td className="center"><strong>{grandTotal.members}</strong></td>
-                  <td colSpan={6}></td>
+                  <td colSpan={8}></td>
                 </tr>
               </>
             ) : (
               <tr>
-                <td colSpan="17" className="no-data">
+                <td colSpan="19" className="no-data">
                   No bookings found
                 </td>
               </tr>
