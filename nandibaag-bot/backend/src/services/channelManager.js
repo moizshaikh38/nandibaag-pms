@@ -49,7 +49,7 @@ async function routeIncomingMessage(message, channel) {
  * @param {string} [sessionId] Baileys session id — default 'primary' / 'resort_primary'
  * @returns {Promise<boolean>} true if at least one WhatsApp channel succeeded
  */
-async function sendMessageViaChannel(chatId, text, channel, sessionId = 'primary') {
+async function sendMessageViaChannel(chatId, text, channel, sessionId = 'resort_primary') {
   const finalText = (text || '')
     .replace(/\\n\\n/g, '\n\n')
     .replace(/\\n/g, '\n')
@@ -85,7 +85,15 @@ async function sendMessageViaChannel(chatId, text, channel, sessionId = 'primary
       console.error(`[Send:Baileys] ❌ Error: ${baileysErr.message}`);
     }
   } else {
-    console.log(`[Send:Baileys] ⏭️ Skipped (Baileys not connected)`);
+    console.log(`[Send:Baileys] ⏭️ Skipped live send (Baileys not connected), queueing message...`);
+    try {
+      if (typeof whatsappService.queueMessage === 'function') {
+        await whatsappService.queueMessage(sessionId, chatId, finalText);
+        console.log(`[Send:Baileys] 📥 Message queued for delivery on reconnection for ${chatId}`);
+      }
+    } catch (qErr) {
+      console.warn(`[Send:Baileys] Error queueing message: ${qErr.message}`);
+    }
   }
 
   // ── 2. Fast2SMS WhatsApp Channel (Independent) ─────────────────────

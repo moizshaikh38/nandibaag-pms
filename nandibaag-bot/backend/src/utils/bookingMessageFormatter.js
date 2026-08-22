@@ -16,6 +16,7 @@ const getCheckInCheckOutTimes = (packageType, mealOption) => {
   switch (packageType) {
     case 'couple':
     case 'group':
+    case 'overnight':
       return {
         checkIn: '12:00 pm',
         checkOut: '10:30 am',
@@ -25,8 +26,11 @@ const getCheckInCheckOutTimes = (packageType, mealOption) => {
     
     case 'oneDay':
     case 'picnic':
+    case 'one-day-picnic':
+    case 'dayuse':
       switch (mealOption) {
         case 'B->D':
+        case 'breakfast-to-dinner':
           return {
             checkIn: '9:00 am',
             checkOut: '9:30 pm',
@@ -34,11 +38,20 @@ const getCheckInCheckOutTimes = (packageType, mealOption) => {
             checkOutTime: '9:30 PM'
           };
         case 'B->T':
+        case 'breakfast-to-tea':
           return {
             checkIn: '9:00 am',
             checkOut: '6:30 pm',
             checkInTime: '09:00 AM',
             checkOutTime: '6:30 PM'
+          };
+        case 'B->L':
+        case 'breakfast-to-lunch':
+          return {
+            checkIn: '9:00 am',
+            checkOut: '2:30 pm',
+            checkInTime: '09:00 AM',
+            checkOutTime: '2:30 PM'
           };
         default:
           return {
@@ -70,14 +83,16 @@ const getDynamicTimings = (packageType, mealOption) => {
  * Empty/null → "Will be assigned at check-in"
  */
 const getRoomDisplay = (roomIds, fallbackRoomId) => {
-  if (roomIds && roomIds.length > 0) {
-    const count = roomIds.length;
-    return count === 1 ? '1 Room' : `${count} Rooms`;
+  if (Array.isArray(roomIds) && roomIds.length > 0) {
+    return roomIds.join(', ');
+  }
+  if (typeof roomIds === 'string' && roomIds.trim()) {
+    return roomIds.trim();
   }
   if (fallbackRoomId) {
-    return '1 Room';
+    return String(fallbackRoomId);
   }
-  return 'Common Room';
+  return 'Will be assigned at check-in';
 };
 
 /**
@@ -90,7 +105,7 @@ const getRateDisplay = (packageType) => {
   if (packageType === 'group') {
     return '₹2,000 (Weekday) / ₹3,000 (Weekend)';
   }
-  if (packageType === 'oneDay' || packageType === 'picnic') {
+  if (packageType === 'oneDay' || packageType === 'picnic' || packageType === 'one-day-picnic' || packageType === 'dayuse') {
     return '₹1,250 (Weekday) / ₹1,500 (Weekend)';
   }
   return '₹2,000 (Weekday) / ₹3,000 (Weekend)';

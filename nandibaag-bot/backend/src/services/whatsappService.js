@@ -686,6 +686,11 @@ let messageProcessorHandle = null;
 
 async function queueMessage(sessionId, chatId, text) {
   try {
+    const mongoose = require('mongoose');
+    if (mongoose.connection.readyState !== 1) {
+      logger.info(`[Queue] Database not connected, skipping offline queue for: ${chatId}`);
+      return;
+    }
     const { MessageQueue } = require('../models');
     const existing = await MessageQueue.findOne({ chatId, text, status: 'pending' });
     if (!existing) {
@@ -952,6 +957,8 @@ module.exports = {
   getSessionStatus,
   getAllSessionsStatus,
   sendMessage,
+  queueMessage,
+  startMessageProcessor,
   stopSession,
   destroySession: stopSession,
   restartAllActiveSessions: restoreAllSessions,

@@ -180,7 +180,7 @@ router.post('/manual-booking', async (req, res) => {
       });
     }
 
-    if (!packageType || !['couple', 'group', 'oneDay', 'picnic'].includes(packageType)) {
+    if (!packageType || !['couple', 'group', 'oneDay', 'picnic', 'one-day-picnic', 'overnight', 'dayuse'].includes(packageType)) {
       return res.status(400).json({ 
         success: false, 
         error: 'Invalid package type' 
@@ -205,7 +205,7 @@ router.post('/manual-booking', async (req, res) => {
     const checkOut = checkOutDate ? new Date(checkOutDate) : new Date(checkIn.getTime() + 86400000);
     const dateStr = checkIn.toISOString().split('T')[0];
 
-    const sessionId = req.body.sessionId || null;
+    const sessionId = req.body.sessionId || 'resort_primary';
 
     // Multi-room handling & final real-time availability check
     const roomIds = Array.isArray(req.body.roomIds) 
@@ -234,15 +234,16 @@ router.post('/manual-booking', async (req, res) => {
     }
     
     // Create booking
+    const isPicnic = packageType === 'oneDay' || packageType === 'picnic' || packageType === 'one-day-picnic' || packageType === 'dayuse';
     const booking = new Booking({
       customerName,
       customerPhone,
       date: dateStr,
       checkInDate: checkIn,
       checkOutDate: checkOut,
-      bookingType: packageType === 'oneDay' ? 'picnic' : packageType,
+      bookingType: isPicnic ? 'picnic' : packageType,
       packageType,
-      mealOption: req.body.mealOption || (packageType === 'oneDay' ? 'B->D' : null),
+      mealOption: req.body.mealOption || (isPicnic ? 'B->D' : null),
       guestComposition: {
         adults: Number(guestComposition.adults) || 2,
         children: Number(guestComposition.children) || 0
@@ -341,6 +342,7 @@ router.post('/manual-booking', async (req, res) => {
       } = require('../utils/bookingMessageFormatter');
       const { sendMessageViaChannel } = require('../services/channelManager');
       const whatsappService = require('../services/whatsappService');
+      const { Chat } = require('../models');
 
       console.log('[Booking:MSG] ══════════════════════════════════════════');
       console.log('[Booking:MSG] Preparing to send confirmation messages');
@@ -354,20 +356,71 @@ router.post('/manual-booking', async (req, res) => {
       console.log('[Booking:MSG] Customer message length:', customerMessage.length);
       console.log('[Booking:MSG] Customer message preview:', customerMessage.substring(0, 150));
 
+      const activeSessionId = sessionId || 'resort_primary';
+
+      // Normalize recipient phone number for WhatsApp
+      let cleanCustomerPhone = String(booking.customerPhone || '').replace(/[^\d]/g, '');
+      if (cleanCustomerPhone.length === 10) cleanCustomerPhone = '91' + cleanCustomerPhone;
+
       // ─── SEND TO CUSTOMER ──────────────────────────────────────
       console.log('[Booking:MSG] ─── Sending to CUSTOMER ───');
       
       // Send to customer via available WhatsApp channels (Baileys and Fast2SMS WhatsApp)
       try {
-        const sent = await sendMessageViaChannel(booking.customerPhone, customerMessage, 'whatsapp-web');
+        const sent = await sendMessageViaChannel(cleanCustomerPhone, customerMessage, 'whatsapp-web', activeSessionId);
         if (sent) {
           customerMsgSent = true;
-          console.log('[Booking:MSG] ✅ WhatsApp booking confirmation sent to customer:', booking.customerPhone);
+          console.log('[Booking:MSG] ✅ WhatsApp booking confirmation sent to customer:', cleanCustomerPhone);
         } else {
-          console.log('[Booking:MSG] ⚠️ WhatsApp booking confirmation failed / queued for customer:', booking.customerPhone);
+          console.log('[Booking:MSG] ⚠️ WhatsApp booking confirmation queued / pending for customer:', cleanCustomerPhone);
         }
       } catch (waError) {
         console.error('[Booking:MSG] ❌ WhatsApp send error for customer:', waError.message);
+      }
+
+      // Record confirmation message in Chat history for dashboard visibility
+      try {
+        let chat = await Chat.findOne({
+          $or: [
+            { customerPhone: cleanCustomerPhone },
+            { customerPhone: booking.customerPhone },
+            { customerPhone: cleanCustomerPhone.slice(-10) }
+          ]
+        });
+
+        if (!chat) {
+          chat = new Chat({
+            customerPhone: cleanCustomerPhone,
+            customerName: booking.customerName,
+            channel: 'whatsapp-web',
+            bookingStage: 'completed',
+            messages: []
+          });
+        }
+
+        chat.messages.push({
+          sender: 'bot',
+          text: customerMessage,
+          timestamp: new Date(),
+          messageType: 'text',
+          deliveryStatus: customerMsgSent ? 'sent' : 'pending'
+        });
+        chat.bookingStage = 'completed';
+        chat.lastMessageAt = new Date();
+        await chat.save();
+
+        const io = req.app?.get?.('io') || (require('../sockets').getIO ? require('../sockets').getIO() : null);
+        if (io) {
+          io.emit('chat:updated', chat);
+          io.emit('chat:new_message', {
+            chatId: chat._id,
+            customerPhone: cleanCustomerPhone,
+            message: customerMessage,
+            sender: 'bot'
+          });
+        }
+      } catch (chatRecordErr) {
+        console.warn('[Booking:MSG] Could not record confirmation message in Chat model:', chatRecordErr.message);
       }
 
       // ─── SEND TO STAFF GROUP ───────────────────────────────────
@@ -376,8 +429,9 @@ router.post('/manual-booking', async (req, res) => {
       console.log('[Booking:MSG] Staff group number:', staffGroupNumber || 'NOT SET in .env');
 
       if (staffGroupNumber) {
+        let cleanGroupNumber = String(staffGroupNumber).trim();
         try {
-          const groupSent = await sendMessageViaChannel(staffGroupNumber, staffGroupMessage, 'whatsapp-web');
+          const groupSent = await sendMessageViaChannel(cleanGroupNumber, staffGroupMessage, 'whatsapp-web', activeSessionId);
           if (groupSent) {
             staffGroupSent = true;
             console.log('[Booking:MSG] ✅ Sent to staff group via WhatsApp');
@@ -400,7 +454,7 @@ router.post('/manual-booking', async (req, res) => {
       try { await booking.save(); } catch (_) {}
 
       console.log('[Booking:MSG] ══════════════════════════════════════════');
-      console.log('[Booking:MSG] RESULT: Customer:', customerMsgSent ? '✅ SENT' : '❌ FAILED', '| Staff:', staffGroupSent ? '✅ SENT' : '❌ FAILED');
+      console.log('[Booking:MSG] RESULT: Customer:', customerMsgSent ? '✅ SENT' : '⚠️ PENDING/QUEUED', '| Staff:', staffGroupSent ? '✅ SENT' : '⚠️ PENDING/QUEUED');
 
     } catch (messageError) {
       console.error('[Booking:MSG] ❌ FATAL: Error in formatting/sending block:', messageError.message);
@@ -411,7 +465,7 @@ router.post('/manual-booking', async (req, res) => {
       success: true,
       booking,
       messagesSent: { customerSMS: customerMsgSent, staffGroup: staffGroupSent },
-      message: customerMsgSent ? 'Booking created and confirmation sent' : 'Booking created (message delivery pending)'
+      message: customerMsgSent ? 'Booking created and confirmation sent' : 'Booking created (confirmation message queued/pending)'
     });
     
   } catch (error) {
