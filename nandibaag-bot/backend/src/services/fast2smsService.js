@@ -6,6 +6,7 @@
  * 2. Fast2SMS Quick Bulk SMS API (`https://www.fast2sms.com/dev/bulkV2`)
  */
 
+const axios = require('axios');
 const env = require('../config/env');
 const logger = require('../config/logger');
 
@@ -70,23 +71,22 @@ class Fast2SmsService {
     console.log(`[Fast2SMS:SMS] Sending Bulk SMS to ${phone10Digits}...`);
 
     try {
-      const response = await fetch('https://www.fast2sms.com/dev/bulkV2', {
-        method: 'POST',
+      const response = await axios.post('https://www.fast2sms.com/dev/bulkV2', {
+        route: 'q',
+        message: text,
+        language: 'english',
+        flash: 0,
+        numbers: phone10Digits,
+        ...(senderId ? { sender_id: senderId } : {})
+      }, {
         headers: {
           'authorization': this.apiKey,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          route: 'q',
-          message: text,
-          language: 'english',
-          flash: 0,
-          numbers: phone10Digits,
-          ...(senderId ? { sender_id: senderId } : {})
-        })
+        timeout: 15000
       });
 
-      const json = await response.json();
+      const json = response.data;
       console.log('[Fast2SMS:SMS] API Response:', json);
 
       if (json && (json.return === true || json.status_code === 200)) {
@@ -103,6 +103,7 @@ class Fast2SmsService {
       return false;
     } catch (err) {
       console.error('[Fast2SMS:SMS] Error:', err.message);
+      if (err.response) console.error('[Fast2SMS:SMS] Response data:', err.response.data);
       return false;
     }
   }
@@ -146,20 +147,17 @@ class Fast2SmsService {
 
       console.log(`[Fast2SMS:WhatsApp] Request URL: ${url.toString()}`);
 
-      const response = await fetch(url.toString(), {
-        method: 'POST',
+      const response = await axios.post(url.toString(), { type: 'text', text: truncatedText }, {
         headers: {
           Authorization: this.apiKey,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ type: 'text', text: truncatedText })
+        timeout: 15000
       });
 
-      const responseText = await response.text();
-      let json = {};
-      try { json = JSON.parse(responseText); } catch (_) {}
+      const json = response.data;
 
-      if (response.ok && json.return !== false) {
+      if (json && json.return !== false) {
         console.log(`[Fast2SMS:WhatsApp] ✅ Message sent successfully to ${number}`);
         return true;
       }
@@ -170,10 +168,11 @@ class Fast2SmsService {
         return false;
       }
 
-      console.log(`[Fast2SMS:WhatsApp] WhatsApp send returned error: ${responseText.slice(0, 200)}`);
+      console.log(`[Fast2SMS:WhatsApp] WhatsApp send returned error: ${JSON.stringify(json).slice(0, 200)}`);
       return false;
     } catch (error) {
       console.error(`[Fast2SMS:WhatsApp] Error: ${error.message}`);
+      if (error.response) console.error(`[Fast2SMS:WhatsApp] Response:`, JSON.stringify(error.response.data).slice(0, 300));
       return false;
     }
   }
