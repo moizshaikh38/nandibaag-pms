@@ -130,7 +130,11 @@ class Fast2SmsService {
 
     // Try Fast2SMS WhatsApp API endpoint
     try {
-      const url = new URL(this.apiUrl);
+      // Strip any existing query params from the env URL (handles both base URL and full sample URL)
+      const parsedUrl = new URL(this.apiUrl);
+      const baseUrl = `${parsedUrl.origin}${parsedUrl.pathname}`;
+      const url = new URL(baseUrl);
+
       url.searchParams.set('to', number);
       if (this.phoneNumberId) {
         url.searchParams.set('phone_number_id', this.phoneNumberId);
@@ -139,6 +143,8 @@ class Fast2SmsService {
         const cleanDisplay = displayNum.length === 12 && displayNum.startsWith('91') ? displayNum.slice(2) : displayNum;
         url.searchParams.set('display_number', cleanDisplay);
       }
+
+      console.log(`[Fast2SMS:WhatsApp] Request URL: ${url.toString()}`);
 
       const response = await fetch(url.toString(), {
         method: 'POST',
