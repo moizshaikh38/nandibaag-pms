@@ -78,21 +78,24 @@ const getDynamicTimings = (packageType, mealOption) => {
 };
 
 /**
- * Returns room display string from roomIds array.
- * e.g. [101, 102, 103] → "101, 102, 103"
- * Empty/null → "Will be assigned at check-in"
+ * Returns room display string showing room count (e.g. "1 Room", "2 Rooms").
  */
 const getRoomDisplay = (roomIds, fallbackRoomId) => {
   if (Array.isArray(roomIds) && roomIds.length > 0) {
-    return roomIds.join(', ');
+    const count = roomIds.length;
+    return count === 1 ? '1 Room' : `${count} Rooms`;
   }
   if (typeof roomIds === 'string' && roomIds.trim()) {
-    return roomIds.trim();
+    const parts = roomIds.split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length > 0) {
+      const count = parts.length;
+      return count === 1 ? '1 Room' : `${count} Rooms`;
+    }
   }
   if (fallbackRoomId) {
-    return String(fallbackRoomId);
+    return '1 Room';
   }
-  return 'Will be assigned at check-in';
+  return '1 Room';
 };
 
 /**
