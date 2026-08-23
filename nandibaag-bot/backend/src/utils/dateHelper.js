@@ -1,5 +1,8 @@
 const getDayName = (date) => {
   try {
+    if (date && typeof date === 'object' && date.date instanceof Date) {
+      date = date.date;
+    }
     if (typeof date === 'string') {
       date = new Date(date);
     }
@@ -32,6 +35,9 @@ const getDayName = (date) => {
 
 const formatDateDDMMYYYY = (date) => {
   try {
+    if (date && typeof date === 'object' && date.date instanceof Date) {
+      date = date.date;
+    }
     if (typeof date === 'string') {
       date = new Date(date);
     }
@@ -55,6 +61,9 @@ const formatDateDDMMYYYY = (date) => {
 
 const isWeekday = (date) => {
   try {
+    if (date && typeof date === 'object' && date.date instanceof Date) {
+      date = date.date;
+    }
     if (typeof date === 'string') {
       date = new Date(date);
     }
@@ -75,6 +84,13 @@ const isWeekday = (date) => {
 const buildDateRangeTable = (startDate, endDate) => {
   try {
     console.log('[DateHelper:Table] Building date table');
+
+    if (startDate && typeof startDate === 'object' && startDate.date instanceof Date) {
+      startDate = startDate.date;
+    }
+    if (endDate && typeof endDate === 'object' && endDate.date instanceof Date) {
+      endDate = endDate.date;
+    }
 
     let start = new Date(startDate);
     let end = new Date(endDate);

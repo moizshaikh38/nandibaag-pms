@@ -162,7 +162,7 @@ export default function AvailabilityPage() {
     try {
       await api.post('/pms/bookings/manual', {
         guestName: `Walk-in Guest (Room ${room.roomNumber})`,
-        guestPhone: '+919257657665',
+        guestPhone: '+919257657664',
         bookingType: 'couple',
         checkInDate,
         checkOutDate,

@@ -41,7 +41,7 @@ export default function PublicWidgetPage() {
   };
 
   const isAvailable = availability && availability.totalAvailable > 0;
-  const whatsappUrl = `https://wa.me/919257657665?text=${encodeURIComponent(
+  const whatsappUrl = `https://wa.me/919257657664?text=${encodeURIComponent(
     `Hi Nandibaag Resort, I want to book a room for ${guestMembers} guests from ${formatDMY(checkInDate)} to ${formatDMY(checkOutDate)}.`
   )}`;
 

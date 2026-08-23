@@ -32,19 +32,20 @@ function buildSystemPrompt(arg1, arg2, arg3, arg4) {
 
   // Use dateHelper for IST-accurate date calculations (single source of truth)
   const todayIST = getTodayIST();
+  const todayDate = todayIST?.date || new Date();
   const now = new Date();
   const currentDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
-  const currentDayName = getDayName(todayIST);
+  const currentDayName = todayIST?.dayName || getDayName(todayDate);
 
-  const tomorrowDate = new Date(todayIST.getFullYear(), todayIST.getMonth(), todayIST.getDate() + 1);
+  const tomorrowDate = new Date(todayDate.getFullYear(), todayDate.getMonth(), todayDate.getDate() + 1);
   const tomorrowDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now.getTime() + 24 * 60 * 60 * 1000);
   const tomorrowDayName = getDayName(tomorrowDate);
 
-  const nextWeekDate = new Date(todayIST.getFullYear(), todayIST.getMonth(), todayIST.getDate() + 7);
+  const nextWeekDate = new Date(todayDate.getFullYear(), todayDate.getMonth(), todayDate.getDate() + 7);
   const nextWeekDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
   // Build dynamic 30-day calendar reference (replaces hardcoded calendar)
-  const calendarReference = buildCalendarReference(todayIST);
+  const calendarReference = buildCalendarReference(todayDate);
 
   console.log('[SystemPrompt:DEBUG] Current date injected:', {
     date: currentDateStr,
@@ -53,14 +54,40 @@ function buildSystemPrompt(arg1, arg2, arg3, arg4) {
     source: 'dateHelper (single source of truth)'
   });
 
+  let resortSettings = null;
+  if (typeof arg4 === 'object' && arg4 !== null) {
+    resortSettings = arg4;
+  } else if (typeof arg3 === 'object' && arg3 !== null) {
+    resortSettings = arg3;
+  }
+
+  const mainPhone = resortSettings?.resortContactNumber || '9257657664';
+  const receptionPhone = resortSettings?.resortContactNumberReception || '9257657665';
+  const kitchenPhone = resortSettings?.resortContactNumberKitchen || '75582 69653';
+
   const RESORT_NAME = 'Nandibaag Resort';
-  const PRIMARY_PHONE = '9257657665';
+  const PRIMARY_PHONE = mainPhone;
   const WEBSITE = 'https://nandibaag.com';
   const GALLERY = 'https://nandibaag.com/rooms';
   const INSTAGRAM = 'https://www.instagram.com/nandibaagresort';
   const MAPS = 'https://maps.app.goo.gl/h6PB4y4G4oSWyFxdA';
 
   const hinglishPrompt = `
+CONTACT INFORMATION:
+═════════════════════════════════════════════════════════════════
+📞 MAIN CONTACT: ${mainPhone}
+📞 RECEPTION: ${receptionPhone}
+📞 KITCHEN: ${kitchenPhone}
+
+When customer needs to:
+- CONFIRM BOOKING → Ask to call: ${mainPhone}
+- BOOK OVERNIGHT → Call: ${mainPhone}
+- SPECIAL REQUESTS → Call: ${receptionPhone}
+- FOOD QUERIES → Call: ${kitchenPhone}
+
+Always provide the correct number based on their need.
+═════════════════════════════════════════════════════════════════
+
 FORMATTING RULES (CRITICAL - FOLLOW ALWAYS):
 
 1. USE CLEAR SECTIONS & LINE BREAKS:
@@ -179,7 +206,7 @@ FORMATTING RULES (CRITICAL - FOLLOW ALWAYS):
    Hamari team aapse jald hi connect karegi for booking 😊
 
 TODAY'S ACTUAL DATE: ${currentDateStr} (${currentDayName})
-Current year: ${todayIST.getFullYear()}
+Current year: ${todayDate.getFullYear()}
 
 CRITICAL DATE RULE: You must NEVER calculate or guess which day of the week
 any date falls on. You are frequently wrong when you do this. Whenever
@@ -384,7 +411,7 @@ TOTAL: ₹24,000
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📞 TO CONFIRM:
-Call: 9257657665
+Call: ${PRIMARY_PHONE}
 
 ROOM AVAILABILITY & MAINTENANCE RULES:
 ⚠️ CRITICAL: You do NOT know room availability yourself. The system checks it for you.
@@ -477,7 +504,7 @@ STEP 6: Show availability status
    
 STEP 7: Show formatted pricing
    
-STEP 8: Ask customer name & show final confirmation → handover to staff (9257657665)
+STEP 8: Ask customer name & show final confirmation → handover to staff (${PRIMARY_PHONE})
 
 [PRICING CALCULATION EXAMPLES]
 

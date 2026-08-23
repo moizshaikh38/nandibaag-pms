@@ -385,9 +385,9 @@ function isGreetingOnly(text) {
   return /^(hi|hello|hey|hii+|namaste|namaskar|good\s+(morning|afternoon|evening)|salam|salaam)[\s!.🙏🌿]*$/i.test((text || '').trim());
 }
 
-function buildEmergencyFallback(messageText, language = 'hinglish') {
+function buildEmergencyFallback(messageText, language = 'hinglish', mainPhone = '9257657664') {
   const text = (messageText || '').toLowerCase();
-  const phone = '9257657665';
+  const phone = mainPhone || '9257657664';
 
   if (isDiscountIntent(text)) {
     if (language === 'roman_marathi') {
@@ -676,7 +676,7 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
       }
 
       if (discountIntent) {
-        addSystemNote('[SYSTEM NOTE: Customer is asking for a discount / lower price. Politely say rates are already best/final because food, activities, and facilities are included. For special approval or group offer, ask them to call staff at 9257657665.]');
+        addSystemNote('[SYSTEM NOTE: Customer is asking for a discount / lower price. Politely say rates are already best/final because food, activities, and facilities are included. For special approval or group offer, ask them to call staff at 9257657664.]');
       }
       
       const extracted = extractBookingDetails(messageText);
@@ -899,7 +899,7 @@ Hamari team aapse jald hi connect karegi for booking 😊]`);
     console.error('[MessageHandler:CRASH] Stack:', outerErr.stack);
     logger.error(`[MessageHandler] Outer error: ${outerErr.message}`);
     logger.error(`OUTER STACK: ${outerErr.stack}`);
-    replyToSend = "Samajh nahi aaya, phir se try karo 😊 Ya call karein: 9257657665";
+    replyToSend = "Samajh nahi aaya, phir se try karo 😊 Ya call karein: 9257657664";
   }
 
   // ─── INDEPENDENT REPLY SEND BLOCK ───────────────────────────────────
@@ -912,7 +912,7 @@ Hamari team aapse jald hi connect karegi for booking 😊]`);
     }
 
     if (!replyToSend || replyToSend.trim() === '') {
-      replyToSend = "Samajh nahi aaya, phir se try karo 😊 Ya call karein: 9257657665";
+      replyToSend = "Samajh nahi aaya, phir se try karo 😊 Ya call karein: 9257657664";
     }
 
     const formattedMessage = replyToSend

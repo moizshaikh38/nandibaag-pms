@@ -30,6 +30,7 @@ module.exports = {
   Staff: require('./Staff'),
   RoomReservation: require('./RoomReservation'),
   RoomMaintenance: require('./RoomMaintenance'),
-  ModeChangeLog: require('./ModeChangeLog')
+  ModeChangeLog: require('./ModeChangeLog'),
+  SystemSettings: require('./SystemSettings')
 };
 

@@ -323,7 +323,7 @@ function sanitizeReply(text) {
     .filter(Boolean)
     .map(n => n.replace(/\D/g, '').slice(-10));
 
-  const primaryClean = (resortContact1 || '9257657665').replace(/\D/g, '').slice(-10);
+  const primaryClean = (resortContact1 || '9257657664').replace(/\D/g, '').slice(-10);
 
   sanitized = sanitized.replace(/(?:\+?91[\s-]*)?\b[6-9]\d{9}\b/g, (match) => {
     const cleanMatch = match.replace(/\D/g, '').slice(-10);
@@ -1231,7 +1231,7 @@ When responding about dates:
     logger.warn(`Using Smart Resort Assistant fallback for message: "${incomingMessage}" (language: ${languageToUse})`);
 
     const { resortContact1 } = require('../config/env');
-    const primaryNumber = (resortContact1 || '9257657665').replace(/\D/g, '');
+    const primaryNumber = (resortContact1 || '9257657664').replace(/\D/g, '');
 
     const msgLower = (incomingMessage || '').toLowerCase();
     const isDiscountRequest = /\b(discount|offer|kam|kum|less|negotiate|negotiable|sasta|cheap|budget|final price|best price)\b/i.test(msgLower);

@@ -50,6 +50,12 @@ export default function SettingsPage() {
   const [isMassSwitching, setIsMassSwitching] = useState(false);
   const [massSwitchResult, setMassSwitchResult] = useState(null);
 
+  // Contact Numbers
+  const [resortContactNumber, setResortContactNumber] = useState('9257657664');
+  const [resortContactNumberReception, setResortContactNumberReception] = useState('9257657665');
+  const [resortContactNumberKitchen, setResortContactNumberKitchen] = useState('75582 69653');
+  const [isSavingContacts, setIsSavingContacts] = useState(false);
+
   // Password Form
   const [passwordForm, setPasswordForm] = useState({ current: '', new: '', confirm: '' });
 
@@ -63,8 +69,11 @@ export default function SettingsPage() {
       setIsLoading(true);
       const res = await api.get('/settings');
       setSettings(res.data.settings);
-      setFollowUpEnabled(res.data.settings.followUpEnabled ?? true);
-      setDefaultModeForNewChats(res.data.settings.defaultModeForNewChats || 'ai');
+      setFollowUpEnabled(res.data.settings?.followUpEnabled ?? true);
+      setDefaultModeForNewChats(res.data.settings?.defaultModeForNewChats || 'ai');
+      setResortContactNumber(res.data.settings?.resortContactNumber || '9257657664');
+      setResortContactNumberReception(res.data.settings?.resortContactNumberReception || '9257657665');
+      setResortContactNumberKitchen(res.data.settings?.resortContactNumberKitchen || '75582 69653');
     } catch (error) {
       toast.error('Failed to load settings');
     } finally {
@@ -147,6 +156,35 @@ export default function SettingsPage() {
       toast.error(err.response?.data?.error || err.message || 'Error executing mass mode switch', { id: 'mass-switch' });
     } finally {
       setIsMassSwitching(false);
+    }
+  };
+
+  const handleSaveContactNumbers = async (e) => {
+    if (e) e.preventDefault();
+    if (!isAdmin) {
+      toast.error('Admin access required');
+      return;
+    }
+    try {
+      setIsSavingContacts(true);
+      await api.patch('/settings/resortContactNumber', {
+        value: resortContactNumber,
+        updatedBy: user?.name || user?.email || 'Admin'
+      });
+      await api.patch('/settings/resortContactNumberReception', {
+        value: resortContactNumberReception,
+        updatedBy: user?.name || user?.email || 'Admin'
+      });
+      await api.patch('/settings/resortContactNumberKitchen', {
+        value: resortContactNumberKitchen,
+        updatedBy: user?.name || user?.email || 'Admin'
+      });
+      toast.success('✅ Resort contact numbers updated successfully!');
+      fetchSettings();
+    } catch (err) {
+      toast.error('Failed to update contact numbers: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setIsSavingContacts(false);
     }
   };
 
@@ -499,6 +537,91 @@ export default function SettingsPage() {
                 <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Stage 4</span>
                 <p className="font-bold text-sm text-slate-800">7 Days Later</p>
                 <p className="text-[11px] text-slate-500">Final re-engagement prompt.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION: RESORT CONTACT NUMBERS */}
+          <div className="glass-card rounded-2xl p-6 bg-white border border-slate-200 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                  <Phone size={18} />
+                </div>
+                <div>
+                  <h3 className="font-display font-bold text-base text-slate-800">
+                    Resort Contact Numbers
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Update phone numbers shown to customers in AI messages, booking confirmations, and SMS.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                disabled={isSavingContacts || !isAdmin}
+                onClick={handleSaveContactNumbers}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+              >
+                <Save size={14} />
+                <span>{isSavingContacts ? 'Saving...' : 'Save Numbers'}</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700">
+                  Main Booking Number (Primary)
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={resortContactNumber}
+                    onChange={(e) => setResortContactNumber(e.target.value)}
+                    placeholder="9257657664"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  Primary number for bookings, quotes & customer confirmations.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700">
+                  Reception Contact Number
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={resortContactNumberReception}
+                    onChange={(e) => setResortContactNumberReception(e.target.value)}
+                    placeholder="9257657665"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  Direct line to front desk & reception staff.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700">
+                  Kitchen / Dining Contact Number
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={resortContactNumberKitchen}
+                    onChange={(e) => setResortContactNumberKitchen(e.target.value)}
+                    placeholder="75582 69653"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  Direct line for kitchen & food queries.
+                </p>
               </div>
             </div>
           </div>

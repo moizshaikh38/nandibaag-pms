@@ -44,6 +44,18 @@ const settingsSchema = new mongoose.Schema({
   followUpEnabled: {
     type: Boolean,
     default: true
+  },
+  resortContactNumber: {
+    type: String,
+    default: '9257657664'
+  },
+  resortContactNumberReception: {
+    type: String,
+    default: '9257657665'
+  },
+  resortContactNumberKitchen: {
+    type: String,
+    default: '75582 69653'
   }
 }, {
   timestamps: true

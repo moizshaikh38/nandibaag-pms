@@ -42,11 +42,11 @@ function getFollowUpMessage(stage, language, customerName = null) {
       gujarati: `${greeting}પૂલ, કાયાકિંગ અને માઉન્ટેન વ્યૂ તમારી રાહ જુએ છે. પ્લાન કરો, તમને ગમશે! 🌊`
     },
     '7day': {
-      hindi: `${greeting}jab bhi aap ready ho, hum hain. Call karein: 9257657665. Nandibaag aapka swagat karega! 🙏`,
-      marathi: `${greeting}जेव्हा तुम्ही तयार असाल, तेव्हा आम्ही आहोत. कॉल करा: 9257657665. नंदीबाग तुमचे स्वागत करेल! 🙏`,
-      english: `${greeting}Whenever you're ready, we're here. Call us: 9257657665. Nandibaag welcomes you! 🙏`,
-      hinglish: `${greeting}jab bhi aap ready ho, hum hain. Call karein: 9257657665. Nandibaag aapka swagat karega! 🙏`,
-      gujarati: `${greeting}જ્યારે પણ તમે તૈયાર હો, અમે છીએ. કૉલ કરો: 9257657665. નંદીબાગ તમારું સ્વાગત કરશે! 🙏`
+      hindi: `${greeting}jab bhi aap ready ho, hum hain. Call karein: 9257657664. Nandibaag aapka swagat karega! 🙏`,
+      marathi: `${greeting}जेव्हा तुम्ही तयार असाल, तेव्हा आम्ही आहोत. कॉल करा: 9257657664. नंदीबाग तुमचे स्वागत करेल! 🙏`,
+      english: `${greeting}Whenever you're ready, we're here. Call us: 9257657664. Nandibaag welcomes you! 🙏`,
+      hinglish: `${greeting}jab bhi aap ready ho, hum hain. Call karein: 9257657664. Nandibaag aapka swagat karega! 🙏`,
+      gujarati: `${greeting}જ્યારે પણ તમે તૈયાર હો, અમે છીએ. કૉલ કરો: 9257657664. નંદીબાગ તમારું સ્વાગત કરશે! 🙏`
     }
   };
   

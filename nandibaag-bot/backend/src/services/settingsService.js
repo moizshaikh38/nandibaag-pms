@@ -3,7 +3,7 @@
  * Handles system settings configuration, mass chat mode updates, and audit logging.
  */
 
-const { Settings, Chat, ModeChangeLog } = require('../models');
+const { Settings, SystemSettings, Chat, ModeChangeLog } = require('../models');
 const logger = require('../config/logger');
 
 /**
@@ -22,9 +22,21 @@ function normalizeMode(mode) {
  */
 async function getSettingValue(key, defaultValue = null) {
   try {
+    // 1. Check Settings collection
     const settings = await Settings.findOne();
-    if (!settings || settings[key] === undefined) return defaultValue;
-    return settings[key];
+    if (settings && settings[key] !== undefined && settings[key] !== null) {
+      return settings[key];
+    }
+
+    // 2. Check SystemSettings collection if model exists
+    if (SystemSettings) {
+      const sysSetting = await SystemSettings.findOne({ settingKey: key });
+      if (sysSetting && sysSetting.settingValue !== undefined && sysSetting.settingValue !== null) {
+        return sysSetting.settingValue;
+      }
+    }
+
+    return defaultValue;
   } catch (err) {
     logger.error(`[SettingsService] Error reading setting ${key}: ${err.message}`);
     return defaultValue;
@@ -50,8 +62,10 @@ async function getAllSettings() {
 /**
  * Initialize default settings if not exists
  */
-async function initializeDefaultSettings() {
+const initializeDefaultSettings = async () => {
   try {
+    console.log('[Settings:Init] Initializing default settings');
+
     let settings = await Settings.findOne();
     if (!settings) {
       settings = new Settings({
@@ -59,17 +73,93 @@ async function initializeDefaultSettings() {
         defaultModeForNewChats: 'ai',
         whatsappNumbers: [],
         openRouterModelOverride: null,
-        followUpEnabled: true
+        followUpEnabled: true,
+        resortContactNumber: '9257657664',
+        resortContactNumberReception: '9257657665',
+        resortContactNumberKitchen: '75582 69653'
       });
       await settings.save();
-      logger.info('[SettingsService] ✅ Initialized default settings');
+    } else {
+      let needsSave = false;
+      if (!settings.resortContactNumber) {
+        settings.resortContactNumber = '9257657664';
+        needsSave = true;
+      }
+      if (!settings.resortContactNumberReception) {
+        settings.resortContactNumberReception = '9257657665';
+        needsSave = true;
+      }
+      if (!settings.resortContactNumberKitchen) {
+        settings.resortContactNumberKitchen = '75582 69653';
+        needsSave = true;
+      }
+      if (needsSave) {
+        await settings.save();
+      }
     }
+
+    const defaultSettings = [
+      {
+        settingKey: 'defaultModeForNewChats',
+        settingValue: 'ai',
+        description: 'Default mode for new incoming chats (ai/staff/auto)',
+        dataType: 'string',
+        category: 'chat'
+      },
+      {
+        settingKey: 'resortContactNumber',
+        settingValue: '9257657664',
+        description: 'Main resort contact number',
+        dataType: 'string',
+        category: 'general'
+      },
+      {
+        settingKey: 'resortContactNumberReception',
+        settingValue: '9257657665',
+        description: 'Reception contact number',
+        dataType: 'string',
+        category: 'general'
+      },
+      {
+        settingKey: 'resortContactNumberKitchen',
+        settingValue: '75582 69653',
+        description: 'Kitchen contact number',
+        dataType: 'string',
+        category: 'general'
+      },
+      {
+        settingKey: 'enableChatHistory',
+        settingValue: 'true',
+        description: 'Store full chat history',
+        dataType: 'boolean',
+        category: 'chat'
+      },
+      {
+        settingKey: 'maxChatsDisplay',
+        settingValue: '100',
+        description: 'Max chats shown in inbox',
+        dataType: 'number',
+        category: 'chat'
+      }
+    ];
+
+    if (SystemSettings) {
+      for (const setting of defaultSettings) {
+        const exists = await SystemSettings.findOne({ settingKey: setting.settingKey });
+
+        if (!exists) {
+          await SystemSettings.create(setting);
+          console.log('[Settings:Init] Created:', setting.settingKey);
+        }
+      }
+    }
+
+    console.log('[Settings:Init] ✅ Default settings initialized');
     return settings;
-  } catch (err) {
-    logger.error(`[SettingsService] Error initializing settings: ${err.message}`);
-    throw err;
+  } catch (error) {
+    console.error('[Settings:Init] Error:', error.message);
   }
-}
+};
 
 /**
  * FUNCTION 1: UPDATE DEFAULT ONLY (don't touch existing chats)
@@ -237,11 +327,57 @@ const massUpdateAllChatMode = async (newMode, updatedBy = 'Admin') => {
   }
 };
 
+const updateGenericSetting = async (key, value, updatedBy = 'Admin') => {
+  try {
+    console.log(`[Settings:Update] Setting ${key} to ${value} by ${updatedBy}`);
+
+    if (key === 'defaultModeForNewChats' || key === 'globalMode') {
+      return await updateDefaultModeOnly(value, updatedBy);
+    }
+
+    // Update Settings model
+    const settings = await Settings.findOneAndUpdate(
+      {},
+      { $set: { [key]: value } },
+      { new: true, upsert: true }
+    );
+
+    // Update SystemSettings model if it exists
+    if (SystemSettings) {
+      await SystemSettings.findOneAndUpdate(
+        { settingKey: key },
+        {
+          $set: {
+            settingKey: key,
+            settingValue: value,
+            updatedBy
+          }
+        },
+        { new: true, upsert: true }
+      );
+    }
+
+    try {
+      const { getIO } = require('../sockets');
+      const io = getIO();
+      if (io) {
+        io.emit('settings:updated', { key, value, updatedBy });
+      }
+    } catch (e) {}
+
+    return settings;
+  } catch (error) {
+    console.error(`[Settings:Update] Error updating ${key}:`, error.message);
+    throw error;
+  }
+};
+
 module.exports = {
   getSettingValue,
   getAllSettings,
-  updateSetting: updateDefaultModeOnly, // Use DEFAULT ONLY for normal updates
-  updateDefaultModeOnly, // Export both
+  updateSetting: updateGenericSetting,
+  updateGenericSetting,
+  updateDefaultModeOnly,
   massUpdateAllChatMode,
   initializeDefaultSettings
 };
