@@ -7,27 +7,35 @@
  */
 
 const axios = require('axios');
-const env = require('../config/env');
 const logger = require('../config/logger');
 
 const MAX_MESSAGE_LENGTH = 4096;
 
 class Fast2SmsService {
   constructor() {
-    this.apiKey = (env.fast2smsApiKey || process.env.FAST2SMS_API_KEY || '').trim();
-    this.apiUrl = (env.fast2smsApiUrl || 'https://www.fast2sms.com/dev/whatsapp-session').trim();
-    this.senderNumbers = String(env.fast2smsSenderNumbers || '')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    this.phoneNumberId = String(env.fast2smsPhoneNumberId || '').trim();
-    this.webhookSecret = (env.fast2smsWebhookSecret || '').trim();
+    this._refreshConfig();
     this.configured = false;
     this.initializedAt = null;
   }
 
-  initialize() {
+  _refreshConfig() {
+    let env = {};
+    try {
+      env = require('../config/env');
+    } catch (_) {}
+
     this.apiKey = (env.fast2smsApiKey || process.env.FAST2SMS_API_KEY || '').trim();
+    this.apiUrl = (env.fast2smsApiUrl || process.env.FAST2SMS_API_URL || 'https://www.fast2sms.com/dev/whatsapp-session').trim();
+    this.senderNumbers = String(env.fast2smsSenderNumbers || process.env.FAST2SMS_SENDER_NUMBERS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    this.phoneNumberId = String(env.fast2smsPhoneNumberId || process.env.FAST2SMS_PHONE_NUMBER_ID || '').trim();
+    this.webhookSecret = (env.fast2smsWebhookSecret || process.env.FAST2SMS_WEBHOOK_SECRET || '').trim();
+  }
+
+  initialize() {
+    this._refreshConfig();
     if (!this.apiKey) {
       this.configured = false;
       console.log('[Fast2SMS] ⚠️ FAST2SMS_API_KEY is not set — Fast2SMS channel is INERT.');
@@ -41,13 +49,14 @@ class Fast2SmsService {
   }
 
   getStatus() {
-    this.apiKey = (env.fast2smsApiKey || process.env.FAST2SMS_API_KEY || '').trim();
+    this._refreshConfig();
     return this.apiKey ? 'connected' : 'not_configured';
   }
 
   normalizeNumber(to) {
     if (!to) return '';
     let digits = String(to).replace(/\D/g, '');
+    if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);
     if (digits.length === 10) digits = `91${digits}`;
     return digits;
   }
@@ -56,15 +65,14 @@ class Fast2SmsService {
    * Send a Quick Bulk SMS via Fast2SMS API (https://www.fast2sms.com/dev/bulkV2)
    */
   async sendSMS(to, text) {
-    if (!this.apiKey) {
-      this.apiKey = (process.env.FAST2SMS_API_KEY || '').trim();
-    }
+    this._refreshConfig();
     if (!this.apiKey) {
       console.log('[Fast2SMS:SMS] ⚠️ FAST2SMS_API_KEY is missing');
       return false;
     }
 
-    const digits = String(to).replace(/\D/g, '');
+    let digits = String(to).replace(/\D/g, '');
+    if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);
     const phone10Digits = digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits;
     const senderId = (process.env.FAST2SMS_SENDER_ID || 'NBAAG').trim();
 
@@ -114,7 +122,7 @@ class Fast2SmsService {
    * Does NOT automatically fall back to Bulk SMS, preventing accidental cellular SMS.
    */
   async sendMessage(to, text) {
-    this.apiKey = (env.fast2smsApiKey || process.env.FAST2SMS_API_KEY || '').trim();
+    this._refreshConfig();
     if (!this.apiKey) {
       console.log(`[Fast2SMS] ⚠️ sendMessage ignored (FAST2SMS_API_KEY missing) for ${to}`);
       return false;
@@ -140,6 +148,7 @@ class Fast2SmsService {
       if (this.phoneNumberId) {
         url.searchParams.set('phone_number_id', this.phoneNumberId);
       } else {
+        const env = require('../config/env');
         const displayNum = (this.senderNumbers[0] || env.resortContact1 || '9257657664').replace(/\D/g, '');
         const cleanDisplay = displayNum.length === 12 && displayNum.startsWith('91') ? displayNum.slice(2) : displayNum;
         url.searchParams.set('display_number', cleanDisplay);

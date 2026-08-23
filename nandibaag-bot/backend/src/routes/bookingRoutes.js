@@ -383,28 +383,53 @@ const handleSendConfirmation = async (req, res) => {
     const customerMessage = formatBookingMessageForCustomer(booking);
     const staffGroupMessage = formatBookingMessageForStaffGroup(booking);
 
-    // Normalize recipient phone number for WhatsApp
+    // Normalize recipient phone number for WhatsApp / SMS
     let cleanCustomerPhone = String(booking.customerPhone || '').replace(/[^\d]/g, '');
-    if (cleanCustomerPhone.length === 10) cleanCustomerPhone = '91' + cleanCustomerPhone;
+    if (cleanCustomerPhone.length === 11 && cleanCustomerPhone.startsWith('0')) {
+      cleanCustomerPhone = cleanCustomerPhone.slice(1);
+    }
+    if (cleanCustomerPhone.length === 10) {
+      cleanCustomerPhone = '91' + cleanCustomerPhone;
+    }
 
     const activeSessionId = 'resort_primary';
     let customerMsgSent = false;
     let staffGroupSent = false;
     let sendError = null;
 
-    // ─── 1. SEND TO CUSTOMER ───
+    // ─── 1. SEND TO CUSTOMER (WhatsApp First, Fast2SMS SMS Fallback) ───
     console.log('[Booking:SendSMS] ─── Sending to CUSTOMER:', cleanCustomerPhone);
     try {
+      const fast2smsService = require('../services/fast2smsService');
       const sent = await sendMessageViaChannel(cleanCustomerPhone, customerMessage, 'whatsapp-web', activeSessionId);
+      
       if (sent) {
         customerMsgSent = true;
-        console.log('[Booking:SendSMS] ✅ WhatsApp/SMS confirmation sent to customer:', cleanCustomerPhone);
+        console.log('[Booking:SendSMS] ✅ WhatsApp confirmation sent to customer via active channel:', cleanCustomerPhone);
       } else {
-        console.log('[Booking:SendSMS] ⚠️ WhatsApp/SMS confirmation queued / pending for customer:', cleanCustomerPhone);
+        console.log('[Booking:SendSMS] ⚠️ WhatsApp channels not connected. Attempting Cellular Bulk SMS via Fast2SMS...');
+        const smsFallbackSent = await fast2smsService.sendSMS(cleanCustomerPhone, customerMessage);
+        if (smsFallbackSent) {
+          customerMsgSent = true;
+          console.log('[Booking:SendSMS] ✅ Cellular SMS confirmation sent to customer via Fast2SMS:', cleanCustomerPhone);
+        } else {
+          console.log('[Booking:SendSMS] ⚠️ Fast2SMS sendSMS returned false. Message queued for Baileys reconnect.');
+        }
       }
     } catch (waError) {
       console.error('[Booking:SendSMS] ❌ Send error for customer:', waError.message);
       sendError = waError.message;
+      try {
+        const fast2smsService = require('../services/fast2smsService');
+        const smsFallbackSent = await fast2smsService.sendSMS(cleanCustomerPhone, customerMessage);
+        if (smsFallbackSent) {
+          customerMsgSent = true;
+          sendError = null;
+          console.log('[Booking:SendSMS] ✅ Cellular SMS sent via Fast2SMS after error:', cleanCustomerPhone);
+        }
+      } catch (smsErr) {
+        console.error('[Booking:SendSMS] ❌ Fast2SMS emergency fallback failed:', smsErr.message);
+      }
     }
 
     // ─── 2. RECORD IN CHAT HISTORY ───
