@@ -47,29 +47,36 @@ router.get('/', verifyToken, async (req, res, next) => {
 
 /**
  * PATCH /api/settings/global-mode
- * Mass switch all existing chats and future new-chat default (admin only).
+ * Update default mode for NEW chats only (admin only)
+ * DOES NOT touch existing chats — only new incoming chats use this mode
  */
 router.patch('/global-mode', verifyToken, requireAdmin, async (req, res, next) => {
   try {
-    const requestedMode = req.body.globalMode || req.body.mode;
-    const targetMode = normalizeChatMode(requestedMode);
+    const requestedMode = normalizeChatMode(req.body.globalMode || req.body.mode);
     
-    if (!targetMode || !['ai', 'human'].includes(targetMode)) {
+    if (!requestedMode || !['ai', 'human', 'staff', 'auto'].includes(requestedMode)) {
       return res.status(400).json({
         success: false,
-        message: 'Mode must be "ai" or "human"'
+        message: 'Mode must be "ai", "staff", or "human"'
       });
     }
 
-    const { massUpdateAllChatMode } = require('../services/settingsService');
+    const { updateDefaultModeOnly } = require('../services/settingsService');
     const updatedBy = req.user?.name || req.user?.email || req.user?.id || 'Admin';
-    const result = await massUpdateAllChatMode(targetMode, updatedBy, 'Dashboard global mode switch');
-    const settings = await Settings.findOne();
+    const result = await updateDefaultModeOnly(requestedMode, updatedBy);
     
+    logActivity(
+      req.user.id,
+      'global_mode_changed',
+      `Set default mode for new chats to ${requestedMode.toUpperCase()} (existing chats not touched)`,
+      req
+    );
+
     res.json({
       success: true,
-      settings,
-      result
+      settings: result.setting,
+      result,
+      message: `Default mode set to ${requestedMode}. Existing chats not touched.`
     });
   } catch (error) {
     next(error);
