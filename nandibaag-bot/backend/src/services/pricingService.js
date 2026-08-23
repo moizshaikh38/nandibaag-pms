@@ -351,11 +351,78 @@ Hamari team aapse jald hi connect karegi for booking 😊`;
   };
 }
 
+const calculateBookingPrice = (checkInDate, checkOutDate, packageType, adults = 2, kids = 0) => {
+  try {
+    console.log('[Pricing:Calculate] Starting calculation');
+    console.log('[Pricing:Calculate] Package:', packageType);
+    console.log('[Pricing:Calculate] Check-in:', dateHelper.formatDateDDMMYYYY ? dateHelper.formatDateDDMMYYYY(checkInDate) : checkInDate);
+    console.log('[Pricing:Calculate] Check-out:', dateHelper.formatDateDDMMYYYY ? dateHelper.formatDateDDMMYYYY(checkOutDate) : checkOutDate);
+
+    let totalPrice = 0;
+    let breakdown = [];
+
+    const checkIn = new Date(checkInDate);
+    const checkOut = new Date(checkOutDate);
+
+    // Iterate through each night
+    let currentDate = new Date(checkIn);
+    let nightCount = 0;
+
+    while (currentDate < checkOut && nightCount < 365) {
+      const dateStr = dateHelper.formatDateDDMMYYYY ? dateHelper.formatDateDDMMYYYY(currentDate) : formatDateShort(currentDate);
+      const dayName = getDayName(currentDate);
+      const weekday = isWeekday(currentDate);
+
+      console.log(`[Pricing:Calculate] Night ${nightCount + 1}: ${dateStr} (${dayName}) - ${weekday ? 'WEEKDAY' : 'WEEKEND'}`);
+
+      let nightPrice = 0;
+
+      if (packageType === 'couple') {
+        nightPrice = weekday ? 5500 : 6500;
+      } else if (packageType === 'group') {
+        nightPrice = (weekday ? 2000 : 3000) * Number(adults);
+      } else {
+        nightPrice = (weekday ? 2000 : 3000) * Number(adults);
+      }
+
+      breakdown.push({
+        date: dateStr,
+        day: dayName,
+        type: weekday ? 'Weekday' : 'Weekend',
+        pricePerNight: nightPrice
+      });
+
+      totalPrice += nightPrice;
+      currentDate.setDate(currentDate.getDate() + 1);
+      nightCount++;
+    }
+
+    // Add kids
+    const kidsCount = Array.isArray(kids) ? kids.length : Number(kids || 0);
+    const kidsPrice = kidsCount * 1000 * nightCount;
+    totalPrice += kidsPrice;
+
+    console.log('[Pricing:Calculate] Total nights:', nightCount);
+    console.log('[Pricing:Calculate] Total price:', totalPrice);
+
+    return {
+      totalPrice,
+      breakdown,
+      nights: nightCount
+    };
+
+  } catch (error) {
+    console.error('[Pricing:Calculate] Error:', error.message);
+    throw error;
+  }
+};
+
 module.exports = {
   isWeekend,
   isWeekday,
   getDayName,
   parseLocalDate,
   calculatePricing,
+  calculateBookingPrice,
   formatDateShort
 };

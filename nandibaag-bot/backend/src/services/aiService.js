@@ -1077,17 +1077,45 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
   }
 
   // Build system prompt with today's date and detected language
-  const today = new Date();
-  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const dayOfWeek = days[today.getDay()];
-  const todayDateString = today.toLocaleDateString('en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric'
-  });
+  const { getTodayIST, buildDateRangeTable } = require('../utils/dateHelper');
+  const todayInfo = getTodayIST() || {
+    date: new Date(),
+    dateStr: new Date().toISOString().split('T')[0],
+    dayName: 'Sunday'
+  };
+  const todayDateString = todayInfo.dateStr;
+  const dayOfWeek = todayInfo.dayName;
   
   const systemPrompt = buildSystemPrompt(languageToUse, todayDateString, dayOfWeek, resortSettings);
+
+  const futureDate = new Date(todayInfo.date);
+  futureDate.setUTCDate(futureDate.getUTCDate() + 60);
+  const dateTable = buildDateRangeTable(todayInfo.date, futureDate);
+
+  const dateReferenceSection = `
+═════════════════════════════════════════════════════════════════════
+TODAY'S DATE REFERENCE:
+═════════════════════════════════════════════════════════════════════
+Today is: ${todayDateString} (${dayOfWeek})
+
+${dateTable}
+
+═════════════════════════════════════════════════════════════════════
+
+CRITICAL RULES FOR DATE/DAY HANDLING:
+────────────────────────────────────
+1. ALWAYS read day-of-week from the table above
+2. NEVER calculate day-of-week yourself
+3. When customer says "28 Aug", look in table for day
+4. Example: If table says "28/08/2026 = Friday", then 28 Aug IS Friday
+5. NEVER say "28 Aug (Saturday)" if table says Friday
+
+When responding about dates:
+- Always mention the day from the table
+- Format: "28 Aug (Friday)"
+- If customer gives dates, look them up in table first
+- Then calculate pricing based on weekday/weekend
+`;
   
   // Append any system-level notes (e.g. availability/pricing results) to system prompt
   const continuityPrompt = [
@@ -1104,6 +1132,7 @@ async function getAIResponse(chat, incomingMessage, resortSettings, systemNotes 
 
   const finalSystemPrompt = [
     systemPrompt,
+    dateReferenceSection,
     continuityPrompt,
     systemNotes || ''
   ].filter(Boolean).join('\n\n');
