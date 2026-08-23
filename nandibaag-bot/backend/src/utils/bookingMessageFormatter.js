@@ -13,63 +13,64 @@
 const { formatDateToDDMMYYYY, getDayName } = require('./dateUtils');
 
 const getCheckInCheckOutTimes = (packageType, mealOption) => {
-  switch (packageType) {
-    case 'couple':
-    case 'group':
-    case 'overnight':
-      return {
-        checkIn: '12:00 pm',
-        checkOut: '10:30 am',
-        checkInTime: '12:00 PM',
-        checkOutTime: '10:30 AM'
-      };
-    
-    case 'oneDay':
-    case 'picnic':
-    case 'one-day-picnic':
-    case 'dayuse':
-      switch (mealOption) {
-        case 'B->D':
-        case 'breakfast-to-dinner':
-          return {
-            checkIn: '9:00 am',
-            checkOut: '9:30 pm',
-            checkInTime: '09:00 AM',
-            checkOutTime: '9:30 PM'
-          };
-        case 'B->T':
-        case 'breakfast-to-tea':
-          return {
-            checkIn: '9:00 am',
-            checkOut: '6:30 pm',
-            checkInTime: '09:00 AM',
-            checkOutTime: '6:30 PM'
-          };
-        case 'B->L':
-        case 'breakfast-to-lunch':
-          return {
-            checkIn: '9:00 am',
-            checkOut: '2:30 pm',
-            checkInTime: '09:00 AM',
-            checkOutTime: '2:30 PM'
-          };
-        default:
-          return {
-            checkIn: '9:00 am',
-            checkOut: '9:30 pm',
-            checkInTime: '09:00 AM',
-            checkOutTime: '9:30 PM'
-          };
-      }
-    
-    default:
-      return {
-        checkIn: '12:00 pm',
-        checkOut: '10:30 am',
-        checkInTime: '12:00 PM',
-        checkOutTime: '10:30 AM'
-      };
+  console.log('[Formatter:Times] Getting times for:', packageType, mealOption);
+
+  // OVERNIGHT STAYS
+  if (packageType === 'couple' || packageType === 'group' || packageType === 'overnight') {
+    return {
+      checkIn: '12:00 PM',
+      checkOut: '10:30 AM',
+      checkInTime: '12:00 PM',
+      checkOutTime: '10:30 AM',
+      description: 'Check-in: 12:00 PM | Check-out: 10:30 AM (next day)'
+    };
   }
+
+  // ONE-DAY PICNIC
+  if (packageType === 'one-day-picnic' || packageType === 'oneDay' || packageType === 'picnic' || packageType === 'dayuse') {
+    if (mealOption === 'breakfast-to-tea' || mealOption === 'B->T') {
+      return {
+        checkIn: '9:00 AM',
+        checkOut: '6:30 PM',
+        checkInTime: '9:00 AM',
+        checkOutTime: '6:30 PM',
+        description: 'Check-in: 9:00 AM | Check-out: 6:30 PM (same day)'
+      };
+    } else if (mealOption === 'breakfast-to-dinner' || mealOption === 'B->D') {
+      return {
+        checkIn: '9:00 AM',
+        checkOut: '9:30 PM',
+        checkInTime: '9:00 AM',
+        checkOutTime: '9:30 PM',
+        description: 'Check-in: 9:00 AM | Check-out: 9:30 PM (same day)'
+      };
+    } else if (mealOption === 'breakfast-to-lunch' || mealOption === 'B->L') {
+      return {
+        checkIn: '9:00 AM',
+        checkOut: '2:30 PM',
+        checkInTime: '9:00 AM',
+        checkOutTime: '2:30 PM',
+        description: 'Check-in: 9:00 AM | Check-out: 2:30 PM (same day)'
+      };
+    } else {
+      return {
+        checkIn: '9:00 AM',
+        checkOut: '9:30 PM',
+        checkInTime: '9:00 AM',
+        checkOutTime: '9:30 PM',
+        description: 'Check-in: 9:00 AM | Check-out: 9:30 PM (same day)'
+      };
+    }
+  }
+
+  // DEFAULT (Overnight fallback)
+  return {
+    checkIn: '12:00 PM',
+    checkOut: '10:30 AM',
+    checkInTime: '12:00 PM',
+    checkOutTime: '10:30 AM',
+    description: 'Check-in: 12:00 PM | Check-out: 10:30 AM (next day)'
+  };
 };
 
 const getDynamicTimings = (packageType, mealOption) => {
@@ -133,13 +134,12 @@ const formatBookingMessageForCustomer = (booking) => {
   const pendingPayment = Math.max(0, totalAmount - advancePaid);
   const pendingDisplay = pendingPayment > 0 ? `₹${pendingPayment.toLocaleString('en-IN')}` : 'Nil';
 
-  const bookedByName = booking.bookedBy?.name || 'Staff';
+  const bookedByName = booking.bookedBy?.name || booking.bookedBy || 'Staff';
   const roomDisplay = getRoomDisplay(booking.roomIds, booking.roomId);
-  const rateDisplay = getRateDisplay(booking.packageType);
 
-  const { checkInTime, checkOutTime } = getDynamicTimings(booking.packageType, booking.mealOption);
+  const { checkInTime, checkOutTime } = getCheckInCheckOutTimes(booking.packageType, booking.mealOption);
 
-  console.log('[Message:Formatter] Package:', booking.packageType, 'Timings:', checkInTime, '-', checkOutTime);
+  console.log('[Formatter:Confirmation] Package:', booking.packageType, 'Timings:', checkInTime, '-', checkOutTime);
 
   const message = `✅ BOOKING CONFIRMED ✓
 
@@ -150,27 +150,30 @@ Check Out Date: ${checkOutDateStr}
 Check Out Day: ${checkOutDay}
 Members: ${totalMembers}
 Room: ${roomDisplay}
-Total Payment: ₹${totalAmount.toLocaleString('en-IN')}
+Package: ${(booking.packageType || 'Stay').toUpperCase()}
+${booking.mealOption ? `Meal Option: ${booking.mealOption}\n` : ''}Total Payment: ₹${totalAmount.toLocaleString('en-IN')}
 Advance Payment: ₹${advancePaid.toLocaleString('en-IN')}
 Pending Payment: ${pendingDisplay}
 Contact No.: ${booking.customerPhone}
 Booked by: ${bookedByName}
 
-Note:
-⏳ Check in: ${checkInTime}
-⏳ Check out: ${checkOutTime}
-Lunch time: 1:30 to 2:30 pm
-Hi-tea time: 5:30 to 6:30 pm
-Dinner time: 8:30 to 9:30 pm
-Breakfast time: 9:00 to 10:30 am
+🕐 TIMING:
+Check in: ${checkInTime}
+Check out: ${checkOutTime}
 
-Activities timing
-Kayaking and Rope Cycling
-9:00 am to 1:30 pm
-3:00 pm to 5:30 pm
+🍽️ MEAL TIMINGS:
+Breakfast: 9:00 AM - 10:30 AM
+Lunch: 1:30 PM - 2:30 PM
+Hi-tea: 5:30 PM - 6:30 PM
+Dinner: 8:30 PM - 9:30 PM
 
-DOLLERS CAFE TIMING
-12:00 PM TO 12:00 AM
+🏄 ACTIVITIES:
+Kayaking & Rope Cycling:
+9:00 AM - 1:30 PM
+3:00 PM - 5:30 PM
+
+☕ DOLLERS CAFE:
+12:00 PM - 12:00 AM
 ${booking.notes ? `\nSpecial Notes: ${booking.notes}` : ''}
 Thank you for booking with Nandibaag Resort! 🙏`;
 
