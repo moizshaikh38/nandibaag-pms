@@ -23,7 +23,11 @@ import {
   AlertTriangle,
   Cpu,
   ShieldCheck,
-  CheckCircle
+  CheckCircle,
+  History,
+  UserCheck,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -38,11 +42,20 @@ export default function SettingsPage() {
   const [defaultModeForNewChats, setDefaultModeForNewChats] = useState('ai');
   const [isSaving, setIsSaving] = useState(false);
 
+  // Mass Chat Mode Switch States
+  const [modeChangeHistory, setModeChangeHistory] = useState([]);
+  const [showMassSwitchModal, setShowMassSwitchModal] = useState(false);
+  const [targetMassMode, setTargetMassMode] = useState('staff');
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
+  const [isMassSwitching, setIsMassSwitching] = useState(false);
+  const [massSwitchResult, setMassSwitchResult] = useState(null);
+
   // Password Form
   const [passwordForm, setPasswordForm] = useState({ current: '', new: '', confirm: '' });
 
   useEffect(() => {
     fetchSettings();
+    fetchModeChangeHistory();
   }, []);
 
   const fetchSettings = async () => {
@@ -56,6 +69,15 @@ export default function SettingsPage() {
       toast.error('Failed to load settings');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchModeChangeHistory = async () => {
+    try {
+      const res = await api.get('/settings/mode-change-history');
+      setModeChangeHistory(res.data.history || []);
+    } catch (err) {
+      console.warn('[Settings] Failed to fetch mode history:', err);
     }
   };
 
@@ -86,6 +108,37 @@ export default function SettingsPage() {
       toast.error('Failed to update default mode for new chats');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleMassSwitch = async (e) => {
+    if (e) e.preventDefault();
+    try {
+      setIsMassSwitching(true);
+      toast.loading(`Switching ALL chats to ${targetMassMode.toUpperCase()} mode...`, { id: 'mass-switch' });
+      
+      const res = await api.post('/settings/switch-all-chats', {
+        mode: targetMassMode,
+        confirmPassword: adminPasswordInput,
+        updatedBy: user?.name || user?.email || 'Admin'
+      });
+
+      if (res.data.success) {
+        const stats = res.data.result.stats;
+        toast.success(`✅ Switched ${stats.modifiedChats}/${stats.totalChats} chats to ${targetMassMode.toUpperCase()}!`, { id: 'mass-switch' });
+        setMassSwitchResult(res.data.result);
+        setShowMassSwitchModal(false);
+        setAdminPasswordInput('');
+        fetchSettings();
+        fetchModeChangeHistory();
+        window.dispatchEvent(new Event('refresh_chats'));
+      } else {
+        toast.error(`❌ Failed: ${res.data.error || 'Could not switch modes'}`, { id: 'mass-switch' });
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || err.message || 'Error executing mass mode switch', { id: 'mass-switch' });
+    } finally {
+      setIsMassSwitching(false);
     }
   };
 
@@ -241,6 +294,154 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          {/* SECTION 2: MASS CHAT MODE SWITCH (PAST + FUTURE CHATS) */}
+          <div className="glass-card rounded-2xl p-6 bg-white border border-rose-200 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-rose-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center">
+                  <AlertTriangle size={18} />
+                </div>
+                <div>
+                  <h3 className="font-display font-bold text-base text-rose-950">
+                    Switch ALL Chats (Past + Future)
+                  </h3>
+                  <p className="text-[11px] text-rose-800/80">
+                    Instantly switches mode across entire system. Chat memory & history 100% preserved.
+                  </p>
+                </div>
+              </div>
+
+              <span className="text-[10px] uppercase tracking-wider font-extrabold bg-rose-100 text-rose-800 px-2.5 py-1 rounded-full border border-rose-300 w-fit">
+                Mass Override
+              </span>
+            </div>
+
+            <div className="p-3.5 bg-rose-50/70 border border-rose-200/80 rounded-xl text-xs text-rose-900 space-y-1.5">
+              <div className="flex items-center gap-2 font-bold text-rose-950">
+                <ShieldCheck size={16} className="text-rose-600 shrink-0" />
+                <span>Zero Data Loss Guarantee</span>
+              </div>
+              <p className="text-[11px] text-rose-800 leading-relaxed">
+                When you execute a mass switch:
+              </p>
+              <ul className="text-[11px] text-rose-800 list-disc list-inside space-y-0.5">
+                <li><strong>All existing chats</strong> immediately change to the selected mode.</li>
+                <li><strong>Future chats</strong> will automatically default to the new mode.</li>
+                <li><strong>Chat messages, notes, customer details, and price drafts remain completely intact.</strong></li>
+              </ul>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setTargetMassMode('staff');
+                  setShowMassSwitchModal(true);
+                }}
+                className="p-4 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white shadow-sm transition-all flex items-center justify-between gap-3 group active:scale-[0.99]"
+              >
+                <div className="flex items-center gap-2.5 text-left">
+                  <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+                    <Users size={18} />
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm">Switch ALL to Staff Mode</p>
+                    <p className="text-[11px] text-amber-100">All chats handled by human team</p>
+                  </div>
+                </div>
+                <span className="text-xs bg-white/20 px-2 py-1 rounded-lg font-extrabold group-hover:translate-x-0.5 transition-transform">
+                  Go ➔
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setTargetMassMode('ai');
+                  setShowMassSwitchModal(true);
+                }}
+                className="p-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white shadow-sm transition-all flex items-center justify-between gap-3 group active:scale-[0.99]"
+              >
+                <div className="flex items-center gap-2.5 text-left">
+                  <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+                    <Bot size={18} />
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm">Switch ALL to AI Auto Mode</p>
+                    <p className="text-[11px] text-emerald-100">AI auto-replies across all chats</p>
+                  </div>
+                </div>
+                <span className="text-xs bg-white/20 px-2 py-1 rounded-lg font-extrabold group-hover:translate-x-0.5 transition-transform">
+                  Go ➔
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* SECTION 3: MODE CHANGE AUDIT LOG HISTORY */}
+          <div className="glass-card rounded-2xl p-6 bg-white border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <History size={18} className="text-indigo-600" />
+                <h3 className="font-display font-bold text-base text-slate-800">Mode Change Audit History</h3>
+              </div>
+
+              <button
+                type="button"
+                onClick={fetchModeChangeHistory}
+                className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 p-1"
+                title="Refresh History"
+              >
+                <RefreshCw size={13} />
+                <span>Refresh</span>
+              </button>
+            </div>
+
+            {modeChangeHistory.length === 0 ? (
+              <div className="p-6 text-center text-slate-400 text-xs border border-dashed border-slate-200 rounded-xl">
+                No mass mode transitions logged yet.
+              </div>
+            ) : (
+              <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                {modeChangeHistory.map((log, idx) => (
+                  <div
+                    key={log._id || idx}
+                    className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded-md font-extrabold text-[10px] uppercase ${
+                          log.toMode === 'ai' || log.toMode === 'auto'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                            : 'bg-amber-100 text-amber-800 border border-amber-300'
+                        }`}>
+                          {log.toMode === 'ai' ? '🤖 AI Auto' : '👤 Staff Mode'}
+                        </span>
+                        <strong className="text-slate-800">
+                          {log.modifiedChats} of {log.totalChats || log.affectedChats} chats updated
+                        </strong>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Triggered by <span className="font-medium text-slate-700">{log.changedBy}</span> • {log.notes || 'Mass mode update'}
+                      </p>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <span className="text-[11px] text-slate-400 font-medium">
+                        {new Date(log.changedAt || log.createdAt).toLocaleString('en-IN', {
+                          day: '2-digit',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="glass-card rounded-2xl p-6 bg-white border border-slate-200 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
@@ -375,6 +576,105 @@ export default function SettingsPage() {
                 <span>Outside food and beverage is not permitted inside resort premises.</span>
               </li>
             </ul>
+          </div>
+        </div>
+      )}
+
+      {/* MASS CHAT MODE SWITCH CONFIRMATION MODAL */}
+      {showMassSwitchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-4 border border-rose-300 relative text-slate-800">
+            <button
+              type="button"
+              onClick={() => {
+                setShowMassSwitchModal(false);
+                setAdminPasswordInput('');
+              }}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition-colors"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-sm border ${
+                targetMassMode === 'staff'
+                  ? 'bg-amber-100 text-amber-700 border-amber-300'
+                  : 'bg-emerald-100 text-emerald-700 border-emerald-300'
+              }`}>
+                {targetMassMode === 'staff' ? <Users size={22} /> : <Bot size={22} />}
+              </div>
+              <div>
+                <h3 className="font-display font-extrabold text-base sm:text-lg text-slate-900 leading-tight">
+                  Switch ALL Chats (Past + Future)
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  Target: <strong className="uppercase text-slate-800">{targetMassMode === 'staff' ? 'Staff / Human Mode' : 'AI Auto Mode'}</strong>
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-slate-50 rounded-xl space-y-2 text-xs text-slate-700 border border-slate-200">
+              <div className="flex items-center gap-2 font-bold text-slate-900">
+                <ShieldCheck size={16} className="text-emerald-600 shrink-0" />
+                <span>What happens next:</span>
+              </div>
+              <ul className="list-disc list-inside space-y-1 text-[11px] text-slate-600">
+                <li>Every existing chat will be switched to <strong>{targetMassMode.toUpperCase()}</strong>.</li>
+                <li>New incoming chats will start in <strong>{targetMassMode.toUpperCase()}</strong>.</li>
+                <li><strong>Chat history & memory are 100% preserved.</strong></li>
+              </ul>
+            </div>
+
+            <form onSubmit={handleMassSwitch} className="space-y-4 pt-1">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Admin Password <span className="text-slate-400 font-normal">(Optional Confirmation)</span>
+                </label>
+                <input
+                  type="password"
+                  value={adminPasswordInput}
+                  onChange={(e) => setAdminPasswordInput(e.target.value)}
+                  placeholder="Enter admin password if configured"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-rose-500 bg-white"
+                />
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                <button
+                  type="submit"
+                  disabled={isMassSwitching}
+                  className={`flex-1 py-2.5 px-4 text-white font-extrabold rounded-xl text-xs sm:text-sm transition-all flex items-center justify-center gap-2 shadow-md disabled:opacity-50 ${
+                    targetMassMode === 'staff'
+                      ? 'bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800'
+                      : 'bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800'
+                  }`}
+                >
+                  {isMassSwitching ? (
+                    <>
+                      <RefreshCw size={15} className="animate-spin" />
+                      <span>Updating All Chats...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check size={15} />
+                      <span>Confirm Switch ALL</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMassSwitchModal(false);
+                    setAdminPasswordInput('');
+                  }}
+                  disabled={isMassSwitching}
+                  className="py-2.5 px-4 bg-slate-100 hover:bg-slate-200 active:scale-[0.99] text-slate-700 font-bold rounded-xl text-xs transition-colors text-center"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

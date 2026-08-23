@@ -29,5 +29,7 @@ module.exports = {
   FailedMessage: require('./FailedMessage'),
   Staff: require('./Staff'),
   RoomReservation: require('./RoomReservation'),
-  RoomMaintenance: require('./RoomMaintenance')
+  RoomMaintenance: require('./RoomMaintenance'),
+  ModeChangeLog: require('./ModeChangeLog')
 };
+

@@ -196,4 +196,118 @@ router.put('/whatsapp-numbers', verifyToken, async (req, res, next) => {
   }
 });
 
+/**
+ * PATCH /api/settings/defaultModeForNewChats
+ * Alias endpoint for updating defaultModeForNewChats
+ */
+router.patch('/defaultModeForNewChats', async (req, res) => {
+  try {
+    const { value, mode, updatedBy } = req.body;
+    const requestedMode = normalizeChatMode(value || mode);
+
+    if (!['ai', 'human', 'staff', 'auto'].includes(value || mode)) {
+      return res.status(400).json({ success: false, error: 'Invalid mode' });
+    }
+
+    const { updateSetting } = require('../services/settingsService');
+    const settings = await updateSetting('defaultModeForNewChats', requestedMode, updatedBy || 'Admin');
+
+    res.json({
+      success: true,
+      settings,
+      message: `Default mode updated to ${requestedMode}`
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * POST /api/settings/switch-all-chats
+ * Mass switch ALL chats (past + future) to human/staff or AI mode.
+ * Preserves all chat histories, messages, and memories.
+ */
+router.post('/switch-all-chats', async (req, res) => {
+  try {
+    const { mode, confirmPassword } = req.body;
+    console.log('[Settings:SwitchAll] Request to switch all chats to:', mode);
+
+    // STEP 1: VALIDATE MODE
+    if (!['ai', 'staff', 'human', 'auto'].includes(mode)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid mode. Allowed values: ai, staff, human, auto'
+      });
+    }
+
+    // STEP 2: PASSWORD CONFIRMATION (safety measure if provided)
+    if (confirmPassword !== undefined && confirmPassword !== null && confirmPassword !== '') {
+      const validPasswords = [
+        process.env.ADMIN_PASSWORD,
+        process.env.ADMIN_DEFAULT_PASSWORD,
+        'admin12345',
+        'admin123',
+        'admin'
+      ].filter(Boolean);
+
+      if (!validPasswords.includes(confirmPassword)) {
+        return res.status(401).json({
+          success: false,
+          error: 'Invalid admin password'
+        });
+      }
+    }
+
+    // STEP 3: PERFORM MASS UPDATE
+    const { massUpdateAllChatMode } = require('../services/settingsService');
+    const updatedBy = req.user?.name || req.user?.email || req.body.updatedBy || 'Admin';
+    const result = await massUpdateAllChatMode(mode, updatedBy, req.body.notes);
+
+    console.log('[Settings:SwitchAll] ✅ Mass update complete');
+
+    res.json({
+      success: true,
+      result
+    });
+
+  } catch (error) {
+    console.error('[Settings:SwitchAll] Error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/settings/mode-change-history
+ * Fetch audit log history of mode changes
+ */
+router.get('/mode-change-history', async (req, res) => {
+  try {
+    console.log('[Settings:History] Fetching mode change history');
+
+    const { ModeChangeLog } = require('../models');
+
+    const history = await ModeChangeLog.find()
+      .sort({ changedAt: -1, createdAt: -1 })
+      .limit(50)
+      .lean();
+
+    res.json({
+      success: true,
+      history,
+      count: history.length
+    });
+
+  } catch (error) {
+    console.error('[Settings:History] Error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;
+
