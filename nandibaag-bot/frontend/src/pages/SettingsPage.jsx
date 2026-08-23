@@ -92,6 +92,10 @@ export default function SettingsPage() {
   };
 
   const handleDefaultModeChange = async (mode) => {
+    if (!isAdmin) {
+      toast.error('Admin access required');
+      return;
+    }
     if (mode === defaultModeForNewChats) return;
     const previousMode = defaultModeForNewChats;
 
@@ -113,6 +117,10 @@ export default function SettingsPage() {
 
   const handleMassSwitch = async (e) => {
     if (e) e.preventDefault();
+    if (!isAdmin) {
+      toast.error('Admin access required');
+      return;
+    }
     try {
       setIsMassSwitching(true);
       toast.loading(`Switching ALL chats to ${targetMassMode.toUpperCase()} mode...`, { id: 'mass-switch' });
@@ -334,11 +342,12 @@ export default function SettingsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <button
                 type="button"
+                disabled={!isAdmin}
                 onClick={() => {
                   setTargetMassMode('staff');
                   setShowMassSwitchModal(true);
                 }}
-                className="p-4 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white shadow-sm transition-all flex items-center justify-between gap-3 group active:scale-[0.99]"
+                className="p-4 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white shadow-sm transition-all flex items-center justify-between gap-3 group active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <div className="flex items-center gap-2.5 text-left">
                   <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
@@ -356,11 +365,12 @@ export default function SettingsPage() {
 
               <button
                 type="button"
+                disabled={!isAdmin}
                 onClick={() => {
                   setTargetMassMode('ai');
                   setShowMassSwitchModal(true);
                 }}
-                className="p-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white shadow-sm transition-all flex items-center justify-between gap-3 group active:scale-[0.99]"
+                className="p-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white shadow-sm transition-all flex items-center justify-between gap-3 group active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <div className="flex items-center gap-2.5 text-left">
                   <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center shrink-0">

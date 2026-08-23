@@ -28,12 +28,12 @@ const whatsappNumberSchema = new mongoose.Schema({
 const settingsSchema = new mongoose.Schema({
   globalMode: {
     type: String,
-    enum: ['ai', 'human'],
-    default: 'ai' // Bulk control only. PATCH /global-mode overrides all existing chats.
+    enum: ['ai', 'staff', 'human', 'auto'],
+    default: 'ai'
   },
   defaultModeForNewChats: {
     type: String,
-    enum: ['ai', 'human'],
+    enum: ['ai', 'staff', 'human', 'auto'],
     default: 'ai'
   },
   whatsappNumbers: [whatsappNumberSchema],

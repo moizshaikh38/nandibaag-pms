@@ -12,7 +12,7 @@ const logger = require('../config/logger');
 function normalizeMode(mode) {
   if (!mode) return 'ai';
   const m = String(mode).trim().toLowerCase();
-  if (m === 'staff' || m === 'human') return 'human';
+  if (m === 'staff' || m === 'human') return 'staff';
   if (m === 'auto' || m === 'ai') return 'ai';
   return m;
 }
@@ -72,152 +72,176 @@ async function initializeDefaultSettings() {
 }
 
 /**
- * Update a setting by key
+ * FUNCTION 1: UPDATE DEFAULT ONLY (don't touch existing chats)
  */
-async function updateSetting(key, value, updatedBy = 'Admin') {
+const updateDefaultModeOnly = async (newMode, updatedBy = 'Admin') => {
   try {
-    const update = { [key]: value };
-    const settings = await Settings.findOneAndUpdate(
-      {},
-      { $set: update },
-      { new: true, upsert: true, setDefaultsOnInsert: true }
-    );
-    logger.info(`[SettingsService] Setting '${key}' updated to '${value}' by ${updatedBy}`);
-    return settings;
-  } catch (err) {
-    logger.error(`[SettingsService] Error updating setting ${key}: ${err.message}`);
-    throw err;
-  }
-}
-
-/**
- * Mass update ALL chats (past + future) to target mode.
- * Preserves all chat histories, messages, and memories.
- * 
- * @param {'ai' | 'staff' | 'human' | 'auto'} newMode
- * @param {string} [updatedBy]
- * @param {string} [notes]
- */
-async function massUpdateAllChatMode(newMode, updatedBy = 'Admin', notes = '') {
-  try {
-    console.log('[Settings:MassUpdate] Starting mass chat mode update');
-    console.log('[Settings:MassUpdate] Target mode requested:', newMode);
+    console.log('[Settings:DefaultOnly] Updating default mode to:', newMode);
 
     if (!['ai', 'staff', 'human', 'auto'].includes(newMode)) {
-      throw new Error(`Invalid mode: ${newMode}. Allowed modes: ai, staff, human, auto`);
+      throw new Error('Invalid mode');
     }
 
-    const targetDbMode = normalizeMode(newMode); // 'ai' or 'human'
+    const normalizedMode = normalizeMode(newMode);
 
-    // STEP 1: GET ALL CHATS FOR DISTRIBUTION STATS
-    const allChats = await Chat.find().select('_id customerPhone mode').lean();
-    const totalChats = allChats.length;
-
-    console.log('[Settings:MassUpdate] Found', totalChats, 'chats in database');
-
-    // STEP 2: CATEGORIZE CHATS
-    let aiChats = 0;
-    let staffChats = 0;
-    let otherChats = 0;
-
-    allChats.forEach(chat => {
-      const m = (chat.mode || '').trim().toLowerCase();
-      if (m === 'ai' || m === 'auto') aiChats++;
-      else if (m === 'staff' || m === 'human') staffChats++;
-      else otherChats++;
-    });
-
-    console.log('[Settings:MassUpdate] Current distribution:');
-    console.log('[Settings:MassUpdate] - AI mode:', aiChats);
-    console.log('[Settings:MassUpdate] - Staff/Human mode:', staffChats);
-    console.log('[Settings:MassUpdate] - Other:', otherChats);
-
-    // STEP 3: PERFORM MASS UPDATE ON ALL CHATS
-    const updateResult = await Chat.updateMany(
-      {}, // Match all chats
+    // ONLY update the setting - DO NOT TOUCH ANY CHAT
+    const setting = await Settings.findOneAndUpdate(
+      {},
       {
         $set: {
-          mode: targetDbMode,
-          updatedAt: new Date()
+          defaultModeForNewChats: normalizedMode,
+          globalMode: normalizedMode
         }
-      }
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
     );
 
-    console.log('[Settings:MassUpdate] ✅ Update result:');
-    console.log('[Settings:MassUpdate] - Matched:', updateResult.matchedCount);
-    console.log('[Settings:MassUpdate] - Modified:', updateResult.modifiedCount);
+    console.log('[Settings:DefaultOnly] ✅ Setting updated to:', normalizedMode);
+    console.log('[Settings:DefaultOnly] ⚠️ EXISTING CHATS NOT TOUCHED');
 
-    // STEP 4: UPDATE DEFAULT SETTING FOR FUTURE CHATS
-    await updateSetting('defaultModeForNewChats', targetDbMode, updatedBy);
-    await updateSetting('globalMode', targetDbMode, updatedBy);
-
-    console.log('[Settings:MassUpdate] ✅ Default mode for new chats updated to:', targetDbMode);
-
-    // STEP 5: CREATE AUDIT LOG
-    const logEntry = new ModeChangeLog({
-      changedAt: new Date(),
-      changedBy: updatedBy || 'Admin',
-      affectedChats: totalChats,
-      modifiedChats: updateResult.modifiedCount,
-      fromModeDistribution: {
-        ai: aiChats,
-        staff: staffChats,
-        other: otherChats
-      },
-      toMode: newMode,
-      totalChats: totalChats,
-      notes: notes || `Mass switched all chats to ${newMode.toUpperCase()}`
-    });
-
-    await logEntry.save();
-    console.log('[Settings:MassUpdate] ✅ Audit log saved with ID:', logEntry._id);
-
-    // STEP 6: EMIT SOCKET.IO NOTIFICATION TO ALL CLIENTS
     try {
       const { getIO } = require('../sockets');
       const io = getIO();
       if (io) {
-        io.emit('settings:global_mode_changed', { globalMode: targetDbMode, mode: newMode });
-        io.emit('settings:default_new_chat_mode_changed', { defaultModeForNewChats: targetDbMode });
-        io.emit('chats:mass_mode_updated', {
-          targetMode: targetDbMode,
-          displayMode: newMode,
-          modifiedChats: updateResult.modifiedCount,
-          totalChats
-        });
+        io.emit('settings:default_new_chat_mode_changed', { defaultModeForNewChats: normalizedMode });
+        io.emit('settings:global_mode_changed', { globalMode: normalizedMode });
       }
     } catch (socketErr) {
-      logger.warn(`[SettingsService] Could not emit socket update: ${socketErr.message}`);
+      logger.warn(`[Settings:DefaultOnly] Socket emit failed: ${socketErr.message}`);
     }
 
     return {
       success: true,
-      message: `All ${updateResult.modifiedCount} chats switched to ${newMode.toUpperCase()} mode successfully`,
+      message: 'Default mode updated. New chats will use ' + newMode + ' mode.',
+      changedType: 'DEFAULT_ONLY',
+      existingChatsAffected: 0,
+      newChatsAffected: 'future',
+      setting
+    };
+
+  } catch (error) {
+    console.error('[Settings:DefaultOnly] Error:', error.message);
+    throw error;
+  }
+};
+
+/**
+ * FUNCTION 2: MASS SWITCH (update ALL chats)
+ */
+const massUpdateAllChatMode = async (newMode, updatedBy = 'Admin') => {
+  try {
+    console.log('[Settings:MassSwitch] MASS UPDATING ALL CHATS to:', newMode);
+
+    const Chat = require('../models/Chat');
+
+    if (!['ai', 'staff', 'human', 'auto'].includes(newMode)) {
+      throw new Error('Invalid mode');
+    }
+
+    const normalizedMode = normalizeMode(newMode);
+
+    // GET STATS BEFORE
+    const allChatsBefore = await Chat.find().select('mode').lean();
+    const statsBefore = {
+      ai: allChatsBefore.filter(c => c.mode === 'ai').length,
+      staff: allChatsBefore.filter(c => c.mode === 'staff' || c.mode === 'human').length,
+      auto: allChatsBefore.filter(c => c.mode === 'auto').length,
+      total: allChatsBefore.length
+    };
+
+    console.log('[Settings:MassSwitch] Before stats:', statsBefore);
+
+    // STEP 1: MASS UPDATE ALL CHATS
+    console.log('[Settings:MassSwitch] Updating all', statsBefore.total, 'chats...');
+
+    const updateResult = await Chat.updateMany(
+      {}, // No filter = all chats
+      {
+        $set: {
+          mode: normalizedMode,
+          updatedAt: new Date()
+        }
+      },
+      { runValidators: false }
+    );
+
+    console.log('[Settings:MassSwitch] Update result - Matched:', updateResult.matchedCount, 'Modified:', updateResult.modifiedCount);
+
+    // VERIFY UPDATE
+    const allChatsAfter = await Chat.find().select('mode').lean();
+    const statsAfter = {
+      ai: allChatsAfter.filter(c => c.mode === 'ai').length,
+      staff: allChatsAfter.filter(c => c.mode === 'staff' || c.mode === 'human').length,
+      auto: allChatsAfter.filter(c => c.mode === 'auto').length,
+      total: allChatsAfter.length
+    };
+
+    console.log('[Settings:MassSwitch] After stats:', statsAfter);
+
+    // STEP 2: ALSO UPDATE DEFAULT FOR FUTURE CHATS
+    console.log('[Settings:MassSwitch] Updating default mode for future chats...');
+
+    await updateDefaultModeOnly(newMode, updatedBy);
+
+    // STEP 3: CREATE AUDIT LOG
+    const ModeChangeLog = require('../models/ModeChangeLog');
+
+    const logEntry = new ModeChangeLog({
+      changedAt: new Date(),
+      changedBy: updatedBy || 'Admin',
+      affectedChats: statsBefore.total,
+      modifiedChats: updateResult.modifiedCount,
+      fromModeDistribution: statsBefore,
+      toMode: normalizedMode,
+      totalChats: statsBefore.total,
+      changeType: 'MASS_SWITCH'
+    });
+
+    await logEntry.save();
+
+    console.log('[Settings:MassSwitch] ✅ Audit log created');
+
+    try {
+      const { getIO } = require('../sockets');
+      const io = getIO();
+      if (io) {
+        io.emit('settings:global_mode_changed', { globalMode: normalizedMode, mode: normalizedMode });
+        io.emit('settings:default_new_chat_mode_changed', { defaultModeForNewChats: normalizedMode });
+        io.emit('chats:bulk_mode_updated', { mode: normalizedMode });
+        io.emit('chats:mass_mode_updated', {
+          targetMode: normalizedMode,
+          displayMode: newMode,
+          modifiedChats: updateResult.modifiedCount,
+          totalChats: statsBefore.total
+        });
+      }
+    } catch (socketErr) {
+      logger.warn(`[Settings:MassSwitch] Socket emit failed: ${socketErr.message}`);
+    }
+
+    return {
+      success: true,
+      message: `✅ ALL ${updateResult.modifiedCount} chats switched to ${newMode} mode + default updated`,
+      changedType: 'MASS_SWITCH',
       stats: {
-        totalChats,
-        modifiedChats: updateResult.modifiedCount,
-        matchedChats: updateResult.matchedCount,
-        previousDistribution: {
-          ai: aiChats,
-          staff: staffChats,
-          other: otherChats
-        },
-        newMode: newMode,
-        targetDbMode: targetDbMode,
-        timestamp: new Date()
+        chatsSwitched: updateResult.modifiedCount,
+        statsBefore,
+        statsAfter,
+        defaultNowSet: newMode
       }
     };
 
   } catch (error) {
-    console.error('[Settings:MassUpdate] ❌ Error:', error.message);
+    console.error('[Settings:MassSwitch] ❌ Error:', error.message);
     throw error;
   }
-}
+};
 
 module.exports = {
   getSettingValue,
   getAllSettings,
-  initializeDefaultSettings,
-  updateSetting,
-  massUpdateAllChatMode
+  updateSetting: updateDefaultModeOnly, // Use DEFAULT ONLY for normal updates
+  updateDefaultModeOnly, // Export both
+  massUpdateAllChatMode,
+  initializeDefaultSettings
 };

@@ -84,12 +84,12 @@ const bookingDraftSchema = new mongoose.Schema({
 const modeHistorySchema = new mongoose.Schema({
   fromMode: {
     type: String,
-    enum: ['ai', 'human', null],
+    enum: ['ai', 'staff', 'human', 'auto', null],
     default: null
   },
   toMode: {
     type: String,
-    enum: ['ai', 'human'],
+    enum: ['ai', 'staff', 'human', 'auto'],
     required: true
   },
   switchedAt: {
@@ -123,7 +123,7 @@ const chatSchema = new mongoose.Schema({
   },
   mode: {
     type: String,
-    enum: ['ai', 'human'],
+    enum: ['ai', 'staff', 'human', 'auto'],
     default: 'ai'
   },
   language: {

@@ -1,6 +1,6 @@
 const express = require('express');
 const { verifyToken, requireAdmin } = require('../middleware/auth');
-const { Settings, Chat } = require('../models');
+const { Settings } = require('../models');
 const { getIO } = require('../sockets');
 const logger = require('../config/logger');
 const { logActivity } = require('../utils/activityLogger');
@@ -9,6 +9,7 @@ const router = express.Router();
 
 function normalizeChatMode(mode) {
   if (mode === 'staff') return 'human';
+  if (mode === 'auto') return 'ai';
   return mode;
 }
 
@@ -46,43 +47,29 @@ router.get('/', verifyToken, async (req, res, next) => {
 
 /**
  * PATCH /api/settings/global-mode
- * Update default mode for NEW chats only (admin only)
- * DOES NOT touch existing chats — only new incoming chats use this mode
+ * Mass switch all existing chats and future new-chat default (admin only).
  */
-router.patch('/global-mode', verifyToken, async (req, res, next) => {
+router.patch('/global-mode', verifyToken, requireAdmin, async (req, res, next) => {
   try {
-    const requestedMode = normalizeChatMode(req.body.globalMode || req.body.mode);
+    const requestedMode = req.body.globalMode || req.body.mode;
+    const targetMode = normalizeChatMode(requestedMode);
     
-    if (!requestedMode || !['ai', 'human'].includes(requestedMode)) {
+    if (!targetMode || !['ai', 'human'].includes(targetMode)) {
       return res.status(400).json({
         success: false,
         message: 'Mode must be "ai" or "human"'
       });
     }
-    
-    // Update ONLY the settings document — NOT any chats
-    const settings = await Settings.findOneAndUpdate(
-      {},
-      { globalMode: requestedMode, defaultModeForNewChats: requestedMode },
-      { new: true, upsert: true }
-    );
 
-    // ⚠️ REMOVED: Chat.updateMany({}, { mode }) — this was overwriting ALL existing chats
-    logger.info(`[Settings] Default mode for new chats set to: ${requestedMode} (existing chats NOT touched)`);
-    logActivity(req.user.id, 'default_mode_changed', `Set default mode for new chats to ${requestedMode.toUpperCase()} (existing chats unchanged)`, req);
-
-    // Emit real-time Socket.io event to clients
-    try {
-      const io = getIO();
-      io.emit('settings:default_new_chat_mode_changed', { defaultModeForNewChats: requestedMode });
-      io.emit('settings:global_mode_changed', { globalMode: requestedMode });
-    } catch (err) {
-      logger.error(`Failed to emit socket updates after mode setting change: ${err.message}`);
-    }
+    const { massUpdateAllChatMode } = require('../services/settingsService');
+    const updatedBy = req.user?.name || req.user?.email || req.user?.id || 'Admin';
+    const result = await massUpdateAllChatMode(targetMode, updatedBy, 'Dashboard global mode switch');
+    const settings = await Settings.findOne();
     
     res.json({
       success: true,
-      settings
+      settings,
+      result
     });
   } catch (error) {
     next(error);
@@ -94,41 +81,35 @@ router.patch('/global-mode', verifyToken, async (req, res, next) => {
  * Set default mode for brand-new chats only (admin only)
  * Existing chats keep their current mode.
  */
-router.patch('/default-new-chat-mode', verifyToken, async (req, res, next) => {
+router.patch('/default-new-chat-mode', verifyToken, requireAdmin, async (req, res, next) => {
   try {
     const requestedMode = normalizeChatMode(req.body.defaultModeForNewChats || req.body.mode || req.body.value);
 
-    if (!requestedMode || !['ai', 'human'].includes(requestedMode)) {
+    if (!requestedMode || !['ai', 'human', 'staff', 'auto'].includes(requestedMode)) {
       return res.status(400).json({
         success: false,
-        message: 'defaultModeForNewChats must be "ai" or "human"'
+        message: 'defaultModeForNewChats must be "ai", "staff", or "human"'
       });
     }
 
-    const settings = await Settings.findOneAndUpdate(
-      {},
-      { defaultModeForNewChats: requestedMode },
-      { new: true, upsert: true, setDefaultsOnInsert: true }
+    const { updateDefaultModeOnly } = require('../services/settingsService');
+    const result = await updateDefaultModeOnly(
+      requestedMode,
+      req.user?.name || req.user?.email || req.user?.id || 'Admin'
     );
 
     logActivity(
       req.user.id,
       'default_new_chat_mode_changed',
-      `Set new chats default mode to ${requestedMode.toUpperCase()}`,
+      `Set new chats default mode to ${requestedMode.toUpperCase()} (existing chats not touched)`,
       req
     );
 
-    try {
-      const io = getIO();
-      io.emit('settings:default_new_chat_mode_changed', { defaultModeForNewChats: requestedMode });
-    } catch (err) {
-      logger.error(`Failed to emit socket update after default chat mode change: ${err.message}`);
-    }
-
     res.json({
       success: true,
-      settings,
-      message: 'Default mode for new chats updated'
+      settings: result.setting,
+      result,
+      message: 'Default mode for new chats updated. Existing chats not touched.'
     });
   } catch (error) {
     next(error);
@@ -139,7 +120,7 @@ router.patch('/default-new-chat-mode', verifyToken, async (req, res, next) => {
  * PATCH /api/settings/follow-ups
  * Enable/disable follow-up system (admin only)
  */
-router.patch('/follow-ups', verifyToken, async (req, res, next) => {
+router.patch('/follow-ups', verifyToken, requireAdmin, async (req, res, next) => {
   try {
     const { followUpEnabled } = req.body;
     
@@ -170,7 +151,7 @@ router.patch('/follow-ups', verifyToken, async (req, res, next) => {
  * PUT /api/settings/whatsapp-numbers
  * Update WhatsApp numbers configuration (admin only)
  */
-router.put('/whatsapp-numbers', verifyToken, async (req, res, next) => {
+router.put('/whatsapp-numbers', verifyToken, requireAdmin, async (req, res, next) => {
   try {
     const { whatsappNumbers } = req.body;
     
@@ -200,7 +181,7 @@ router.put('/whatsapp-numbers', verifyToken, async (req, res, next) => {
  * PATCH /api/settings/defaultModeForNewChats
  * Alias endpoint for updating defaultModeForNewChats
  */
-router.patch('/defaultModeForNewChats', async (req, res) => {
+router.patch('/defaultModeForNewChats', verifyToken, requireAdmin, async (req, res) => {
   try {
     const { value, mode, updatedBy } = req.body;
     const requestedMode = normalizeChatMode(value || mode);
@@ -209,8 +190,8 @@ router.patch('/defaultModeForNewChats', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid mode' });
     }
 
-    const { updateSetting } = require('../services/settingsService');
-    const settings = await updateSetting('defaultModeForNewChats', requestedMode, updatedBy || 'Admin');
+    const { updateDefaultModeOnly } = require('../services/settingsService');
+    const settings = await updateDefaultModeOnly(requestedMode, updatedBy || req.user?.email || 'Admin');
 
     res.json({
       success: true,
@@ -227,7 +208,7 @@ router.patch('/defaultModeForNewChats', async (req, res) => {
  * Mass switch ALL chats (past + future) to human/staff or AI mode.
  * Preserves all chat histories, messages, and memories.
  */
-router.post('/switch-all-chats', async (req, res) => {
+router.post('/switch-all-chats', verifyToken, requireAdmin, async (req, res) => {
   try {
     const { mode, confirmPassword } = req.body;
     console.log('[Settings:SwitchAll] Request to switch all chats to:', mode);
@@ -283,7 +264,7 @@ router.post('/switch-all-chats', async (req, res) => {
  * GET /api/settings/mode-change-history
  * Fetch audit log history of mode changes
  */
-router.get('/mode-change-history', async (req, res) => {
+router.get('/mode-change-history', verifyToken, async (req, res) => {
   try {
     console.log('[Settings:History] Fetching mode change history');
 
@@ -302,6 +283,54 @@ router.get('/mode-change-history', async (req, res) => {
 
   } catch (error) {
     console.error('[Settings:History] Error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * PATCH /api/settings/:settingKey
+ * Dynamic setting update route - uses updateDefaultModeOnly for defaultModeForNewChats
+ */
+router.patch('/:settingKey', async (req, res) => {
+  try {
+    const { settingKey } = req.params;
+    const { value, updatedBy } = req.body;
+
+    console.log('[Settings:Patch] Updating setting:', settingKey);
+
+    if (!value) {
+      return res.status(400).json({
+        success: false,
+        error: 'Value required'
+      });
+    }
+
+    // CRITICAL: Use updateDefaultModeOnly which doesn't touch chats
+    const { updateDefaultModeOnly } = require('../services/settingsService');
+
+    if (settingKey === 'defaultModeForNewChats' || settingKey === 'globalMode') {
+      const result = await updateDefaultModeOnly(value, updatedBy || 'Admin');
+      
+      res.json({
+        success: true,
+        result
+      });
+    } else {
+      // For other settings, use regular update
+      const { updateSetting } = require('../services/settingsService');
+      const setting = await updateSetting(settingKey, value, updatedBy || 'Admin');
+
+      res.json({
+        success: true,
+        setting
+      });
+    }
+
+  } catch (error) {
+    console.error('[Settings:Patch] Error:', error.message);
     res.status(500).json({
       success: false,
       error: error.message

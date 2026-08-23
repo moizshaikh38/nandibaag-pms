@@ -16,6 +16,45 @@ const { formatDateToISO } = require('../utils/dateUtils');
 // Statuses that BLOCK a room (active bookings)
 const BLOCKING_STATUSES = ['confirmed', 'checked_in', 'pending_payment', 'pending', 'draft'];
 
+function startOfDate(value) {
+  if (typeof value === 'string') {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      return new Date(Date.UTC(
+        Number(match[1]),
+        Number(match[2]) - 1,
+        Number(match[3])
+      ));
+    }
+  }
+
+  const input = new Date(value);
+  const date = new Date(Date.UTC(
+    input.getUTCFullYear(),
+    input.getUTCMonth(),
+    input.getUTCDate()
+  ));
+  return date;
+}
+
+function addDays(date, days) {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+function isPicnicOnlyBooking(booking) {
+  return ['dayuse', 'picnic', 'oneDay'].includes(booking?.bookingType) ||
+    ['one-day-picnic', 'oneDay', 'picnic'].includes(booking?.packageType);
+}
+
+function addBookingRoomIds(blockedRoomIds, booking) {
+  if (booking?.roomId) blockedRoomIds.add(String(booking.roomId));
+  if (Array.isArray(booking?.roomIds)) {
+    booking.roomIds.forEach(id => blockedRoomIds.add(String(id)));
+  }
+}
+
 /**
  * a) checkOverlap — internal helper
  * Returns true if the room has any active RoomBooking that overlaps the given range.
@@ -78,10 +117,10 @@ async function getActiveRoomStructure() {
  * Also returns breakdown by capacity tier for suggestion logic.
  */
 async function getCapacityAvailability(checkInDate, checkOutDate, minCapacity = 1) {
-  const checkInObj = new Date(checkInDate);
-  let checkOutObj = new Date(checkOutDate);
+  const checkInObj = startOfDate(checkInDate);
+  let checkOutObj = startOfDate(checkOutDate);
   if (isNaN(checkOutObj.getTime()) || checkOutObj <= checkInObj) {
-    checkOutObj = new Date(checkInObj.getTime() + 86400000);
+    checkOutObj = addDays(checkInObj, 1);
   }
   const checkInStr = checkInObj.toISOString().split('T')[0];
 
@@ -105,12 +144,11 @@ async function getCapacityAvailability(checkInDate, checkOutDate, minCapacity = 
   }).select('roomId').lean();
 
   const overlappingMainBookings = await Booking.find({
-    status: { $nin: ['cancelled', 'no_show'] },
-    $or: [
-      { checkInDate: { $lt: checkOutObj }, checkOutDate: { $gt: checkInObj } },
-      { date: checkInStr }
-    ]
-  }).select('roomId roomIds').lean();
+    bookingType: { $in: ['overnight', 'couple', 'group'] },
+    status: { $in: ['pending_payment', 'confirmed', 'checked_in'] },
+    checkInDate: { $lt: checkOutObj },
+    checkOutDate: { $gt: checkInObj }
+  }).select('roomId roomIds customerName').lean();
 
   const activeMaintenance = await RoomMaintenance.find({
     status: 'active',
@@ -124,10 +162,7 @@ async function getCapacityAvailability(checkInDate, checkOutDate, minCapacity = 
   ]);
 
   for (const b of overlappingMainBookings) {
-    if (b.roomId) blockedRoomIds.add(String(b.roomId));
-    if (Array.isArray(b.roomIds)) {
-      b.roomIds.forEach(id => blockedRoomIds.add(String(id)));
-    }
+    addBookingRoomIds(blockedRoomIds, b);
   }
 
   let availableCount = 0;
@@ -171,12 +206,11 @@ async function getDetailedAvailability(checkInDate, checkOutDate, minCapacity = 
   const { Booking } = require('../models');
   const RoomMaintenance = require('../models/RoomMaintenance');
 
-  const checkInObj = new Date(checkInDate);
-  let checkOutObj = new Date(checkOutDate);
+  const checkInObj = startOfDate(checkInDate);
+  let checkOutObj = startOfDate(checkOutDate);
   if (isNaN(checkOutObj.getTime()) || checkOutObj <= checkInObj) {
-    checkOutObj = new Date(checkInObj.getTime() + 86400000);
+    checkOutObj = addDays(checkInObj, 1);
   }
-  const checkInStr = checkInObj.toISOString().split('T')[0];
 
   const overlappingRoomBookings = await RoomBooking.find({
     status: { $in: BLOCKING_STATUSES },
@@ -185,12 +219,11 @@ async function getDetailedAvailability(checkInDate, checkOutDate, minCapacity = 
   }).select('roomId').lean();
 
   const overlappingMainBookings = await Booking.find({
+    bookingType: { $in: ['overnight', 'couple', 'group'] },
     status: { $in: ['pending_payment', 'confirmed', 'checked_in'] },
-    $or: [
-      { checkInDate: { $lt: checkOutObj }, checkOutDate: { $gt: checkInObj } },
-      { date: checkInStr }
-    ]
-  }).select('roomId roomIds').lean();
+    checkInDate: { $lt: checkOutObj },
+    checkOutDate: { $gt: checkInObj }
+  }).select('roomId roomIds customerName').lean();
 
   const activeMaintenance = await RoomMaintenance.find({
     status: 'active',
@@ -204,10 +237,7 @@ async function getDetailedAvailability(checkInDate, checkOutDate, minCapacity = 
   ]);
 
   for (const b of overlappingMainBookings) {
-    if (b.roomId) blockedRoomIds.add(String(b.roomId));
-    if (Array.isArray(b.roomIds)) {
-      b.roomIds.forEach(id => blockedRoomIds.add(String(id)));
-    }
+    addBookingRoomIds(blockedRoomIds, b);
   }
 
   return rooms.filter(r => (
@@ -734,30 +764,40 @@ const getAvailabilityMessage = async (checkInDate, checkOutDate, sessionId = nul
  */
 const checkOvernightAvailability = async (checkInDate, checkOutDate) => {
   try {
+    console.log('[Availability:Overnight] ═══════════════════════════════');
     console.log('[Availability:Overnight] Checking overnight availability');
-    console.log('[Availability:Overnight] Check-in:', checkInDate);
-    console.log('[Availability:Overnight] Check-out:', checkOutDate);
 
+    // CRITICAL: Parse dates correctly
     const checkIn = new Date(checkInDate);
     let checkOut = new Date(checkOutDate);
+
+    // Remove time component for date-only comparison
+    checkIn.setHours(0, 0, 0, 0);
+    checkOut.setHours(0, 0, 0, 0);
+
     if (isNaN(checkOut.getTime()) || checkOut <= checkIn) {
-      checkOut = new Date(checkIn.getTime() + 86400000);
+      checkOut = new Date(checkIn.getTime() + 24 * 60 * 60 * 1000);
+      checkOut.setHours(0, 0, 0, 0);
     }
-    const checkInStr = checkIn.toISOString().split('T')[0];
 
+    console.log('[Availability:Overnight] Check-in:', checkIn.toISOString().split('T')[0]);
+    console.log('[Availability:Overnight] Check-out:', checkOut.toISOString().split('T')[0]);
+
+    // Get all rooms
+    const allRooms = await getActiveRoomStructure();
+    console.log('[Availability:Overnight] Total rooms in system:', allRooms.length);
+
+    // Find OVERNIGHT bookings that overlap
     const { Booking } = require('../models');
-
-    // Find bookings for OVERNIGHT during this period
-    const overnightBookings = await Booking.find({
-      status: { $nin: ['cancelled', 'no_show'] },
-      $or: [
-        { checkInDate: { $lt: checkOut }, checkOutDate: { $gt: checkIn } },
-        { date: checkInStr }
-      ]
-    }).select('roomIds roomId customerName bookingType packageType').lean();
+    const bookings = await Booking.find({
+      bookingType: { $in: ['overnight', 'couple', 'group'] }, // Include couple/group
+      status: { $in: ['pending_payment', 'confirmed', 'checked_in'] },
+      checkInDate: { $lt: checkOut }, // Booking starts before checkout
+      checkOutDate: { $gt: checkIn } // Booking ends after checkin
+    }).select('roomIds roomId checkInDate checkOutDate customerName').lean();
 
     const overlappingRoomBookings = await RoomBooking.find({
-      status: { $in: BLOCKING_STATUSES },
+      status: { $in: ['pending_payment', 'confirmed', 'checked_in'] },
       checkInDate: { $lt: checkOut },
       checkOutDate: { $gt: checkIn }
     }).select('roomId').lean();
@@ -769,128 +809,134 @@ const checkOvernightAvailability = async (checkInDate, checkOutDate) => {
       endDate: { $gt: checkIn }
     }).select('roomId').lean();
 
-    console.log('[Availability:Overnight] Found bookings:', overnightBookings.length);
+    console.log('[Availability:Overnight] Found overlapping bookings:', bookings.length);
 
-    // Get all active rooms
-    const allRooms = await getActiveRoomStructure();
+    bookings.forEach((b, idx) => {
+      console.log(`  [${idx + 1}] ${b.customerName} | Rooms: ${b.roomIds?.join(',') || b.roomId} | ${new Date(b.checkInDate).toISOString().split('T')[0]} → ${new Date(b.checkOutDate).toISOString().split('T')[0]}`);
+    });
 
-    // Find booked room identifiers
+    // Collect booked room IDs
     const bookedRoomIds = new Set();
-    overnightBookings.forEach(booking => {
-      // Overnight bookings, or any booking that uses a room overnight
-      const isPicnicOnly = (booking.bookingType === 'dayuse' || booking.bookingType === 'picnic' || booking.bookingType === 'oneDay' || booking.packageType === 'one-day-picnic');
-      if (!isPicnicOnly) {
-        if (booking.roomId) bookedRoomIds.add(String(booking.roomId));
-        if (booking.roomIds && Array.isArray(booking.roomIds)) {
-          booking.roomIds.forEach(roomId => bookedRoomIds.add(String(roomId)));
-        }
+    bookings.forEach(booking => {
+      if (booking.roomId) bookedRoomIds.add(booking.roomId.toString());
+      if (booking.roomIds && Array.isArray(booking.roomIds)) {
+        booking.roomIds.forEach(roomId => {
+          bookedRoomIds.add(roomId.toString());
+        });
       }
     });
 
     overlappingRoomBookings.forEach(rb => {
-      if (rb.roomId) bookedRoomIds.add(String(rb.roomId));
+      if (rb.roomId) bookedRoomIds.add(rb.roomId.toString());
     });
 
     activeMaintenance.forEach(m => {
-      if (m.roomId) bookedRoomIds.add(String(m.roomId));
+      if (m.roomId) bookedRoomIds.add(m.roomId.toString());
     });
 
-    const availableRooms = allRooms.filter(room => {
-      const idStr = String(room._id);
-      const numStr = String(room.roomNumber || room.number || '');
-      return !bookedRoomIds.has(idStr) && !bookedRoomIds.has(numStr) && room.status !== 'maintenance';
-    });
+    // Get available rooms
+    const availableRooms = allRooms.filter(
+      room => !bookedRoomIds.has(room._id.toString()) &&
+              !bookedRoomIds.has(String(room.roomNumber || room.number)) &&
+              room.status !== 'maintenance'
+    );
 
-    console.log('[Availability:Overnight] Available rooms:', availableRooms.length, '/', allRooms.length);
+    console.log('[Availability:Overnight] Booked rooms:', bookedRoomIds.size);
+    console.log('[Availability:Overnight] Available rooms:', availableRooms.length);
+    console.log('[Availability:Overnight] ═══════════════════════════════\n');
 
     return {
       availableRooms,
       totalRooms: allRooms.length,
-      bookedRoomIds: Array.from(bookedRoomIds)
+      bookedRoomIds: Array.from(bookedRoomIds),
+      checkInDate: checkIn,
+      checkOutDate: checkOut
     };
+
   } catch (error) {
-    console.error('[Availability:Overnight] Error:', error.message);
+    console.error('[Availability:Overnight] ❌ Error:', error.message);
     throw error;
   }
 };
 
-/**
- * Check availability for ONE-DAY PICNIC.
- * Day-use: 9:00 AM -> 6:30 PM (B->Tea) or 9:30 PM (B->Dinner).
- */
 const checkOneDayPicknicAvailability = async (picnicDate, mealOption = 'breakfast-to-dinner') => {
   try {
-    console.log('[Availability:OneDay] Checking one-day picnic availability');
-    console.log('[Availability:OneDay] Date:', picnicDate);
+    console.log('[Availability:OneDay] ═══════════════════════════════');
+    console.log('[Availability:OneDay] Checking one-day picnic');
+
+    // CRITICAL: Parse date correctly
+    const date = new Date(picnicDate);
+    date.setHours(0, 0, 0, 0); // Remove time
+
+    const nextDay = new Date(date.getTime() + 24 * 60 * 60 * 1000);
+    nextDay.setHours(0, 0, 0, 0);
+
+    console.log('[Availability:OneDay] Date:', date.toISOString().split('T')[0]);
     console.log('[Availability:OneDay] Meal option:', mealOption);
 
-    const date = new Date(picnicDate);
-    const dateStr = date.toISOString().split('T')[0];
-    const nextDay = new Date(date);
-    nextDay.setDate(nextDay.getDate() + 1);
+    // Get all rooms
+    const allRooms = await getActiveRoomStructure();
+    console.log('[Availability:OneDay] Total rooms:', allRooms.length);
 
+    // OVERNIGHT bookings that include this date
     const { Booking } = require('../models');
+    const overnightBookings = await Booking.find({
+      bookingType: { $in: ['overnight', 'couple', 'group'] },
+      status: { $in: ['pending_payment', 'confirmed', 'checked_in'] },
+      checkInDate: { $lte: date }, // Checkin on or before this date
+      checkOutDate: { $gt: date } // Checkout after this date
+    }).select('roomIds roomId customerName').lean();
 
-    // Find OVERNIGHT bookings that block this day
-    const blockingOvernightBookings = await Booking.find({
-      status: { $nin: ['cancelled', 'no_show'] },
-      $or: [
-        { checkInDate: { $lte: date }, checkOutDate: { $gte: date } },
-        { date: dateStr }
-      ]
-    }).select('roomIds roomId bookingType packageType').lean();
+    console.log('[Availability:OneDay] Overnight bookings blocking:', overnightBookings.length);
 
-    // Find ONE-DAY PICNIC bookings that directly conflict on same day
-    const conflictingDayUseBookings = await Booking.find({
-      status: { $nin: ['cancelled', 'no_show'] },
-      $or: [
-        { bookingType: { $in: ['dayuse', 'picnic', 'oneDay'] } },
-        { packageType: { $in: ['one-day-picnic', 'oneDay', 'picnic'] } }
-      ],
+    // One-day bookings on this exact date
+    const oneDayBookings = await Booking.find({
+      bookingType: { $in: ['dayuse', 'picnic', 'oneDay'] },
+      status: { $in: ['pending_payment', 'confirmed', 'checked_in'] },
       $or: [
         { checkInDate: { $gte: date, $lt: nextDay } },
-        { date: dateStr }
+        { date: date.toISOString().split('T')[0] }
       ]
-    }).select('roomIds roomId').lean();
+    }).select('roomIds roomId customerName').lean();
 
-    console.log('[Availability:OneDay] Blocking overnight bookings:', blockingOvernightBookings.length);
-    console.log('[Availability:OneDay] Conflicting dayuse bookings:', conflictingDayUseBookings.length);
+    console.log('[Availability:OneDay] One-day bookings on this date:', oneDayBookings.length);
 
-    const allRooms = await getActiveRoomStructure();
-
+    // Combine blocked rooms
     const blockedRoomIds = new Set();
-    blockingOvernightBookings.forEach(booking => {
-      const isPicnicOnly = (booking.bookingType === 'dayuse' || booking.bookingType === 'picnic' || booking.bookingType === 'oneDay' || booking.packageType === 'one-day-picnic');
-      if (!isPicnicOnly) {
-        if (booking.roomId) blockedRoomIds.add(String(booking.roomId));
-        if (booking.roomIds && Array.isArray(booking.roomIds)) {
-          booking.roomIds.forEach(roomId => blockedRoomIds.add(String(roomId)));
-        }
+
+    overnightBookings.forEach(b => {
+      if (b.roomId) blockedRoomIds.add(b.roomId.toString());
+      if (b.roomIds && Array.isArray(b.roomIds)) {
+        b.roomIds.forEach(roomId => blockedRoomIds.add(roomId.toString()));
       }
     });
 
-    conflictingDayUseBookings.forEach(booking => {
-      if (booking.roomId) blockedRoomIds.add(String(booking.roomId));
-      if (booking.roomIds && Array.isArray(booking.roomIds)) {
-        booking.roomIds.forEach(roomId => blockedRoomIds.add(String(roomId)));
+    oneDayBookings.forEach(b => {
+      if (b.roomId) blockedRoomIds.add(b.roomId.toString());
+      if (b.roomIds && Array.isArray(b.roomIds)) {
+        b.roomIds.forEach(roomId => blockedRoomIds.add(roomId.toString()));
       }
     });
 
-    const availableRooms = allRooms.filter(room => {
-      const idStr = String(room._id);
-      const numStr = String(room.roomNumber || room.number || '');
-      return !blockedRoomIds.has(idStr) && !blockedRoomIds.has(numStr) && room.status !== 'maintenance';
-    });
+    const availableRooms = allRooms.filter(
+      room => !blockedRoomIds.has(room._id.toString()) &&
+              !blockedRoomIds.has(String(room.roomNumber || room.number)) &&
+              room.status !== 'maintenance'
+    );
 
-    console.log('[Availability:OneDay] Available rooms:', availableRooms.length, '/', allRooms.length);
+    console.log('[Availability:OneDay] Blocked rooms:', blockedRoomIds.size);
+    console.log('[Availability:OneDay] Available rooms:', availableRooms.length);
+    console.log('[Availability:OneDay] ═══════════════════════════════\n');
 
     return {
       availableRooms,
       totalRooms: allRooms.length,
-      blockedRoomIds: Array.from(blockedRoomIds)
+      blockedRoomIds: Array.from(blockedRoomIds),
+      date
     };
+
   } catch (error) {
-    console.error('[Availability:OneDay] Error:', error.message);
+    console.error('[Availability:OneDay] ❌ Error:', error.message);
     throw error;
   }
 };
@@ -1061,4 +1107,3 @@ module.exports = {
   getDetailedAvailabilityMessage,
   getRoomsWithDetailedStatus
 };
-

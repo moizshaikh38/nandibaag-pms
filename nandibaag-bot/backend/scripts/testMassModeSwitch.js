@@ -1,7 +1,7 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const mongoose = require('mongoose');
 const { Chat, Settings } = require('../src/models');
-const { massUpdateAllChatMode } = require('../src/services/settingsService');
+const { massUpdateAllChatMode, updateDefaultModeOnly } = require('../src/services/settingsService');
 
 const testMassSwitch = async () => {
   try {
@@ -10,48 +10,49 @@ const testMassSwitch = async () => {
     await mongoose.connect(mongoUri);
 
     console.log('\n═════════════════════════════════════════════════════════');
-    console.log('🧪 TESTING MASS MODE SWITCH (PAST + FUTURE CHATS)');
+    console.log('🧪 TESTING SETTINGS & MASS MODE SWITCH');
     console.log('═════════════════════════════════════════════════════════\n');
 
-    // Show before state
-    const before = await Chat.find().select('mode').lean();
-    const aiCount = before.filter(c => c.mode === 'ai' || c.mode === 'auto').length;
-    const staffCount = before.filter(c => c.mode === 'staff' || c.mode === 'human').length;
+    // 1. Test updateDefaultModeOnly
+    console.log('🧪 1. Testing updateDefaultModeOnly(newMode) ...');
+    const beforeChats = await Chat.find().select('mode').lean();
+    const beforeStaffCount = beforeChats.filter(c => c.mode === 'staff' || c.mode === 'human').length;
 
-    console.log('BEFORE:');
-    console.log('  AI Chats:', aiCount);
-    console.log('  Staff/Human Chats:', staffCount);
-    console.log('  Total Chats:', before.length);
+    await updateDefaultModeOnly('ai', 'TestScript');
+    const settings1 = await Settings.findOne();
+    console.log('  Default mode set to:', settings1.defaultModeForNewChats);
 
-    // Mass update to STAFF
-    console.log('\n🔄 Executing mass switch to STAFF mode...');
-    const resultStaff = await massUpdateAllChatMode('staff', 'TestScript', 'Automated test mass switch to staff');
+    const afterDefaultOnlyChats = await Chat.find().select('mode').lean();
+    const afterStaffCount = afterDefaultOnlyChats.filter(c => c.mode === 'staff' || c.mode === 'human').length;
 
-    console.log('\n✅ RESULT (Staff Mode):');
-    console.log('  Message:', resultStaff.message);
-    console.log('  Modified Chats:', resultStaff.stats.modifiedChats);
-    console.log('  Default Mode For New Chats:', (await Settings.findOne())?.defaultModeForNewChats);
+    if (beforeStaffCount === afterStaffCount) {
+      console.log('  ✅ VERIFIED: Existing chats were NOT touched by updateDefaultModeOnly');
+    } else {
+      throw new Error('❌ FAILED: updateDefaultModeOnly modified existing chats!');
+    }
 
-    // Verify after state
-    const afterStaff = await Chat.find().select('mode').lean();
-    const staffCountAfter = afterStaff.filter(c => c.mode === 'staff' || c.mode === 'human').length;
-    console.log('  Verified Staff/Human Chats in DB:', staffCountAfter);
+    // 2. Test massUpdateAllChatMode to STAFF
+    console.log('\n🧪 2. Testing massUpdateAllChatMode("staff") ...');
+    const resultStaff = await massUpdateAllChatMode('staff', 'TestScript');
+    console.log('  Result message:', resultStaff.message);
+    console.log('  Modified chats:', resultStaff.stats.chatsSwitched);
 
-    // Mass update back to AI
-    console.log('\n🔄 Executing mass switch back to AI mode...');
-    const resultAi = await massUpdateAllChatMode('ai', 'TestScript', 'Automated test mass switch to AI');
+    const allChatsStaff = await Chat.find().select('mode').lean();
+    const totalStaffInDb = allChatsStaff.filter(c => c.mode === 'staff' || c.mode === 'human').length;
+    console.log(`  Verified Staff chats in DB: ${totalStaffInDb}/${allChatsStaff.length}`);
 
-    console.log('\n✅ RESULT (AI Mode):');
-    console.log('  Message:', resultAi.message);
-    console.log('  Modified Chats:', resultAi.stats.modifiedChats);
-    console.log('  Default Mode For New Chats:', (await Settings.findOne())?.defaultModeForNewChats);
+    // 3. Test massUpdateAllChatMode to AI
+    console.log('\n🧪 3. Testing massUpdateAllChatMode("ai") ...');
+    const resultAi = await massUpdateAllChatMode('ai', 'TestScript');
+    console.log('  Result message:', resultAi.message);
+    console.log('  Modified chats:', resultAi.stats.chatsSwitched);
 
-    const afterAi = await Chat.find().select('mode').lean();
-    const aiCountAfter = afterAi.filter(c => c.mode === 'ai' || c.mode === 'auto').length;
-    console.log('  Verified AI Chats in DB:', aiCountAfter);
+    const allChatsAi = await Chat.find().select('mode').lean();
+    const totalAiInDb = allChatsAi.filter(c => c.mode === 'ai' || c.mode === 'auto').length;
+    console.log(`  Verified AI chats in DB: ${totalAiInDb}/${allChatsAi.length}`);
 
     console.log('\n═════════════════════════════════════════════════════════');
-    console.log('🎉 ALL MASS MODE SWITCH TESTS PASSED SUCCESSFULLY!');
+    console.log('🎉 ALL SETTINGS & MASS SWITCH TESTS PASSED SUCCESSFULLY!');
     console.log('═════════════════════════════════════════════════════════\n');
 
     process.exit(0);

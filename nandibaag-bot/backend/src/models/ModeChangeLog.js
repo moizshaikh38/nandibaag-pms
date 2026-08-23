@@ -36,6 +36,11 @@ const modeChangeLogSchema = new mongoose.Schema({
     required: true,
     default: 0
   },
+  changeType: {
+    type: String,
+    enum: ['MASS_SWITCH', 'DEFAULT_ONLY', 'MANUAL', 'API'],
+    default: 'MASS_SWITCH'
+  },
   notes: {
     type: String,
     required: false

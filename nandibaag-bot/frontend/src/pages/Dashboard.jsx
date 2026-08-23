@@ -148,7 +148,7 @@ export default function Dashboard() {
   const confirmGlobalModeToggle = async () => {
     if (!pendingModeChange) return;
     try {
-      await api.patch('/settings/global-mode', { globalMode: pendingModeChange });
+      await api.patch('/settings/default-new-chat-mode', { defaultModeForNewChats: pendingModeChange });
       setGlobalMode(pendingModeChange);
       toast.success(`New chats will now start in ${pendingModeChange === 'ai' ? 'AI Auto' : 'Staff'} mode`);
     } catch (error) {
@@ -201,7 +201,7 @@ export default function Dashboard() {
             <span>{showManualBookingForm ? '✕ Close Form' : '📝 New Manual Booking'}</span>
           </button>
 
-          {user && (
+          {isAdmin && (
             <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-xl border border-slate-200">
               <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 pl-2">
                 <Bot size={15} className="text-emerald-600" />
