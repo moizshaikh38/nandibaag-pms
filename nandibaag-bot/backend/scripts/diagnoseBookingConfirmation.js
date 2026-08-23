@@ -12,7 +12,7 @@ const testBookingConfirmation = async () => {
     await mongoose.connect(mongoUri);
 
     console.log('\n══════════════════════════════════════════════════');
-    console.log('🔍 DIAGNOSING BOOKING CONFIRMATION SENDING');
+    console.log('🔍 DIAGNOSING WHATSAPP BOOKING CONFIRMATION');
     console.log('══════════════════════════════════════════════════\n');
 
     console.log('ENV Fast2SMS settings:');
@@ -32,27 +32,22 @@ const testBookingConfirmation = async () => {
     console.log('\nTesting with latest booking:');
     console.log('  Customer:', booking.customerName);
     console.log('  Phone:', booking.customerPhone);
-    console.log('  SMS Sent status in DB:', booking.smsSent);
-    console.log('  SMS Error in DB:', booking.smsError);
 
     let cleanCustomerPhone = String(booking.customerPhone || '').replace(/[^\d]/g, '');
+    if (cleanCustomerPhone.length === 11 && cleanCustomerPhone.startsWith('0')) cleanCustomerPhone = cleanCustomerPhone.slice(1);
     if (cleanCustomerPhone.length === 10) cleanCustomerPhone = '91' + cleanCustomerPhone;
 
     const customerMessage = formatBookingMessageForCustomer(booking);
-    console.log('\nFormatted Message Length:', customerMessage.length);
-    console.log('Preview:\n', customerMessage.slice(0, 150) + '...\n');
+    console.log('\nFormatted WhatsApp Message:');
+    console.log(customerMessage);
 
-    console.log('--- Calling sendMessageViaChannel ---');
+    console.log('\n--- 1. Calling sendMessageViaChannel (WhatsApp Channels) ---');
     const result = await sendMessageViaChannel(cleanCustomerPhone, customerMessage, 'whatsapp-web', 'resort_primary');
-    console.log('\nsendMessageViaChannel result:', result);
+    console.log('sendMessageViaChannel result:', result ? '✅ SUCCESS' : '❌ FAILED');
 
-    console.log('\n--- Direct Fast2SMS send test ---');
+    console.log('\n--- 2. Calling fast2smsService.sendMessage (Fast2SMS WhatsApp API) ---');
     const directResult = await fast2smsService.sendMessage(cleanCustomerPhone, customerMessage);
-    console.log('Direct fast2smsService.sendMessage result:', directResult);
-
-    console.log('\n--- Direct Fast2SMS sendSMS (Cellular Quick SMS) test ---');
-    const smsDirectResult = await fast2smsService.sendSMS(cleanCustomerPhone, `Booking Confirmed for ${booking.customerName}! Nandibaag Resort. Check-in: ${booking.checkInDate}`);
-    console.log('Direct fast2smsService.sendSMS result:', smsDirectResult);
+    console.log('Fast2SMS WhatsApp send result:', directResult ? '✅ SUCCESS' : '❌ FAILED');
 
     process.exit(0);
   } catch (error) {
