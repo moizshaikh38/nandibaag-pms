@@ -141,8 +141,6 @@ const formatBookingMessageForCustomer = (booking) => {
 
   console.log('[Formatter:Confirmation] Package:', booking.packageType, 'Timings:', checkInTime, '-', checkOutTime);
 
-  const mainPhone = booking.resortContactNumber || '9257657664';
-
   const message = `✅ BOOKING CONFIRMED ✓
 
 Name: ${booking.customerName}
@@ -174,11 +172,8 @@ Kayaking & Rope Cycling:
 9:00 AM - 1:30 PM
 3:00 PM - 5:30 PM
 
-☕ DOLLERS CAFE:
-12:00 PM - 12:00 AM
-
 📞 RESORT CONTACT:
-Call: ${mainPhone}
+Call: 9257657664/9257657665/9257657663
 ${booking.notes ? `\nSpecial Notes: ${booking.notes}` : ''}
 Thank you for booking with Nandibaag Resort! 🙏`;
 
