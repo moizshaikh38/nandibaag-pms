@@ -767,21 +767,16 @@ const checkOvernightAvailability = async (checkInDate, checkOutDate) => {
     console.log('[Availability:Overnight] ═══════════════════════════════');
     console.log('[Availability:Overnight] Checking overnight availability');
 
-    // CRITICAL: Parse dates correctly
-    const checkIn = new Date(checkInDate);
-    let checkOut = new Date(checkOutDate);
-
-    // Remove time component for date-only comparison
-    checkIn.setHours(0, 0, 0, 0);
-    checkOut.setHours(0, 0, 0, 0);
+    // CRITICAL: Use UTC startOfDate to avoid IST/UTC timezone boundary mismatch
+    const checkIn = startOfDate(checkInDate);
+    let checkOut = startOfDate(checkOutDate);
 
     if (isNaN(checkOut.getTime()) || checkOut <= checkIn) {
-      checkOut = new Date(checkIn.getTime() + 24 * 60 * 60 * 1000);
-      checkOut.setHours(0, 0, 0, 0);
+      checkOut = addDays(checkIn, 1);
     }
 
-    console.log('[Availability:Overnight] Check-in:', checkIn.toISOString().split('T')[0]);
-    console.log('[Availability:Overnight] Check-out:', checkOut.toISOString().split('T')[0]);
+    console.log('[Availability:Overnight] Check-in (UTC):', checkIn.toISOString().split('T')[0]);
+    console.log('[Availability:Overnight] Check-out (UTC):', checkOut.toISOString().split('T')[0]);
 
     // Get all rooms
     const allRooms = await getActiveRoomStructure();
@@ -864,12 +859,9 @@ const checkOneDayPicknicAvailability = async (picnicDate, mealOption = 'breakfas
     console.log('[Availability:OneDay] ═══════════════════════════════');
     console.log('[Availability:OneDay] Checking one-day picnic');
 
-    // CRITICAL: Parse date correctly
-    const date = new Date(picnicDate);
-    date.setHours(0, 0, 0, 0); // Remove time
-
-    const nextDay = new Date(date.getTime() + 24 * 60 * 60 * 1000);
-    nextDay.setHours(0, 0, 0, 0);
+    // CRITICAL: Use UTC startOfDate to avoid IST/UTC timezone boundary mismatch
+    const date = startOfDate(picnicDate);
+    const nextDay = addDays(date, 1);
 
     console.log('[Availability:OneDay] Date:', date.toISOString().split('T')[0]);
     console.log('[Availability:OneDay] Meal option:', mealOption);
