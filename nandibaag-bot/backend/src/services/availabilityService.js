@@ -144,10 +144,13 @@ async function getCapacityAvailability(checkInDate, checkOutDate, minCapacity = 
   }).select('roomId').lean();
 
   const overlappingMainBookings = await Booking.find({
-    bookingType: { $in: ['overnight', 'couple', 'group'] },
-    status: { $in: ['pending_payment', 'confirmed', 'checked_in'] },
     checkInDate: { $lt: checkOutObj },
-    checkOutDate: { $gt: checkInObj }
+    checkOutDate: { $gt: checkInObj },
+    $or: [
+      { roomIds: { $exists: true, $ne: [] } },
+      { roomId: { $exists: true, $ne: null } }
+    ],
+    status: { $in: ['pending_payment', 'confirmed', 'checked_in'] }
   }).select('roomId roomIds customerName').lean();
 
   const activeMaintenance = await RoomMaintenance.find({
@@ -219,10 +222,13 @@ async function getDetailedAvailability(checkInDate, checkOutDate, minCapacity = 
   }).select('roomId').lean();
 
   const overlappingMainBookings = await Booking.find({
-    bookingType: { $in: ['overnight', 'couple', 'group'] },
-    status: { $in: ['pending_payment', 'confirmed', 'checked_in'] },
     checkInDate: { $lt: checkOutObj },
-    checkOutDate: { $gt: checkInObj }
+    checkOutDate: { $gt: checkInObj },
+    $or: [
+      { roomIds: { $exists: true, $ne: [] } },
+      { roomId: { $exists: true, $ne: null } }
+    ],
+    status: { $in: ['pending_payment', 'confirmed', 'checked_in'] }
   }).select('roomId roomIds customerName').lean();
 
   const activeMaintenance = await RoomMaintenance.find({
@@ -606,9 +612,19 @@ const getRoomsWithReservationStatus = async (checkInDate, checkOutDate, sessionI
       }).lean(),
       Booking.find({
         status: { $in: ['pending_payment', 'confirmed', 'checked_in'] },
-        $or: [
-          { checkInDate: { $lt: effectiveCheckOut }, checkOutDate: { $gt: checkIn } },
-          { date: checkInStr }
+        $and: [
+          {
+            $or: [
+              { checkInDate: { $lt: effectiveCheckOut }, checkOutDate: { $gt: checkIn } },
+              { date: checkInStr }
+            ]
+          },
+          {
+            $or: [
+              { roomIds: { $exists: true, $ne: [] } },
+              { roomId: { $exists: true, $ne: null } }
+            ]
+          }
         ]
       }).select('customerName roomId roomIds').lean(),
       RoomReservation.find({
@@ -782,13 +798,16 @@ const checkOvernightAvailability = async (checkInDate, checkOutDate) => {
     const allRooms = await getActiveRoomStructure();
     console.log('[Availability:Overnight] Total rooms in system:', allRooms.length);
 
-    // Find OVERNIGHT bookings that overlap
+    // Find OVERNIGHT bookings that overlap and have room assignments
     const { Booking } = require('../models');
     const bookings = await Booking.find({
-      bookingType: { $in: ['overnight', 'couple', 'group'] }, // Include couple/group
-      status: { $in: ['pending_payment', 'confirmed', 'checked_in'] },
-      checkInDate: { $lt: checkOut }, // Booking starts before checkout
-      checkOutDate: { $gt: checkIn } // Booking ends after checkin
+      checkInDate: { $lt: checkOut },
+      checkOutDate: { $gt: checkIn },
+      $or: [
+        { roomIds: { $exists: true, $ne: [] } },
+        { roomId: { $exists: true, $ne: null } }
+      ],
+      status: { $in: ['pending_payment', 'confirmed', 'checked_in'] }
     }).select('roomIds roomId checkInDate checkOutDate customerName').lean();
 
     const overlappingRoomBookings = await RoomBooking.find({
