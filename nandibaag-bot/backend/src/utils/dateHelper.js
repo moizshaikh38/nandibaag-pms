@@ -1,128 +1,77 @@
-/**
- * dateHelper.js — Single Source of Truth for Day-of-Week and Weekend Logic
- *
- * BUSINESS RULE (Nandibaag Resort):
- *   WEEKEND = Friday (5), Saturday (6), Sunday (0)
- *   WEEKDAY = Monday (1), Tuesday (2), Wednesday (3), Thursday (4)
- *
- * All date computations extract true calendar date components to avoid
- * IST/UTC timezone boundary bugs across strings, local Dates, and UTC Dates.
- */
+const { format, parseISO, isValid, addDays } = require('date-fns');
 
-function extractDateComponents(date) {
-  if (typeof date === 'string') {
-    const match = date.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (match) {
-      return {
-        year: Number(match[1]),
-        month: Number(match[2]) - 1,
-        day: Number(match[3])
-      };
-    }
-    date = new Date(date);
-  }
+function toValidDate(date) {
+  if (!date) return new Date();
   if (date && typeof date === 'object' && date.date instanceof Date) {
-    date = date.date;
+    return date.date;
   }
-  if (!(date instanceof Date) || isNaN(date.getTime())) {
-    return null;
+  if (typeof date === 'string') {
+    const trimmed = date.trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+      return parseISO(trimmed.substring(0, 10));
+    }
+    return new Date(date);
   }
-  if (date.getUTCHours() === 0 && date.getUTCMinutes() === 0 && date.getUTCSeconds() === 0) {
-    return {
-      year: date.getUTCFullYear(),
-      month: date.getUTCMonth(),
-      day: date.getUTCDate()
-    };
-  } else {
-    return {
-      year: date.getFullYear(),
-      month: date.getMonth(),
-      day: date.getDate()
-    };
+  if (date instanceof Date) {
+    return date;
   }
-}
-
-function getCanonicalUTCDate(date) {
-  const c = extractDateComponents(date);
-  if (!c) return null;
-  return new Date(Date.UTC(c.year, c.month, c.day));
+  return new Date(date);
 }
 
 const getDayName = (date) => {
   try {
-    const utcDate = getCanonicalUTCDate(date);
-    if (!utcDate) {
-      console.error('[DateHelper:DayName] Invalid date:', date);
+    const parsedDate = toValidDate(date);
+    if (!isValid(parsedDate)) {
+      console.error('[DateHelper] Invalid date:', date);
       return 'INVALID';
     }
 
-    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const dayOfWeek = utcDate.getUTCDay();
-    return days[dayOfWeek];
+    // Use date-fns - handles ALL timezone issues
+    const dayName = format(parsedDate, 'EEEE');
+    const dateStr = format(parsedDate, 'yyyy-MM-dd');
+    console.log('[DateHelper] Date:', dateStr, '→', dayName);
+
+    return dayName;
   } catch (error) {
-    console.error('[DateHelper:DayName] Error:', error.message);
+    console.error('[DateHelper] Error:', error.message);
     return 'UNKNOWN';
   }
 };
 
 const formatDateDDMMYYYY = (date) => {
   try {
-    const utcDate = getCanonicalUTCDate(date);
-    if (!utcDate) {
-      console.error('[DateHelper:Format] Invalid date:', date);
+    const parsedDate = toValidDate(date);
+    if (!isValid(parsedDate)) {
+      console.error('[DateHelper] Invalid date:', date);
       return 'INVALID';
     }
 
-    const day = String(utcDate.getUTCDate()).padStart(2, '0');
-    const month = String(utcDate.getUTCMonth() + 1).padStart(2, '0');
-    const year = utcDate.getUTCFullYear();
-
-    return `${day}/${month}/${year}`;
+    return format(parsedDate, 'dd/MM/yyyy');
   } catch (error) {
-    console.error('[DateHelper:Format] Error:', error.message);
+    console.error('[DateHelper] Error:', error.message);
     return 'INVALID';
   }
 };
 
-/**
- * BUSINESS RULE: Weekend = Friday (5), Saturday (6), Sunday (0)
- *                Weekday = Monday (1), Tuesday (2), Wednesday (3), Thursday (4)
- */
 const isWeekday = (date) => {
   try {
-    const utcDate = getCanonicalUTCDate(date);
-    if (!utcDate) return true;
+    const dayName = getDayName(date);
+    // Weekend = Friday, Saturday, Sunday (Resort business rule)
+    const isWeekend = dayName === 'Friday' || dayName === 'Saturday' || dayName === 'Sunday';
 
-    const dayOfWeek = utcDate.getUTCDay();
-    // Weekend = Friday (5), Saturday (6), Sunday (0)
-    const isWkend = dayOfWeek === 0 || dayOfWeek === 5 || dayOfWeek === 6;
-
-    return !isWkend;
+    return !isWeekend;
   } catch (error) {
-    console.error('[DateHelper:IsWeekday] Error:', error.message);
+    console.error('[DateHelper] Error:', error.message);
     return true;
   }
 };
 
-/**
- * Weekend = Friday (5), Saturday (6), Sunday (0)
- */
-const isWeekendFn = (d) => !isWeekday(d);
+const isWeekend = (date) => !isWeekday(date);
 
-/**
- * Build array of night breakdown objects between startDate and endDate.
- * Dual array-string: functions both as an Array of nights AND formats to table string when coerced to string.
- */
 const buildDateRangeTable = (startDate, endDate) => {
   try {
-    const start = getCanonicalUTCDate(startDate);
-    const end = getCanonicalUTCDate(endDate);
-
-    if (!start || !end) {
-      const fallback = [];
-      fallback.toString = () => 'ERROR: Could not build date table\n';
-      return fallback;
-    }
+    const start = toValidDate(startDate);
+    const end = toValidDate(endDate);
 
     const nights = [];
     let table = '📅 DATE REFERENCE TABLE:\n';
@@ -136,26 +85,24 @@ const buildDateRangeTable = (startDate, endDate) => {
 
     while (condition(currentDate) && dayCount < 365) {
       const dateStr = formatDateDDMMYYYY(currentDate);
-      const isoStr = currentDate.toISOString().split('T')[0];
+      const isoStr = format(currentDate, 'yyyy-MM-dd');
       const dayName = getDayName(currentDate);
-      const dayOfWeek = currentDate.getUTCDay();
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 5 || dayOfWeek === 6;
-      const typeLabel = isWeekend ? 'WEEKEND' : 'WEEKDAY';
+      const isWkend = isWeekend(currentDate);
+      const typeLabel = isWkend ? 'WEEKEND' : 'WEEKDAY';
 
       nights.push({
         date: new Date(currentDate),
         dateStr,
         isoStr,
         dayName,
-        dayOfWeek,
-        isWeekend,
-        isWeekday: !isWeekend,
+        isWeekend: isWkend,
+        isWeekday: !isWkend,
         type: typeLabel
       });
 
       table += `• ${dateStr} = ${dayName} (${typeLabel})\n`;
 
-      currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+      currentDate = addDays(currentDate, 1);
       dayCount++;
     }
 
@@ -194,7 +141,7 @@ const getTodayIST = () => {
     const now = new Date();
     const istDate = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
     istDate.date = istDate;
-    istDate.dateStr = istDate.toISOString().split('T')[0];
+    istDate.dateStr = format(istDate, 'yyyy-MM-dd');
     istDate.dayName = getDayName(istDate);
     istDate.dayOfWeek = istDate.getUTCDay();
 
@@ -207,20 +154,17 @@ const getTodayIST = () => {
 
 const buildCalendarReference = (startDateInput = null) => {
   try {
-    const start = startDateInput ? getCanonicalUTCDate(startDateInput) : getCanonicalUTCDate(getTodayIST());
-    if (!start) return '';
-
+    const start = startDateInput ? toValidDate(startDateInput) : toValidDate(getTodayIST());
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     let lines = [];
     lines.push('CALENDAR REFERENCE (Next 30 Days):');
 
     for (let i = 0; i < 30; i++) {
-      const cur = new Date(start);
-      cur.setUTCDate(cur.getUTCDate() + i);
-      const d = cur.getUTCDate();
-      const m = monthNames[cur.getUTCMonth()];
+      const cur = addDays(start, i);
+      const d = format(cur, 'd');
+      const m = monthNames[cur.getMonth()];
       const dayName = getDayName(cur);
-      const isWkend = isWeekendFn(cur);
+      const isWkend = isWeekend(cur);
       const type = isWkend ? 'WEEKEND' : 'WEEKDAY';
       const coupleRate = isWkend ? '₹6,500' : '₹5,500';
       const groupRate = isWkend ? '₹3,000' : '₹2,000';
@@ -235,15 +179,14 @@ const buildCalendarReference = (startDateInput = null) => {
 };
 
 const normalizeDate = (d) => {
-  if (typeof d === 'string') return new Date(d);
-  return d;
+  return toValidDate(d);
 };
 
 module.exports = {
   getDayName,
   formatDateDDMMYYYY,
   isWeekday,
-  isWeekend: isWeekendFn,
+  isWeekend,
   buildDateRangeTable,
   formatDateTableForPrompt,
   buildCalendarReference,
