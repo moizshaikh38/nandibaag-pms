@@ -21,8 +21,8 @@ const cleanup = async () => {
     const broken = await Booking.find({
       status: { $in: ['confirmed', 'pending_payment', 'checked_in'] }, // Include other active statuses
       $and: [
-        { $or: [{ roomIds: { $exists: false } }, { roomIds: { $size: 0 } }, { roomIds: null }] },
-        { $or: [{ roomId: { $exists: false } }, { roomId: null }] }
+        { $or: [{ roomIds: { $exists: false } }, { roomIds: { $size: 0 } }, { roomIds: null }, { roomIds: ["NO-ROOM"] }, { roomIds: "NO-ROOM" }] },
+        { $or: [{ roomId: { $exists: false } }, { roomId: null }, { roomId: "NO-ROOM" }, { roomId: "" }] }
       ],
       $or: [
         { bookingType: { $in: ['couple', 'group', 'overnight'] } },
@@ -45,8 +45,8 @@ const cleanup = async () => {
       const result = await Booking.deleteMany({
         status: { $in: ['confirmed', 'pending_payment', 'checked_in'] },
         $and: [
-          { $or: [{ roomIds: { $exists: false } }, { roomIds: { $size: 0 } }, { roomIds: null }] },
-          { $or: [{ roomId: { $exists: false } }, { roomId: null }] }
+          { $or: [{ roomIds: { $exists: false } }, { roomIds: { $size: 0 } }, { roomIds: null }, { roomIds: ["NO-ROOM"] }, { roomIds: "NO-ROOM" }] },
+          { $or: [{ roomId: { $exists: false } }, { roomId: null }, { roomId: "NO-ROOM" }, { roomId: "" }] }
         ],
         $or: [
           { bookingType: { $in: ['couple', 'group', 'overnight'] } },

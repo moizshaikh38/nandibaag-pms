@@ -88,7 +88,8 @@ function getDayName(dateInput) {
  *    - Weekends (Fri-Sun): ₹3,000/person/night
  * 
  * 3. ONE DAY PICNIC (stayType === 'picnic'):
- *    - ₹1,200/person (12 PM - 8 PM, Breakfast to Dinner)
+ *    - Option A: Breakfast to Tea (9:00 AM - 6:30 PM)
+ *    - Option B: Breakfast to Dinner (9:00 AM - 9:30 PM)
  * 
  * @param {Date|string} checkInInput - Check-in date
  * @param {Date|string} checkOutInput - Check-out date
