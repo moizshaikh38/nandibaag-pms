@@ -23,7 +23,9 @@
     "debug-availability": "node scripts/debugAvailabilityIssue.js",
     "cleanup-bookings": "node scripts/cleanupBrokenBookings.js",
     "final-check": "node scripts/finalAvailabilityCheck.js",
-    "verify-pricing-flow": "node scripts/verifyPricingFlow.js"
+    "verify-pricing-flow": "node scripts/verifyPricingFlow.js",
+    "test-pricing": "node scripts/testPricingAccuracy.js",
+    "master-check": "node scripts/masterVerification.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.1.1",
