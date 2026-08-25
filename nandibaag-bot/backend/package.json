@@ -18,7 +18,8 @@
     "test-whatsapp-init": "node src/scripts/testWhatsAppInit.js",
     "test-fast2sms": "node src/scripts/testFast2sms.js",
     "test-resilience": "node src/scripts/testMessageResilience.js",
-    "debug-aug29": "node src/scripts/debugAug29Availability.js"
+    "debug-aug29": "node src/scripts/debugAug29Availability.js",
+    "verify-availability-disabled": "node scripts/verifyAvailabilityDisabled.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.1.1",

@@ -18,6 +18,11 @@ const crypto = require('crypto');
 const { sanitizeBookingDraft } = require('../utils/sanitizeBookingDraft');
 const logger = require('../config/logger');
 
+// ⚠️ AVAILABILITY CHECK KILL SWITCH — Set to true to disable all live DB availability queries.
+// When true, customers are directed to call staff for availability instead.
+// Set back to false when availability logic is fully fixed and verified.
+const AVAILABILITY_CHECK_DISABLED = true;
+
 // Per-channel message cache (SHA256 hash -> timestamp) for robust deduplication
 const webhookMessageCache = new Map();
 
@@ -716,7 +721,7 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
       }
 
       // UNIVERSAL LIVE AVAILABILITY CHECK: Whenever a date is identified, check live DB availability immediately
-      if (draft.date) {
+      if (draft.date && !AVAILABILITY_CHECK_DISABLED) {
         try {
           const checkInDate = new Date(draft.date);
           if (!isNaN(checkInDate.getTime())) {
@@ -802,6 +807,9 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
         } catch (availErr) {
           logger.error(`Availability check error: ${availErr.message}`);
         }
+      } else if (draft.date && AVAILABILITY_CHECK_DISABLED) {
+        console.log('[MessageHandler] ⚠️ Availability check DISABLED — directing customer to call staff');
+        addSystemNote(`[SYSTEM NOTE — MANDATORY: ⚠️ AVAILABILITY CHECK IS TEMPORARILY DISABLED. You CANNOT check or confirm room availability. For ANY availability question, you MUST say: "🔔 Real-time availability aur booking ke liye, please humein call karein: 📞 9257657664. Hamari team aapki perfect stay arrange karegi! 😊" DO NOT guess, assume, or claim any rooms are available or unavailable. DO NOT show pricing until staff confirms availability. For general info (pricing rates, meals, activities, directions) — answer normally.]`);
       }
 
       // ── CONVERSATION STATE MACHINE & NAME COLLECTION (Steps 5 & 6) ──
