@@ -213,6 +213,23 @@ router.post('/manual-booking', async (req, res) => {
       ? req.body.roomIds.filter(Boolean)
       : (req.body.roomId ? [req.body.roomId] : []);
 
+    // VALIDATION: Rooms required for overnight/couple/group
+    if (['couple', 'group', 'overnight'].includes(packageType)) {
+      if (!roomIds || roomIds.length === 0) {
+        console.log('[BookingRoute:Manual] ❌ No rooms selected for', packageType);
+        return res.status(400).json({
+          error: `❌ Select at least 1 room for ${packageType} booking`,
+          requiresRoomSelection: true,
+          message: 'Rooms are REQUIRED for overnight stays'
+        });
+      }
+    }
+
+    // Validation: One-day picnic rooms optional but warn if not selected
+    if (packageType === 'one-day-picnic' && (!roomIds || roomIds.length === 0)) {
+      console.log('[BookingRoute:Manual] ⚠️ One-day picnic without rooms (OK)');
+    }
+
     if (roomIds.length > 0) {
       const { checkMultipleRoomsAvailable } = require('../services/availabilityService');
       const availabilityCheck = await checkMultipleRoomsAvailable(

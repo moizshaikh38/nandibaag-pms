@@ -20,7 +20,8 @@
     "test-resilience": "node src/scripts/testMessageResilience.js",
     "debug-aug29": "node src/scripts/debugAug29Availability.js",
     "verify-availability-disabled": "node scripts/verifyAvailabilityDisabled.js",
-    "debug-availability": "node scripts/debugAvailabilityIssue.js"
+    "debug-availability": "node scripts/debugAvailabilityIssue.js",
+    "cleanup-bookings": "node scripts/cleanupBrokenBookings.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.1.1",

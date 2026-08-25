@@ -344,6 +344,33 @@ const ManualBookingForm = () => {
       return;
     }
 
+    // VALIDATION 1: Check package type
+    if (!formData.packageType) {
+      alert('❌ Select package type first');
+      setLoading(false);
+      return;
+    }
+
+    // VALIDATION 2: Rooms REQUIRED for overnight/couple/group
+    if (['couple', 'group', 'overnight'].includes(formData.packageType)) {
+      if (!selectedRooms || selectedRooms.length === 0) {
+        alert(
+          `❌ Select at least 1 room for ${formData.packageType} booking\n\n` +
+          `Please select room(s) before creating booking.`
+        );
+        console.log('[Form:Booking] ❌ Validation failed - no rooms');
+        setLoading(false);
+        return; // Don't proceed
+      }
+    }
+
+    // VALIDATION 3: Check dates
+    if (!formData.checkInDate || !formData.checkOutDate) {
+      alert('❌ Enter check-in and check-out dates');
+      setLoading(false);
+      return;
+    }
+
     try {
       const response = await api.post('/bookings/manual-booking', {
         ...formData,
@@ -384,8 +411,15 @@ const ManualBookingForm = () => {
 
       window.dispatchEvent(new Event('refresh_bookings'));
     } catch (error) {
-      toast.error(error.response?.data?.error || 'Error creating booking');
-      setMessage(error.response?.data?.error || 'Error creating booking');
+      const errorMsg = error.response?.data?.error || error.message;
+      
+      if (error.response?.data?.requiresRoomSelection) {
+        alert('❌ Please select at least 1 room');
+      } else {
+        alert('❌ Error: ' + errorMsg);
+      }
+      toast.error(errorMsg);
+      setMessage(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -764,6 +798,18 @@ const ManualBookingForm = () => {
                   )}
                 </div>
               )}
+
+              {/* Room required warning for specific package types */}
+              {['couple', 'group', 'overnight'].includes(formData.packageType) && (
+                <div className="room-selection-required">
+                  <p>🔴 ROOMS REQUIRED for {formData.packageType} booking</p>
+                  <p>Selected rooms: {selectedRooms?.length || 0}</p>
+                  {(!selectedRooms || selectedRooms.length === 0) && (
+                    <p style={{color: '#ff4d4f'}}>⚠️ Select at least 1 room</p>
+                  )}
+                </div>
+              )}
+
             </div>
 
           </div>
