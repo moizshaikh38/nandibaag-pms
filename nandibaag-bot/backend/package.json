@@ -21,7 +21,8 @@
     "debug-aug29": "node src/scripts/debugAug29Availability.js",
     "verify-availability-disabled": "node scripts/verifyAvailabilityDisabled.js",
     "debug-availability": "node scripts/debugAvailabilityIssue.js",
-    "cleanup-bookings": "node scripts/cleanupBrokenBookings.js"
+    "cleanup-bookings": "node scripts/cleanupBrokenBookings.js",
+    "final-check": "node scripts/finalAvailabilityCheck.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.1.1",
