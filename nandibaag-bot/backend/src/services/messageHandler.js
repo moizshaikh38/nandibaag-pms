@@ -808,8 +808,44 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
           logger.error(`Availability check error: ${availErr.message}`);
         }
       } else if (draft.date && AVAILABILITY_CHECK_DISABLED) {
-        console.log('[MessageHandler] ⚠️ Availability check DISABLED — directing customer to call staff');
-        addSystemNote(`[SYSTEM NOTE — MANDATORY: ⚠️ AVAILABILITY CHECK IS TEMPORARILY DISABLED. You CANNOT check or confirm room availability. For ANY availability question, you MUST say: "🔔 Real-time availability aur booking ke liye, please humein call karein: 📞 9257657664. Hamari team aapki perfect stay arrange karegi! 😊" DO NOT guess, assume, or claim any rooms are available or unavailable. DO NOT show pricing until staff confirms availability. For general info (pricing rates, meals, activities, directions) — answer normally.]`);
+        console.log('[MessageHandler] ⚠️ Availability check DISABLED — will remove availability numbers from response');
+        
+        try {
+          const checkInDate = new Date(draft.date);
+          if (!isNaN(checkInDate.getTime())) {
+            const nights = draft.nights && draft.nights > 0 ? draft.nights : 1;
+            const checkOutDate = new Date(checkInDate);
+            checkOutDate.setDate(checkOutDate.getDate() + nights);
+
+            const isDayPicnic = draft.bookingType === 'picnic' || draft.bookingType === 'dayuse' || draft.packageType === 'one-day-picnic' || /\b(picnic|day\s*use|dayuse|one\s*day|day\s*package)\b/i.test(msgLower);
+
+            if (isDayPicnic) {
+              const options = { mealOption: draft.mealOption, mealRate: draft.mealRate };
+              const pricingResult = calculatePricing(checkInDate, checkOutDate, draft.adults || 2, draft.kids || [], 'picnic', options);
+
+              if (!draft.mealOption) {
+                addSystemNote(`[SYSTEM NOTE: ONE-DAY PICNIC pricing requested for ${draft.date}. Offer two meal options:\n1. Breakfast to Dinner (₹1,250 weekday / ₹1,500 weekend)\n2. Breakfast to High Tea (₹1,000 weekday / ₹1,250 weekend)\nAsk which option they prefer!]`);
+              } else {
+                addSystemNote(`[SYSTEM NOTE: ONE-DAY PICNIC pricing calculated.\n${pricingResult.formatted}]`);
+              }
+            } else if (draft.adults && draft.adults > 0) {
+              const pricingResult = calculatePricing(checkInDate, checkOutDate, draft.adults || 2, draft.kids || [], draft.bookingType || 'auto');
+
+              const isKidsSpecified = extracted.kidsSpecified || chat.bookingDraft.kidsSpecified || (draft.kids && draft.kids.length > 0);
+              if (!isKidsSpecified) {
+                console.log('[BookingFlow] Kids status NOT specified yet. Asking customer about kids FIRST.');
+                chat.bookingDraft.askingAboutKids = true;
+                addSystemNote(`[SYSTEM NOTE: Dates & adults count confirmed (${draft.date}, ${draft.adults} adults). CRITICAL INSTRUCTION: Ask the customer about kids FIRST before showing pricing breakdown:\n"Kya koi kids aa rahe hain? Agar yes, age bataiye 😊"\nDO NOT display the pricing breakdown until customer responds to kids question!]`);
+              } else {
+                console.log('[BookingFlow] Kids status confirmed. Showing pricing breakdown.');
+                chat.bookingDraft.askingAboutKids = false;
+                addSystemNote(`[SYSTEM NOTE: Pricing calculated for ${draft.date} & kids status confirmed.\nPRICING BREAKDOWN:\n${pricingResult.formatted}]`);
+              }
+            }
+          }
+        } catch (err) {
+          logger.error(`Pricing calculation error: ${err.message}`);
+        }
       }
 
       // ── CONVERSATION STATE MACHINE & NAME COLLECTION (Steps 5 & 6) ──
@@ -894,7 +930,43 @@ Hamari team aapse jald hi connect karegi for booking 😊]`);
         }
 
         const systemNotes = systemNotesList.join('\n\n');
-        replyToSend = await getAIResponse(chat, messageText, settings, systemNotes);
+        
+        // CHECK 1: Videos
+        if (msgLower.includes('video') || msgLower.includes('videos')) {
+          console.log('[MessageHandler] Matched: VIDEOS');
+          replyToSend = `🎥 Staff room videos jald hi share karenge! 
+Aap booking confirm karke waqt par videos dekh sakenge. 
+Kya aap booking karna chahte hain?`;
+        }
+        // CHECK 2: Payment
+        else if (msgLower.includes('payment') || 
+            msgLower.includes('scanner') || 
+            msgLower.includes('upi') ||
+            msgLower.includes('how to pay') ||
+            msgLower.includes('payment method')) {
+          console.log('[MessageHandler] Matched: PAYMENT');
+          replyToSend = `💳 Staff aapko jald hi payment details provide karenge!
+Booking ke baad payment link share hoga.
+Kya aap booking confirm karna chahte hain?`;
+        }
+        // If no keyword match, proceed with normal AI
+        else {
+          console.log('[MessageHandler] No keyword match - using AI');
+          replyToSend = await getAIResponse(chat, messageText, settings, systemNotes);
+          
+          if (AVAILABILITY_CHECK_DISABLED) {
+            // Remove lines like "rooms available", "rooms booked", etc
+            replyToSend = replyToSend
+              .replace(/\d+ room\(s\) available/gi, '')
+              .replace(/all rooms? booked/gi, '')
+              .replace(/available for/gi, '');
+            
+            // Add "Call to confirm" at the end
+            if (!replyToSend.toLowerCase().includes('call') && !replyToSend.includes('9257657664')) {
+              replyToSend += `\n\n📞 To confirm booking, call us: 9257657664`;
+            }
+          }
+        }
       }
     } catch (aiError) {
       logger.error(`[MessageHandler] Error in AI/computation flow: ${aiError.message}`);
@@ -1163,6 +1235,84 @@ Check-in: 12:00 PM (Noon)
 Check-out: 10:30 AM next morning
 
 Includes 4 meals + activities."
+
+═════════════════════════════════════════════════════════════════════
+
+SPECIAL INSTRUCTIONS FOR SPECIFIC KEYWORDS:
+═════════════════════════════════════════════════════════════════════
+
+If customer asks about: "Videos" / "video" / "room video"
+YOUR RESPONSE MUST BE:
+"🎥 Staff room videos jald hi share karenge! 
+Aap booking confirm karke waqt par videos dekh sakenge. 
+Kya aap booking karna chahte hain?"
+
+Do NOT: Try to provide videos yourself or explain room details
+
+---
+
+If customer asks about: "Payment" / "Scanner" / "How to pay" / "Payment method"
+YOUR RESPONSE MUST BE:
+"💳 Staff aapko jald hi payment details provide karenge!
+Booking ke baad payment link share hoga.
+Kya aap booking confirm karna chahte hain?"
+
+Do NOT: Explain payment methods, banking details, or scanner
+
+---
+
+If customer asks about: "Transaction" / "Payment link" / "UPI"
+YOUR RESPONSE MUST BE:
+"💳 Payment details jald hi provide honge.
+Agar booking ready ho toh staff se contact karein:
+📞 9257657664"
+
+---
+
+CRITICAL INSTRUCTIONS:
+═════════════════════════════════════════════════════════════════════
+
+WHEN CUSTOMER GIVES DATES (Check-in + Check-out):
+1. ✅ ALWAYS calculate pricing
+2. ✅ ALWAYS show booking summary:
+   - Check-in date and day
+   - Check-out date and day  
+   - Number of guests/adults
+   - Package type
+   - Total payment
+
+3. ✅ THEN ask to call for confirmation
+
+Example format:
+
+Customer: "29 Aug to 30 Aug, 4 adults"
+
+You must respond:
+
+"✅ BOOKING SUMMARY:
+
+📅 Check-in: 29/08/2026 (Friday)
+📅 Check-out: 30/08/2026 (Saturday)
+👥 Guests: 4 Adults
+🏠 Package: Group Stay
+
+💳 TOTAL PAYMENT: ₹24,000
+
+📞 To confirm this booking, please call us:
+9257657664
+
+Our team will complete your booking! 🎉"
+
+DO NOT:
+❌ Say "rooms available" or "rooms booked"
+❌ Suggest different dates
+❌ Skip pricing calculation
+❌ NEVER show advance or pending amounts
+
+ALWAYS:
+✅ Show complete summary
+✅ Ask them to call
+✅ Be helpful and friendly
 
 ═════════════════════════════════════════════════════════════════════
 `;
