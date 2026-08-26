@@ -450,7 +450,7 @@ const ManualBookingForm = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-xl border border-slate-200/90 overflow-hidden animate-fade-in text-slate-800 mb-16 lg:mb-4">
+    <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-xl border border-slate-200/90 overflow-hidden animate-fade-in text-slate-800 mb-28 lg:mb-4 relative">
       
       {/* Top Banner Header */}
       <div className="bg-gradient-to-r from-emerald-950 via-emerald-900 to-teal-900 px-3.5 py-3 sm:px-6 sm:py-4 text-white flex items-center justify-between gap-2 border-b border-emerald-800">
@@ -801,11 +801,15 @@ const ManualBookingForm = () => {
 
               {/* Room required warning for specific package types */}
               {['couple', 'group', 'overnight'].includes(formData.packageType) && (
-                <div className="room-selection-required">
-                  <p>🔴 ROOMS REQUIRED for {formData.packageType} booking</p>
-                  <p>Selected rooms: {selectedRooms?.length || 0}</p>
+                <div className="p-2.5 mt-3 rounded-xl bg-amber-50/80 border border-amber-200 text-amber-900 text-[11px] font-semibold shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span>🔴 Rooms required for {formData.packageType}</span>
+                    <span>Selected: {selectedRooms?.length || 0}</span>
+                  </div>
                   {(!selectedRooms || selectedRooms.length === 0) && (
-                    <p style={{color: '#ff4d4f'}}>⚠️ Select at least 1 room</p>
+                    <div className="text-rose-600 font-bold mt-1.5 flex items-center gap-1">
+                      ⚠️ Please select at least 1 room below
+                    </div>
                   )}
                 </div>
               )}
@@ -984,10 +988,11 @@ const ManualBookingForm = () => {
                 </div>
               </div>
 
+              {/* Desktop Submit Button (Hidden on Mobile) */}
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-[0.99] text-white font-display font-extrabold text-xs sm:text-sm shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                className="hidden md:flex w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-[0.99] text-white font-display font-extrabold text-sm shadow-lg transition-all items-center justify-center gap-2 disabled:opacity-50"
               >
                 {loading ? 'Creating Reservation...' : '✓ Create & Confirm Reservation'}
               </button>
@@ -995,6 +1000,21 @@ const ManualBookingForm = () => {
 
           </div>
 
+        </div>
+
+        {/* MOBILE STICKY ACTION BAR */}
+        <div className="md:hidden fixed bottom-16 left-0 right-0 p-3 bg-white/90 backdrop-blur-md border-t border-slate-200 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] z-40 flex items-center justify-between gap-4 pb-safe">
+          <div className="flex flex-col pl-1">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Total</span>
+            <span className="text-lg font-extrabold text-slate-900 leading-none tracking-tight">₹{formData.totalAmount || 0}</span>
+          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 active:scale-[0.98] text-white font-display font-extrabold text-sm shadow-lg flex items-center justify-center gap-1.5 disabled:opacity-50 transition-transform"
+          >
+            {loading ? 'Processing...' : '✓ Confirm Booking'}
+          </button>
         </div>
 
       </form>

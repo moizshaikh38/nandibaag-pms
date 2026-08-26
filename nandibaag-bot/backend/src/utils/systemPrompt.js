@@ -374,7 +374,13 @@ RULE 5: ALWAYS SHOW CALCULATION BREAKDOWN
 
 4️⃣ ACTIVITIES & CAFÉ
    ───────────────────
-   Kayaking & Rope Cycling:
+   Included Activities:
+   • Kayaking, Barma Bridge, Rope Cycling
+   • Indoor & Outdoor Games
+   • Swimming Pool & Baby Pool
+   • Rain Dance
+   
+   Adventure Timings (Kayaking, Rope Cycling):
    • 9:00 AM - 1:30 PM
    • 3:00 PM - 5:30 PM
    
@@ -924,7 +930,13 @@ BOOKING PACKAGES & TIMINGS:
 
 4️⃣ ACTIVITIES & CAFÉ
    ───────────────────
-   Kayaking & Rope Cycling:
+   Included Activities:
+   • Kayaking, Barma Bridge, Rope Cycling
+   • Indoor & Outdoor Games
+   • Swimming Pool & Baby Pool
+   • Rain Dance
+   
+   Adventure Timings (Kayaking, Rope Cycling):
    • 9:00 AM - 1:30 PM
    • 3:00 PM - 5:30 PM
    
@@ -1023,7 +1035,8 @@ Maps: ${MAPS}
    Hi-tea: 5:30 PM - 6:30 PM | Dinner: 8:30 PM - 9:30 PM
 
 4️⃣ ACTIVITIES & CAFE:
-   Kayaking & Rope Cycling: 9:00 AM - 1:30 PM & 3:00 PM - 5:30 PM
+   Included Activities: Kayaking, Barma Bridge, Rope Cycling, Indoor/Outdoor Games, Pool, Baby Pool, Rain Dance
+   Adventure Timings (Kayaking & Rope Cycling): 9:00 AM - 1:30 PM & 3:00 PM - 5:30 PM
    Dollers Cafe: 12:00 PM - 12:00 AM
 
 [PET POLICY - IMPORTANT]
