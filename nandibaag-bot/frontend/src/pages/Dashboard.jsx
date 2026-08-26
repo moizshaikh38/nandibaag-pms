@@ -145,16 +145,14 @@ export default function Dashboard() {
     };
   }, [socket, fetchStats]);
 
-  const confirmGlobalModeToggle = async () => {
-    if (!pendingModeChange) return;
+  const handleDirectModeToggle = async (mode) => {
+    if (globalMode === mode) return;
     try {
-      await api.patch('/settings/default-new-chat-mode', { defaultModeForNewChats: pendingModeChange });
-      setGlobalMode(pendingModeChange);
-      toast.success(`New chats will now start in ${pendingModeChange === 'ai' ? 'AI Auto' : 'Staff'} mode`);
+      await api.patch('/settings/default-new-chat-mode', { defaultModeForNewChats: mode });
+      setGlobalMode(mode);
+      toast.success(`New chats will now start in ${mode === 'ai' ? 'AI Auto' : 'Human Only'} mode`);
     } catch (error) {
       toast.error('Failed to update default mode');
-    } finally {
-      setPendingModeChange(null);
     }
   };
 
@@ -219,7 +217,7 @@ export default function Dashboard() {
 
               <div className="flex bg-white/90 rounded-lg p-1 border border-slate-200 shadow-2xs sm:ml-auto">
                 <button
-                  onClick={() => setPendingModeChange('ai')}
+                  onClick={() => handleDirectModeToggle('ai')}
                   className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1 ${
                     globalMode === 'ai' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
                   }`}
@@ -228,7 +226,7 @@ export default function Dashboard() {
                 </button>
 
                 <button
-                  onClick={() => setPendingModeChange('human')}
+                  onClick={() => handleDirectModeToggle('human')}
                   className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1 ${
                     globalMode === 'human' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
                   }`}
@@ -245,37 +243,6 @@ export default function Dashboard() {
       {showManualBookingForm && (
         <div className="animate-fade-in" id="manual-booking-section">
           <ManualBookingForm />
-        </div>
-      )}
-
-      {/* Mode Toggle Confirmation Modal */}
-      {pendingModeChange && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-xs">
-          <div className="glass-card rounded-2xl max-w-sm w-full p-6 space-y-4 bg-white animate-fade-in shadow-2xl">
-            <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
-              <AlertTriangle size={20} />
-            </div>
-            <div className="text-center space-y-1">
-              <h3 className="font-bold text-slate-800 text-base">Change Default Mode?</h3>
-              <p className="text-xs text-slate-500">
-                New incoming chats will start in <strong>{pendingModeChange === 'ai' ? 'AI Auto' : 'Staff'}</strong> mode. Existing chats will keep their current mode.
-              </p>
-            </div>
-            <div className="flex gap-2 pt-2">
-              <button
-                onClick={() => setPendingModeChange(null)}
-                className="flex-1 py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmGlobalModeToggle}
-                className="flex-1 py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl"
-              >
-                Confirm Switch
-              </button>
-            </div>
-          </div>
         </div>
       )}
 
