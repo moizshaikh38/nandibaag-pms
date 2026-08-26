@@ -430,35 +430,35 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
         </div>
 
         {/* Header Action Controls */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
           <a
             href={`tel:${chat?.customerPhone}`}
-            className="p-2 sm:px-3 sm:py-1.5 text-white bg-white/10 hover:bg-white/20 active:scale-95 rounded-xl border border-white/20 transition-all flex items-center gap-1 text-xs font-bold"
+            className="p-2 sm:px-3 sm:py-1.5 text-white hover:bg-white/10 active:bg-white/20 rounded-full sm:rounded-xl sm:border sm:border-white/20 transition-all flex items-center justify-center gap-1 text-xs font-bold"
             title="Call Guest"
           >
-            <PhoneCall size={15} className="text-emerald-200" />
-            <span className="hidden lg:inline">Call</span>
+            <PhoneCall size={18} className="sm:w-[15px] sm:h-[15px] text-white sm:text-emerald-200" />
+            <span className="hidden sm:inline">Call</span>
           </a>
 
           <button
             onClick={handleOpenAssignModal}
-            className="p-2 sm:px-3 sm:py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/40 font-extrabold text-xs rounded-xl transition-all flex items-center gap-1 shadow-xs active:scale-95"
+            className="p-2 sm:px-3 sm:py-1.5 text-white hover:bg-white/10 active:bg-white/20 sm:bg-emerald-600 sm:hover:bg-emerald-500 sm:border sm:border-emerald-400/40 rounded-full sm:rounded-xl font-extrabold text-xs transition-all flex items-center justify-center gap-1 sm:shadow-xs active:scale-95"
             title="Assign Cottage Room"
           >
-            <Bed size={15} />
-            <span className="hidden sm:inline">Assign Cottage</span>
+            <Bed size={18} className="sm:w-[15px] sm:h-[15px]" />
+            <span className="hidden sm:inline">Assign</span>
           </button>
 
           <button
             onClick={handleModeToggle}
-            className={`p-2 sm:px-3 sm:py-1.5 font-extrabold text-xs rounded-xl border transition-all flex items-center gap-1 shadow-xs active:scale-95 ${
+            className={`p-2 sm:px-3 sm:py-1.5 font-extrabold text-xs rounded-full sm:rounded-xl sm:border transition-all flex items-center justify-center gap-1 active:scale-95 ${
               optimisticMode === 'ai'
-                ? 'bg-emerald-500 text-white border-emerald-400'
-                : 'bg-indigo-600 text-white border-indigo-400'
+                ? 'text-white hover:bg-white/10 sm:bg-emerald-500 sm:border-emerald-400'
+                : 'text-amber-300 hover:bg-white/10 sm:bg-amber-500 sm:text-white sm:border-amber-400'
             }`}
             title="Toggle AI Bot / Staff Mode"
           >
-            {optimisticMode === 'ai' ? <Zap size={15} /> : <User size={15} />}
+            {optimisticMode === 'ai' ? <Zap size={18} className="sm:w-[15px] sm:h-[15px]" /> : <User size={18} className="sm:w-[15px] sm:h-[15px]" />}
             <span className="hidden sm:inline">{optimisticMode === 'ai' ? 'AI Auto' : 'Staff'}</span>
           </button>
         </div>
@@ -477,47 +477,48 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
           return (
             <div
               key={index}
-              className={`flex ${isCustomer ? 'justify-start' : 'justify-end'} animate-fade-in`}
+              className={`flex ${isCustomer ? 'justify-start' : 'justify-end'} animate-fade-in mb-1`}
             >
-              <div className={`max-w-[88%] sm:max-w-[75%] p-3 rounded-2xl shadow-xs space-y-1 relative ${
+              <div className={`max-w-[85%] sm:max-w-[70%] px-2.5 py-1.5 rounded-lg shadow-sm space-y-0.5 relative ${
                 isCustomer
-                  ? 'bg-white text-slate-900 rounded-tl-xs border border-slate-200/80 shadow-slate-300/40'
-                  : 'bg-[#d9fdd3] text-slate-900 rounded-tr-xs border border-emerald-200/80 shadow-emerald-900/10'
+                  ? 'bg-white text-slate-900 rounded-tl-sm'
+                  : 'bg-[#d9fdd3] text-slate-900 rounded-tr-sm'
               }`}>
                 {/* Sender Header */}
-                <div className="flex items-center justify-between gap-3 text-[10px] text-slate-500 font-semibold border-b border-slate-900/5 pb-1 mb-1">
-                  <span className={`font-bold ${isCustomer ? 'text-emerald-800' : isBot ? 'text-teal-800' : 'text-indigo-800'}`}>
-                    {isCustomer ? (chat.customerName || formatPhoneDisplay(chat.customerPhone)) : isBot ? '🤖 AI Assistant' : '👤 Staff Member'}
+                <div className="flex items-center justify-between gap-3 text-[9px] text-slate-500 font-semibold mb-0.5">
+                  <span className={`font-bold ${isCustomer ? 'text-emerald-600' : isBot ? 'text-teal-600' : 'text-indigo-600'}`}>
+                    {isCustomer ? (chat.customerName?.split(' ')[0] || formatPhoneDisplay(chat.customerPhone)) : isBot ? '🤖 AI' : '👤 Staff'}
                   </span>
-                  <div className="flex items-center gap-1 font-mono text-[9px]">
-                    <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                    {!isCustomer && (
-                      <span className="text-[#34b7f1] font-bold" title="Delivered to WhatsApp">✓✓</span>
-                    )}
-                    {msg.deliveryStatus === 'failed' && (
-                      <span className="text-rose-600 font-bold flex items-center gap-0.5 ml-1" title="Message failed to deliver to WhatsApp">
-                        <AlertCircle size={12} />
-                        <span>Failed</span>
-                      </span>
-                    )}
-                  </div>
                 </div>
 
                 {/* Body Content */}
                 {msg.messageType === 'image' || msg.mediaUrl || (msg.text && msg.text.includes('📷')) ? (
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     {msg.mediaUrl ? (
-                      <img src={msg.mediaUrl} alt="Received photo" className="max-w-full rounded-xl max-h-64 object-cover shadow-xs border border-slate-200" />
+                      <img src={msg.mediaUrl} alt="Received photo" className="max-w-full rounded-md max-h-60 object-cover shadow-xs border border-black/5" />
                     ) : (
-                      <div className="flex items-center gap-1.5 font-semibold text-emerald-800 bg-emerald-50/90 p-2 rounded-xl text-xs border border-emerald-200">
-                        📸 Photo Received
+                      <div className="flex items-center gap-1 font-semibold text-emerald-800 bg-emerald-50/80 p-1.5 rounded-md text-[11px] border border-emerald-200">
+                        📸 Photo
                       </div>
                     )}
-                    {msg.text && msg.text !== '[Media]' && <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap font-sans text-slate-900">{msg.text}</p>}
+                    {msg.text && msg.text !== '[Media]' && <p className="text-[13px] sm:text-sm leading-snug whitespace-pre-wrap font-sans text-slate-900">{msg.text}</p>}
                   </div>
                 ) : (
-                  <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap font-sans text-slate-900">{msg.text}</p>
+                  <p className="text-[13px] sm:text-sm leading-snug whitespace-pre-wrap font-sans text-slate-900">{msg.text}</p>
                 )}
+                
+                {/* Footer Time & Status */}
+                <div className="flex justify-end items-center gap-1 text-[9px] text-slate-500 mt-1 opacity-80">
+                  <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  {!isCustomer && (
+                    <span className="text-[#34b7f1] font-bold" title="Delivered to WhatsApp">✓✓</span>
+                  )}
+                  {msg.deliveryStatus === 'failed' && (
+                    <span className="text-rose-600 font-bold flex items-center gap-0.5 ml-0.5" title="Message failed to deliver">
+                      <AlertCircle size={10} />
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           );
@@ -554,8 +555,8 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
       </div>
 
       {/* Spacious WhatsApp Input Reply Bar */}
-      <div className="p-2.5 sm:p-3 bg-[#f0f2f5] border-t border-slate-200/90 flex items-end gap-2 safe-pb shrink-0">
-        <div className="flex-1 min-w-0 bg-white border border-slate-300/80 rounded-2xl shadow-inner flex items-center px-3 py-2 sm:py-1.5 focus-within:ring-2 focus-within:ring-emerald-500 focus-within:border-emerald-500 transition-all">
+      <div className="p-2 sm:p-3 bg-[#f0f2f5] border-t border-slate-200/90 flex items-end gap-1.5 sm:gap-2 pb-safe shrink-0">
+        <div className="flex-1 min-w-0 bg-white rounded-3xl shadow-sm flex items-center px-4 py-1.5 focus-within:ring-2 focus-within:ring-emerald-500 transition-all border border-slate-300">
           <textarea
             value={messageText}
             onChange={(e) => setMessageText(e.target.value)}
@@ -566,23 +567,23 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
               }
             }}
             rows={Math.min(5, Math.max(1, messageText.split('\n').length))}
-            placeholder="Type WhatsApp message (Enter to send, Shift+Enter for new line)..."
+            placeholder="Type a message..."
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="sentences"
             spellCheck={false}
-            className="w-full text-base sm:text-sm text-slate-900 placeholder:text-slate-400 bg-transparent focus:outline-none resize-none font-sans leading-normal py-1 custom-scrollbar"
-            style={{ minHeight: '50px', maxHeight: '150px', fontSize: '16px', lineHeight: '1.5' }}
+            className="w-full text-[15px] text-slate-900 placeholder:text-slate-400 bg-transparent focus:outline-none resize-none font-sans leading-relaxed py-1.5 custom-scrollbar"
+            style={{ maxHeight: '120px' }}
           />
         </div>
 
         <button
           onClick={() => handleSendMessage()}
           disabled={isSending || !messageText.trim()}
-          className="w-12 h-12 sm:w-11 sm:h-11 bg-[#00a884] hover:bg-[#06cf9c] active:scale-95 disabled:opacity-40 text-white font-extrabold text-xs rounded-full shadow-md transition-all flex items-center justify-center shrink-0"
+          className="w-10 h-10 sm:w-11 sm:h-11 bg-[#00a884] hover:bg-[#06cf9c] active:scale-95 disabled:opacity-40 text-white font-extrabold text-xs rounded-full shadow-sm transition-all flex items-center justify-center shrink-0 mb-0.5"
           title="Send WhatsApp Message"
         >
-          {isSending ? <Loader size={18} className="animate-spin" /> : <Send size={18} />}
+          {isSending ? <Loader size={18} className="animate-spin" /> : <Send size={18} className="ml-1" />}
         </button>
       </div>
 
