@@ -185,6 +185,66 @@ class Fast2SmsService {
       return false;
     }
   }
+
+  async sendTemplate(to, templateData) {
+    if (!this.apiKey) {
+      console.error('[Fast2SMS:WhatsApp] API Key missing');
+      return false;
+    }
+    const number = this.normalizeNumber(to);
+    if (!number || number.length < 11) {
+      console.error('[Fast2SMS:WhatsApp] Invalid number');
+      return false;
+    }
+
+    try {
+      const url = new URL('https://www.fast2sms.com/dev/whatsapp');
+      if (templateData.message_id) {
+        url.searchParams.set('message_id', templateData.message_id);
+      }
+      if (this.phoneNumberId) {
+        url.searchParams.set('phone_number_id', this.phoneNumberId);
+      } else {
+        const env = require('../config/env');
+        const displayNum = (this.senderNumbers[0] || env.resortContact1 || '9257657664').replace(/\D/g, '');
+        const cleanDisplay = displayNum.length === 12 && displayNum.startsWith('91') ? displayNum.slice(2) : displayNum;
+        url.searchParams.set('display_number', cleanDisplay);
+      }
+      
+      url.searchParams.set('numbers', number);
+      
+      if (templateData.variables_values) {
+        url.searchParams.set('variables_values', templateData.variables_values);
+      }
+
+      console.log(`[Fast2SMS:WhatsApp] Template Request URL: ${url.toString()}`);
+
+      const response = await axios.get(url.toString(), {
+        headers: {
+          Authorization: this.apiKey,
+        },
+        timeout: 15000
+      });
+
+      const json = response.data;
+      if (json && json.return !== false) {
+        console.log(`[Fast2SMS:WhatsApp] ✅ Template sent successfully to ${number}`);
+        return true;
+      }
+      
+      if (json && json.status_code === 999) {
+        console.error('[Fast2SMS:WhatsApp] ❌ FAST2SMS ACCOUNT NOTICE:', json.message);
+        return false;
+      }
+
+      console.log(`[Fast2SMS:WhatsApp] WhatsApp template send returned error: ${JSON.stringify(json).slice(0, 200)}`);
+      return false;
+    } catch (error) {
+      console.error(`[Fast2SMS:WhatsApp] Template Error: ${error.message}`);
+      if (error.response) console.error(`[Fast2SMS:WhatsApp] Response:`, JSON.stringify(error.response.data).slice(0, 300));
+      return false;
+    }
+  }
 }
 
 module.exports = new Fast2SmsService();

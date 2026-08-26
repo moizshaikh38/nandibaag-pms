@@ -151,7 +151,8 @@ Check Out Day: ${checkOutDay}
 Members: ${totalMembers}
 Room: ${roomDisplay}
 Package: ${(booking.packageType || 'Stay').toUpperCase()}
-${booking.mealOption ? `Meal Option: ${booking.mealOption}\n` : ''}Total Payment: ₹${totalAmount.toLocaleString('en-IN')}
+Meal Option: ${booking.mealOption || 'None'}
+Total Payment: ₹${totalAmount.toLocaleString('en-IN')}
 Advance Payment: ₹${advancePaid.toLocaleString('en-IN')}
 Pending Payment: ${pendingDisplay}
 Contact No.: ${booking.customerPhone}
@@ -174,10 +175,35 @@ Kayaking & Rope Cycling:
 
 📞 RESORT CONTACT:
 Call: 9257657664/9257657665/9257657663
-${booking.notes ? `\nSpecial Notes: ${booking.notes}` : ''}
+
+Special Notes: ${booking.notes || 'None'}
+
 Thank you for booking with Nandibaag Resort! 🙏`;
 
-  return message;
+  const templateData = {
+    message_id: process.env.FAST2SMS_CONFIRMATION_TEMPLATE_ID || '', 
+    variables_values: [
+      booking.customerName, // {{1}}
+      checkInDateStr, // {{2}}
+      checkInDay, // {{3}}
+      checkOutDateStr, // {{4}}
+      checkOutDay, // {{5}}
+      totalMembers, // {{6}}
+      roomDisplay, // {{7}}
+      (booking.packageType || 'Stay').toUpperCase(), // {{8}}
+      booking.mealOption || 'None', // {{9}}
+      totalAmount.toLocaleString('en-IN'), // {{10}}
+      advancePaid.toLocaleString('en-IN'), // {{11}}
+      pendingDisplay, // {{12}}
+      booking.customerPhone, // {{13}}
+      bookedByName, // {{14}}
+      checkInTime, // {{15}}
+      checkOutTime, // {{16}}
+      booking.notes || 'None' // {{17}}
+    ].map(v => (v || 'None').toString().replace(/\|/g, '')).join('|')
+  };
+
+  return { text: message, templateData };
 };
 
 const formatBookingMessageForStaffGroup = (booking) => {

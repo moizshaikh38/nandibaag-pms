@@ -50,7 +50,15 @@ async function routeIncomingMessage(message, channel) {
  * @returns {Promise<boolean>} true if at least one WhatsApp channel succeeded
  */
 async function sendMessageViaChannel(chatId, text, channel, sessionId = 'resort_primary') {
-  const finalText = (text || '')
+  let finalText = text;
+  let templateData = null;
+  
+  if (typeof text === 'object' && text !== null) {
+    finalText = text.text;
+    templateData = text.templateData;
+  }
+
+  finalText = (finalText || '')
     .replace(/\\n\\n/g, '\n\n')
     .replace(/\\n/g, '\n')
     .trim();
@@ -98,20 +106,25 @@ async function sendMessageViaChannel(chatId, text, channel, sessionId = 'resort_
 
   // ── 2. Fast2SMS WhatsApp Channel (Independent) ─────────────────────
   const env = require('../config/env');
-  const isFast2SmsAvailable = env.fast2smsEnabled && fast2smsService.getStatus() === 'connected';
-
-  if (isFast2SmsAvailable) {
-    console.log(`[Send:Fast2SMS:WhatsApp] Attempting send to ${chatId}...`);
+  if (env.fast2smsEnabled && (channel === 'fast2sms' || !channel)) {
+    console.log(`[Send:Fast2SMS] Attempting to send to ${chatId}...`);
     try {
-      const fast2smsSent = await fast2smsService.sendMessage(chatId, finalText);
-      if (fast2smsSent) {
-        console.log(`[Send:Fast2SMS:WhatsApp] ✅ Success for ${chatId}`);
+      let f2sSent = false;
+      if (templateData) {
+        console.log(`[Send:Fast2SMS] Sending as WhatsApp Template...`);
+        f2sSent = await fast2smsService.sendTemplate(chatId, templateData);
+      } else {
+        f2sSent = await fast2smsService.sendMessage(chatId, finalText);
+      }
+      
+      if (f2sSent) {
+        console.log(`[Send:Fast2SMS] ✅ Success for ${chatId}`);
         results.fast2sms = true;
       } else {
-        console.log(`[Send:Fast2SMS:WhatsApp] ❌ Failed for ${chatId}`);
+        console.log(`[Send:Fast2SMS] ❌ Failed/Queued for ${chatId}`);
       }
-    } catch (fast2smsErr) {
-      console.error(`[Send:Fast2SMS:WhatsApp] ❌ Error: ${fast2smsErr.message}`);
+    } catch (f2sErr) {
+      console.error(`[Send:Fast2SMS] ❌ Error: ${f2sErr.message}`);
     }
   } else {
     console.log(`[Send:Fast2SMS:WhatsApp] ⏭️ Skipped (Fast2SMS not enabled/configured)`);
