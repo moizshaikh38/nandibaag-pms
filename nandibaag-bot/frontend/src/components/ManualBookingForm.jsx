@@ -1017,6 +1017,9 @@ const ManualBookingForm = () => {
           </button>
         </div>
 
+        {/* Mobile Spacer to prevent overlap with sticky bar */}
+        <div className="md:hidden h-28 w-full shrink-0"></div>
+
       </form>
 
       {/* POST-BOOKING MODAL: SEND CONFIRMATION SMS OPTION */}
