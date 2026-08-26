@@ -417,7 +417,7 @@ const handleSendConfirmation = async (req, res) => {
     // ─── 1. SEND TO CUSTOMER (WhatsApp Only via Baileys / Fast2SMS WhatsApp) ───
     console.log('[Booking:SendConfirmation] ─── Sending WhatsApp confirmation to CUSTOMER:', cleanCustomerPhone);
     try {
-      const sent = await sendMessageViaChannel(cleanCustomerPhone, customerMessage, 'whatsapp-web', activeSessionId);
+      const sent = await sendMessageViaChannel(cleanCustomerPhone, customerMessage, null, activeSessionId);
       
       if (sent) {
         customerMsgSent = true;
@@ -452,7 +452,7 @@ const handleSendConfirmation = async (req, res) => {
 
       chat.messages.push({
         sender: 'bot',
-        text: customerMessage,
+        text: typeof customerMessage === 'object' ? customerMessage.text : customerMessage,
         timestamp: new Date(),
         messageType: 'text',
         deliveryStatus: customerMsgSent ? 'sent' : 'pending'
