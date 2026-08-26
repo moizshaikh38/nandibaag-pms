@@ -202,29 +202,38 @@ export default function Dashboard() {
           </button>
 
           {isAdmin && (
-            <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-xl border border-slate-200">
-              <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 pl-2">
-                <Bot size={15} className="text-emerald-600" />
-                <span>New Chats Mode:</span>
-              </span>
+            <div className={`flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-2 rounded-xl border transition-colors ${globalMode === 'ai' ? 'bg-emerald-50/80 border-emerald-200' : 'bg-amber-50/80 border-amber-200'}`}>
+              <div className="flex items-center gap-2 pl-2">
+                {globalMode === 'ai' ? (
+                  <Bot size={18} className="text-emerald-600" />
+                ) : (
+                  <User size={18} className="text-amber-600" />
+                )}
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider leading-none mb-1">Active Mode</span>
+                  <span className={`text-sm font-extrabold leading-none ${globalMode === 'ai' ? 'text-emerald-700' : 'text-amber-700'}`}>
+                    {globalMode === 'ai' ? '🤖 AI AUTO' : '👨‍💼 HUMAN ONLY'}
+                  </span>
+                </div>
+              </div>
 
-              <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-xs">
+              <div className="flex bg-white/90 rounded-lg p-1 border border-slate-200 shadow-2xs sm:ml-auto">
                 <button
                   onClick={() => setPendingModeChange('ai')}
-                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
-                    globalMode === 'ai' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1 ${
+                    globalMode === 'ai' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
                   }`}
                 >
-                  Auto AI
+                  {globalMode === 'ai' && <Check size={14} />} Auto AI
                 </button>
 
                 <button
                   onClick={() => setPendingModeChange('human')}
-                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
-                    globalMode === 'human' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1 ${
+                    globalMode === 'human' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
                   }`}
                 >
-                  Human Only
+                  {globalMode === 'human' && <Check size={14} />} Human Only
                 </button>
               </div>
             </div>
