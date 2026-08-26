@@ -399,7 +399,7 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <button
             onClick={onClose}
-            className="md:hidden p-2 text-white bg-white/10 active:bg-white/20 rounded-xl border border-white/20 shrink-0 flex items-center justify-center font-bold active:scale-95 transition-all"
+            className="md:hidden p-2 text-white bg-white/10 active:bg-white/20 rounded-full shrink-0 flex items-center justify-center font-bold active:scale-95 transition-all"
             title="Back to chat list"
           >
             <ArrowLeft size={18} />
@@ -555,7 +555,7 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
       </div>
 
       {/* Spacious WhatsApp Input Reply Bar */}
-      <div className="p-2 sm:p-3 bg-[#f0f2f5] border-t border-slate-200/90 flex items-end gap-1.5 sm:gap-2 pb-safe shrink-0">
+      <div className="p-2 sm:p-3 bg-[#f0f2f5] border-t border-slate-200/90 flex items-end gap-1.5 sm:gap-2 safe-pb shrink-0">
         <div className="flex-1 min-w-0 bg-white rounded-3xl shadow-sm flex items-center px-4 py-1.5 focus-within:ring-2 focus-within:ring-emerald-500 transition-all border border-slate-300">
           <textarea
             value={messageText}

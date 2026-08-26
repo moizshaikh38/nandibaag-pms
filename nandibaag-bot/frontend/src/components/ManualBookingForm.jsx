@@ -1003,7 +1003,7 @@ const ManualBookingForm = () => {
         </div>
 
         {/* MOBILE STICKY ACTION BAR */}
-        <div className="md:hidden fixed bottom-16 left-0 right-0 p-3 bg-white/90 backdrop-blur-md border-t border-slate-200 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] z-40 flex items-center justify-between gap-4 pb-safe">
+        <div className="md:hidden fixed bottom-16 left-0 right-0 p-3 bg-white/90 backdrop-blur-md border-t border-slate-200 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] z-40 flex items-center justify-between gap-4 safe-pb">
           <div className="flex flex-col pl-1">
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Total</span>
             <span className="text-lg font-extrabold text-slate-900 leading-none tracking-tight">₹{formData.totalAmount || 0}</span>
