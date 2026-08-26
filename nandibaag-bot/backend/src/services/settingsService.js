@@ -12,7 +12,7 @@ const logger = require('../config/logger');
 function normalizeMode(mode) {
   if (!mode) return 'ai';
   const m = String(mode).trim().toLowerCase();
-  if (m === 'staff' || m === 'human') return 'staff';
+  if (m === 'staff' || m === 'human') return 'human';
   if (m === 'auto' || m === 'ai') return 'ai';
   return m;
 }

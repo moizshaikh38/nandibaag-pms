@@ -148,11 +148,19 @@ export default function Dashboard() {
   const handleDirectModeToggle = async (mode) => {
     if (globalMode === mode) return;
     try {
-      await api.patch('/settings/default-new-chat-mode', { defaultModeForNewChats: mode });
-      setGlobalMode(mode);
-      toast.success(`New chats will now start in ${mode === 'ai' ? 'AI Auto' : 'Human Only'} mode`);
+      if (mode === 'human') {
+        // Mass switch: Existing chats + New chats go to human
+        await api.post('/settings/switch-all-chats', { mode: 'human' });
+        setGlobalMode('human');
+        toast.success('All existing and new chats are now in Human Only mode');
+      } else {
+        // Default only: Only new chats go to AI, existing stay untouched
+        await api.patch('/settings/default-new-chat-mode', { defaultModeForNewChats: 'ai' });
+        setGlobalMode('ai');
+        toast.success('New chats will now start in AI Auto mode');
+      }
     } catch (error) {
-      toast.error('Failed to update default mode');
+      toast.error('Failed to update mode');
     }
   };
 

@@ -378,7 +378,9 @@ function updateConversationState(chat, text, sender) {
 }
 
 function getDefaultModeForNewChat(settings) {
-  const configuredMode = settings?.defaultModeForNewChats || settings?.globalMode || 'ai';
+  let configuredMode = settings?.defaultModeForNewChats || settings?.globalMode || 'ai';
+  if (configuredMode === 'staff') configuredMode = 'human';
+  if (configuredMode === 'auto') configuredMode = 'ai';
   return ['ai', 'human'].includes(configuredMode) ? configuredMode : 'ai';
 }
 
