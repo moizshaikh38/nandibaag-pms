@@ -1289,13 +1289,13 @@ When responding about dates:
       }
     } else if (msgLower.includes('rate') || msgLower.includes('price') || msgLower.includes('cost') || msgLower.includes('kitn') || msgLower.includes('charge') || msgLower.includes('kay')) {
       if (languageToUse === 'roman_marathi') {
-        result = `Nandibaag Resort Rates:\n1. 🏡 Couple Stay: ₹5,500 (Weekday) / ₹6,500 (Weekend)\n2. 👨‍👩‍👧‍👦 Group Stay: ₹2,000 (Weekday) / ₹3,000 (Weekend) per person\n3. 🌊 Day Picnic:\n   B→Tea: ₹1,250 (Wkday) / ₹1,500 (Wkend)\n   B→Dinner: ₹1,200 (Wkday) / ₹1,500 (Wkend)\n\nDates sanga, exact total sangto! 🗓️`;
+        result = `Nandibaag Resort Rates:\n1. 🏡 Couple Stay: ₹5,500 (Weekday) / ₹6,500 (Weekend)\n2. 👨‍👩‍👧‍👦 Group Stay: ₹2,000 (Weekday) / ₹3,000 (Weekend) per person\n3. 🌊 Day Picnic (Common room included. Private room ₹2000 extra):\n   B→Tea: ₹1,250 (Wkday) / ₹1,500 (Wkend)\n   B→Dinner: ₹1,250 (Wkday) / ₹1,500 (Wkend)\n\nDates sanga, exact total sangto! 🗓️`;
       } else if (languageToUse === 'marathi') {
-        result = `नंदीबाग रिसॉर्ट दर:\n1. 🏡 कपल्स: ₹5,500 (Weekdays) / ₹6,500 (Weekends)\n2. 👨‍👩‍👧‍👦 फॅमिली: ₹2,000 (Weekdays) / ₹3,000 (Weekends) प्रति व्यक्ती\n3. 🌊 पिकनिक:\n   B→Tea: ₹1,250 (Wkday) / ₹1,500 (Wkend)\n   B→Dinner: ₹1,200 (Wkday) / ₹1,500 (Wkend)\n\nतारखा सांगा, total सांगतो! 🗓️`;
+        result = `नंदीबाग रिसॉर्ट दर:\n1. 🏡 कपल्स: ₹5,500 (Weekdays) / ₹6,500 (Weekends)\n2. 👨‍👩‍👧‍👦 फॅमिली: ₹2,000 (Weekdays) / ₹3,000 (Weekends) प्रति व्यक्ती\n3. 🌊 पिकनिक (Common room included. Private room ₹2000 extra):\n   B→Tea: ₹1,250 (Wkday) / ₹1,500 (Wkend)\n   B→Dinner: ₹1,250 (Wkday) / ₹1,500 (Wkend)\n\nतारखा सांगा, total सांगतो! 🗓️`;
       } else if (languageToUse === 'english') {
-        result = `Nandibaag Resort Rates:\n1. 🏡 Couple Stay: ₹5,500 (Weekday) / ₹6,500 (Weekend)\n2. 👨‍👩‍👧‍👦 Group Stay: ₹2,000 (Weekday) / ₹3,000 (Weekend) per person\n3. 🌊 Day Picnic:\n   B→Tea: ₹1,250 (Wkday) / ₹1,500 (Wkend)\n   B→Dinner: ₹1,200 (Wkday) / ₹1,500 (Wkend)\n\nPlease share your dates for exact total! 🗓️`;
+        result = `Nandibaag Resort Rates:\n1. 🏡 Couple Stay: ₹5,500 (Weekday) / ₹6,500 (Weekend)\n2. 👨‍👩‍👧‍👦 Group Stay: ₹2,000 (Weekday) / ₹3,000 (Weekend) per person\n3. 🌊 Day Picnic (Common room included. Private room ₹2000 extra):\n   B→Tea: ₹1,250 (Wkday) / ₹1,500 (Wkend)\n   B→Dinner: ₹1,250 (Wkday) / ₹1,500 (Wkend)\n\nPlease share your dates for exact total! 🗓️`;
       } else {
-        result = `Nandibaag Resort Packages:\n1. 🏡 Couple Stay: ₹5,500 (Weekday) / ₹6,500 (Weekend)\n2. 👨‍👩‍👧‍👦 Group Stay: ₹2,000 (Weekday) / ₹3,000 (Weekend) per person\n3. 🌊 Day Picnic:\n   B→Tea: ₹1,250 (Wkday) / ₹1,500 (Wkend)\n   B→Dinner: ₹1,200 (Wkday) / ₹1,500 (Wkend)\n\nCheck-in date aur total guests batayein! 🗓️`;
+        result = `Nandibaag Resort Packages:\n1. 🏡 Couple Stay: ₹5,500 (Weekday) / ₹6,500 (Weekend)\n2. 👨‍👩‍👧‍👦 Group Stay: ₹2,000 (Weekday) / ₹3,000 (Weekend) per person\n3. 🌊 Day Picnic (Common room included. Private room ₹2000 extra):\n   B→Tea: ₹1,250 (Wkday) / ₹1,500 (Wkend)\n   B→Dinner: ₹1,250 (Wkday) / ₹1,500 (Wkend)\n\nCheck-in date aur total guests batayein! 🗓️`;
       }
     } else {
       const draft = chat?.bookingDraft || {};
@@ -1331,7 +1331,7 @@ When responding about dates:
             result = `Total kitne adults aur kids aayenge? Total guest count batayein! 👨‍👩‍👧‍👦`;
           }
         } else {
-          result = `Ji, Nandibaag Resort mein Couple Stay (₹5,500 Wkday / ₹6,500 Wkend), Family Group (₹2,000 Wkday / ₹3,000 Wkend per head), aur Day Picnic (₹1,250/head B→T, ₹1,200/head B→D) options available hain. Aap kiske baare mein aur janna chahte hain? 🌿`;
+          result = `Ji, Nandibaag Resort mein Couple Stay (₹5,500 Wkday / ₹6,500 Wkend), Family Group (₹2,000 Wkday / ₹3,000 Wkend per head), aur Day Picnic (₹1,250/head B→T, ₹1,250/head B→D, Private room ₹2000 extra) options available hain. Aap kiske baare mein aur janna chahte hain? 🌿`;
         }
       } else {
         if (languageToUse === 'roman_marathi') {

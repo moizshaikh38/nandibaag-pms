@@ -355,17 +355,19 @@ BOOKING PACKAGES & PRICING:
    Kids:
    • Below 5 years: FREE
    • 6 to 10 years: ₹1,000/child/night
-   • 10 to 15 years: ₹1,500/child/night
+   • Above 10 years: Charged as an adult
 
 3️⃣ ONE-DAY PICNIC
    ──────────────
    Option A: Breakfast → Tea (B→T)
+   • Weekday: ₹1,000/person
+   • Weekend: ₹1,250/person
+   
+   Option B: Breakfast → Dinner (B→D)
    • Weekday: ₹1,250/person
    • Weekend: ₹1,500/person
    
-   Option B: Breakfast → Dinner (B→D)
-   • Weekday: ₹1,200/person
-   • Weekend: ₹1,500/person
+   ✅ NOTE: A Common Room is provided by default. If a private room is needed, it is ₹2000 extra (strictly allotted at 12 PM).
 
 CRITICAL PRICING RULES:
 ═════════════════════════════════════════════════════════════════════
@@ -434,7 +436,7 @@ RULE 5: ALWAYS SHOW CALCULATION BREAKDOWN
    
    Adventure Timings (Kayaking, Rope Cycling):
    • 9:00 AM - 1:30 PM
-   • 3:00 PM - 5:30 PM
+   • 3:00 PM - 6:00 PM
    
    Dollers Cafe:
    • 12:00 PM - 12:00 AM (Midnight)

@@ -753,7 +753,7 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
                 const pricingResult = calculatePricing(checkInDate, checkOutDate, draft.adults || 2, draft.kids || [], 'picnic', options);
 
                 if (!draft.mealOption) {
-                  addSystemNote(`[SYSTEM NOTE: ONE-DAY PICNIC is AVAILABLE on ${draft.date} (${availableCount} cottage(s) available). Offer two meal options:\n1. Breakfast to Dinner (₹1,250 weekday / ₹1,500 weekend)\n2. Breakfast to High Tea (₹1,000 weekday / ₹1,250 weekend)\nAsk which option they prefer!]`);
+                  addSystemNote(`[SYSTEM NOTE: ONE-DAY PICNIC is AVAILABLE on ${draft.date} (${availableCount} cottage(s) available). Offer two meal options:\n1. Breakfast to Dinner (₹1,250 weekday / ₹1,500 weekend)\n2. Breakfast to High Tea (₹1,000 weekday / ₹1,250 weekend)\nNote: Common room is included. Private room is ₹2000 extra.\nAsk which option they prefer!]`);
                 } else {
                   addSystemNote(`[SYSTEM NOTE: ONE-DAY PICNIC pricing calculated (${availableCount} cottage(s) available).\n${pricingResult.formatted}]`);
                 }
@@ -826,7 +826,7 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
               const pricingResult = calculatePricing(checkInDate, checkOutDate, draft.adults || 2, draft.kids || [], 'picnic', options);
 
               if (!draft.mealOption) {
-                addSystemNote(`[SYSTEM NOTE: ONE-DAY PICNIC pricing requested for ${draft.date}. Offer two meal options:\n1. Breakfast to Dinner (₹1,250 weekday / ₹1,500 weekend)\n2. Breakfast to High Tea (₹1,000 weekday / ₹1,250 weekend)\nAsk which option they prefer!]`);
+                addSystemNote(`[SYSTEM NOTE: ONE-DAY PICNIC pricing requested for ${draft.date}. Offer two meal options:\n1. Breakfast to Dinner (₹1,250 weekday / ₹1,500 weekend)\n2. Breakfast to High Tea (₹1,000 weekday / ₹1,250 weekend)\nNote: Common room is included. Private room is ₹2000 extra.\nAsk which option they prefer!]`);
               } else {
                 addSystemNote(`[SYSTEM NOTE: ONE-DAY PICNIC pricing calculated.\n${pricingResult.formatted}]`);
               }
@@ -1137,7 +1137,8 @@ BOOKING PACKAGES & TIMINGS:
    Pricing:
    • Couple: ₹5,500 (Weekday) / ₹6,500 (Weekend)
    • Group (3+ people): ₹2,000/person (Weekday) / ₹3,000/person (Weekend)
-   • Kids: <5 FREE | 6-10 ₹1,000 | 10-15 ₹1,500
+   • Kids (Couple): <5 FREE | 6-10 ₹1,000 | 10-15 ₹1,500
+   • Kids (Group): <5 FREE | 6-10 ₹1,000 | >10 Charged as adult
 
 2️⃣ ONE-DAY PICNIC PACKAGES (Same-day only)
    ────────────────────────────────────────
@@ -1158,6 +1159,8 @@ BOOKING PACKAGES & TIMINGS:
    Meals: Breakfast + Lunch + Hi-tea + Dinner
    Price: ₹1,250 (Weekday) / ₹1,500 (Weekend)
    
+   ✅ NOTE: A Common Room is provided by default. If a private room is needed, it is ₹2000 extra (strictly allotted at 12 PM).
+   
    ⚠️ CRITICAL: Day picnic is SAME-DAY ONLY
    NOT overnight stay!
 
@@ -1172,7 +1175,7 @@ BOOKING PACKAGES & TIMINGS:
    ───────────────────
    Kayaking & Rope Cycling:
    • 9:00 AM - 1:30 PM
-   • 3:00 PM - 5:30 PM
+   • 3:00 PM - 6:00 PM
    
    Dollers Cafe:
    • 12:00 PM - 12:00 AM (Midnight)

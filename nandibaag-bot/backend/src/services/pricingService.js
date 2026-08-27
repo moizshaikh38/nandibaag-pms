@@ -136,7 +136,8 @@ function calculatePricing(checkInInput, checkOutInput, adultCountOrGuestCount = 
     let ratePerPerson = 1250;
     if (isWknd) {
       ratePerPerson = (mealOption === 'breakfast_tea' || mealOption === '1000' || mealOption === '1250_tea') ? 1250 : 1500;
-    } else {
+    }
+    if (!isWknd) {
       ratePerPerson = (mealOption === 'breakfast_tea' || mealOption === '1000') ? 1000 : 1250;
     }
     const mealLabel = (ratePerPerson === 1000 || ratePerPerson === 1250 && (mealOption === 'breakfast_tea' || mealOption === '1000')) ? 'Breakfast to High Tea' : 'Breakfast to Dinner';
@@ -204,8 +205,14 @@ Hamari team aapse jald hi connect karegi for booking 😊`
     const kidAge = typeof kid === 'object' ? (kid?.age !== undefined ? Number(kid.age) : 5) : Number(kid || 5);
     if (kidAge <= 5) return 0;
     if (kidAge >= 6 && kidAge <= 10) return 1000;
-    if (kidAge >= 11 && kidAge <= 15) return 1500;
-    return isWknd ? 3000 : 2000;
+    
+    if (stayType === 'couple') {
+      if (kidAge >= 11 && kidAge <= 15) return 1500;
+      return isWknd ? 3000 : 2000; // Above 15, fallback to adult rate
+    } else {
+      // For Group Stay (or other types), >10 years is charged as an adult
+      return isWknd ? 3000 : 2000;
+    }
   }
 
   // Count weekday nights vs weekend nights and build per-night breakdown
