@@ -695,7 +695,8 @@ router.post('/bookings/manual', verifyToken, async (req, res, next) => {
       priceBreakdown: value.priceBreakdown || '',
       specialRequests: value.specialRequests || '',
       status: 'pending_payment',
-      createdBy: 'staff'
+      createdBy: 'staff',
+      roomIds: value.roomIds || []
     });
 
     await booking.save();

@@ -150,7 +150,7 @@ const ManualBookingForm = () => {
   }, [formData.checkInDate, formData.checkOutDate]);
 
   const handleRoomToggle = async (roomObj) => {
-    const roomIdentifier = String(roomObj.number || roomObj.roomNumber || roomObj._id);
+    const roomIdentifier = String(roomObj._id); // ALWAYS use the unique ObjectId
     const isSelected = selectedRooms.includes(roomIdentifier);
     const newSelection = isSelected
       ? selectedRooms.filter(r => r !== roomIdentifier)
@@ -725,9 +725,10 @@ const ManualBookingForm = () => {
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {rooms.map((room) => {
-                          const num = String(room.number || room.roomNumber || room._id);
+                          const num = String(room.number || room.roomNumber || room._id); // Keep for UI display only
+                          const id = String(room._id); // Use ID for exact matching
                           const cap = room.capacity || 4;
-                          const isChecked = selectedRooms.includes(num);
+                          const isChecked = selectedRooms.includes(id);
 
                           const isAvailable = room.status === 'available';
                           const isReservedByYou = room.status === 'reserved_by_you';
