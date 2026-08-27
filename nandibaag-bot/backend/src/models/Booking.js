@@ -180,12 +180,14 @@ const bookingSchema = new mongoose.Schema({
   },
   roomId: {
     type: String,
-    required: false
+    default: null
   },
-  roomIds: {
-    type: [String],
-    required: false,
-    default: []
+  roomIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Room'
+  }],
+  qrCode: {
+    type: String
   },
   createdBy: {
     type: String,

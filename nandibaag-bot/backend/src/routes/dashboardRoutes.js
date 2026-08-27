@@ -221,14 +221,17 @@ router.get('/last-2-days-bookings', async (req, res) => {
       createdAt: { $gte: twoDaysAgo, $lte: now },
       status: { $in: ['pending_payment', 'confirmed', 'checked_in'] }
     })
-    .select('customerName customerPhone dates totalAmount status createdAt')
+    .select('customerName customerPhone dates roomIds roomId totalAmount status createdAt')
     .sort({ createdAt: -1 })
     .limit(100)
     .lean();
     
+    const { mapRoomIdsToNumbers } = require('../utils/bookingHelper');
+    const mappedBookings = await mapRoomIdsToNumbers(bookings);
+    
     res.json({
       success: true,
-      bookings,
+      bookings: mappedBookings,
       count: bookings.length
     });
     

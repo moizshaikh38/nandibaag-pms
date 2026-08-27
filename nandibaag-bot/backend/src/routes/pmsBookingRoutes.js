@@ -988,9 +988,9 @@ router.get('/bookings', verifyToken, async (req, res, next) => {
       .skip((parseInt(page) - 1) * parseInt(limit));
 
     // Populate room details if roomBookingId exists
-    const populated = await Promise.all(
+    let populated = await Promise.all(
       bookings.map(async (b) => {
-        const obj = b.toObject();
+        const obj = b.toObject ? b.toObject() : b;
         if (b.roomBookingId && b.roomBookingId.roomId) {
           const room = await Room.findById(b.roomBookingId.roomId).select('roomNumber capacity seriesId');
           if (room) {
@@ -1001,6 +1001,9 @@ router.get('/bookings', verifyToken, async (req, res, next) => {
         return obj;
       })
     );
+    
+    const { mapRoomIdsToNumbers } = require('../utils/bookingHelper');
+    populated = await mapRoomIdsToNumbers(populated);
 
     const total = await Booking.countDocuments(filter);
 
