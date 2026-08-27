@@ -25,11 +25,23 @@ router.get('/', async (req, res, next) => {
       .lean();
     
     console.log('[Bookings:GetAll] Found:', bookings.length, 'bookings');
+
+    // Map room ObjectIds to human-readable room numbers
+    const { roomIdsToNumbers } = require('../utils/roomMapper');
+    const bookingsWithNumbers = await Promise.all(
+      bookings.map(async (booking) => {
+        if (booking.roomIds && booking.roomIds.length > 0) {
+          const roomNumbers = await roomIdsToNumbers(booking.roomIds);
+          return { ...booking, roomNumbers };
+        }
+        return { ...booking, roomNumbers: [] };
+      })
+    );
     
     res.json({
       success: true,
-      bookings,
-      count: bookings.length
+      bookings: bookingsWithNumbers,
+      count: bookingsWithNumbers.length
     });
   } catch (error) {
     console.error('[Bookings:GetAll] Error:', error.message);
@@ -361,9 +373,13 @@ router.post('/manual-booking', async (req, res) => {
     };
     try { await booking.save(); } catch (_) {}
 
+    // Return booking with room numbers mapped
+    const { roomIdsToNumbers } = require('../utils/roomMapper');
+    const roomNumbers = await roomIdsToNumbers(booking.roomIds || []);
+
     res.json({
       success: true,
-      booking,
+      booking: { ...booking.toObject(), roomNumbers },
       messagesSent: { customerSMS: false, staffGroup: false },
       message: 'Booking created. SMS / confirmation not sent automatically. Use "Send SMS" button to send confirmation.'
     });

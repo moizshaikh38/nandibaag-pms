@@ -427,7 +427,7 @@ export default function Dashboard() {
                       <div>
                         <p className="font-semibold text-slate-800">{item.customerName}</p>
                         <p className="text-[10px] text-slate-500">
-                          {item.bookingType} • Rooms: {item.roomIds?.length > 0 ? item.roomIds.join(', ') : (item.roomId || 'TBA')}
+                          {item.bookingType} • Rooms: {item.roomNumbers?.length > 0 ? item.roomNumbers.join(', ') : (item.roomIds?.length > 0 ? item.roomIds.join(', ') : (item.roomId || 'TBA'))}
                         </p>
                       </div>
                       <span className="text-[10px] bg-emerald-600 text-white font-semibold px-2 py-0.5 rounded-full">
@@ -455,7 +455,7 @@ export default function Dashboard() {
                       <div>
                         <p className="font-semibold text-slate-800">{item.customerName}</p>
                         <p className="text-[10px] text-slate-500">
-                          Rooms: {item.roomIds?.length > 0 ? item.roomIds.join(', ') : (item.roomId || 'TBA')} • {item.customerPhone}
+                          Rooms: {item.roomNumbers?.length > 0 ? item.roomNumbers.join(', ') : (item.roomIds?.length > 0 ? item.roomIds.join(', ') : (item.roomId || 'TBA'))} • {item.customerPhone}
                         </p>
                       </div>
                       <span className="text-[10px] bg-purple-600 text-white font-semibold px-2 py-0.5 rounded-full">

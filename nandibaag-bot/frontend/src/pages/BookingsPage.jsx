@@ -636,7 +636,13 @@ export default function BookingsPage() {
                         </span>
 
                         {/* Room Badges */}
-                        {b.roomIds && b.roomIds.length > 0 ? (
+                        {b.roomNumbers && b.roomNumbers.length > 0 ? (
+                          b.roomNumbers.map((rNum, idx) => (
+                            <span key={idx} className="text-[10px] bg-emerald-700 text-white font-extrabold px-2 py-0.5 rounded-md shadow-xs">
+                              Room {rNum}
+                            </span>
+                          ))
+                        ) : b.roomIds && b.roomIds.length > 0 ? (
                           b.roomIds.map((rId, idx) => (
                             <span key={idx} className="text-[10px] bg-emerald-700 text-white font-extrabold px-2 py-0.5 rounded-md shadow-xs">
                               Room {rId}
@@ -840,7 +846,7 @@ export default function BookingsPage() {
                     <td className="p-2.5">
                       Cottage Room Package Stay 
                       <span className="text-[11px] font-bold text-slate-500 block">
-                        Rooms: {invoiceModal.roomIds && invoiceModal.roomIds.length > 0 ? invoiceModal.roomIds.join(', ') : (invoiceModal.roomId || 'Assigned at check-in')}
+                        Rooms: {invoiceModal.roomNumbers && invoiceModal.roomNumbers.length > 0 ? invoiceModal.roomNumbers.join(', ') : (invoiceModal.roomIds && invoiceModal.roomIds.length > 0 ? invoiceModal.roomIds.join(', ') : (invoiceModal.roomId || 'Assigned at check-in'))}
                       </span>
                     </td>
                     <td className="p-2.5 text-right font-semibold">₹{invoiceModal.totalAmount}</td>

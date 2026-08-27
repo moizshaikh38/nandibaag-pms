@@ -92,12 +92,16 @@ const BookingsTableView = ({ bookings = [], onRefresh }) => {
         return p || '👫 Couple';
       };
 
-      const roomsDisplay = (booking.roomIds && booking.roomIds.length > 0)
-        ? booking.roomIds.join(', ')
-        : (booking.roomId || 'TBA');
-      const roomCount = (booking.roomIds && booking.roomIds.length > 0)
-        ? booking.roomIds.length
-        : (booking.roomId ? 1 : 0);
+      const roomsDisplay = (booking.roomNumbers && booking.roomNumbers.length > 0)
+        ? booking.roomNumbers.join(', ')
+        : (booking.roomIds && booking.roomIds.length > 0)
+          ? booking.roomIds.join(', ')
+          : (booking.roomId || 'TBA');
+      const roomCount = (booking.roomNumbers && booking.roomNumbers.length > 0)
+        ? booking.roomNumbers.length
+        : (booking.roomIds && booking.roomIds.length > 0)
+          ? booking.roomIds.length
+          : (booking.roomId ? 1 : 0);
 
       return {
         ...booking,

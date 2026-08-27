@@ -344,11 +344,15 @@ export default function CalendarPage() {
                 const badgeInfo = STATUS_BADGES[b.status] || STATUS_BADGES.confirmed;
                 const Icon = badgeInfo.icon;
                 const guestCount = (b.adults || 0) + (b.kids || []).length;
-                const roomsDisplay = (b.roomIds && b.roomIds.length > 0) 
-                  ? b.roomIds.join(', ') 
-                  : (b.roomId || (b.room?.roomNumber ? `Room ${b.room.roomNumber}` : 'TBA'));
-                const roomCount = (b.roomIds && b.roomIds.length > 0) 
-                  ? b.roomIds.length 
+                const roomsDisplay = (b.roomNumbers && b.roomNumbers.length > 0) 
+                  ? b.roomNumbers.join(', ') 
+                  : (b.roomIds && b.roomIds.length > 0) 
+                    ? b.roomIds.join(', ') 
+                    : (b.roomId || (b.room?.roomNumber ? `Room ${b.room.roomNumber}` : 'TBA'));
+                const roomCount = (b.roomNumbers && b.roomNumbers.length > 0) 
+                  ? b.roomNumbers.length 
+                  : (b.roomIds && b.roomIds.length > 0) 
+                    ? b.roomIds.length 
                   : (b.roomId || b.room ? 1 : 0);
 
                 return (

@@ -1064,7 +1064,7 @@ const ManualBookingForm = () => {
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500 font-medium">Rooms:</span>
-                <span className="font-bold text-slate-900">{createdBooking.roomId || (createdBooking.roomIds?.join(', ')) || 'Assigned'}</span>
+                <span className="font-bold text-slate-900">{(createdBooking.roomNumbers?.join(', ')) || createdBooking.roomId || (createdBooking.roomIds?.join(', ')) || 'Assigned'}</span>
               </div>
             </div>
 

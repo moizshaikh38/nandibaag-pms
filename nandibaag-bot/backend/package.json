@@ -23,6 +23,8 @@
     "debug-availability": "node scripts/debugAvailabilityIssue.js",
     "cleanup-bookings": "node scripts/cleanupBrokenBookings.js",
     "final-check": "node scripts/finalAvailabilityCheck.js",
+    "sync-bookings": "node scripts/syncManualBookingsToAvailability.js",
+    "cleanup-ghost": "node scripts/cleanupGhostBookings.js",
     "verify-pricing-flow": "node scripts/verifyPricingFlow.js",
     "test-pricing": "node scripts/testPricingAccuracy.js",
     "master-check": "node scripts/masterVerification.js"
