@@ -300,12 +300,16 @@ router.post('/manual-booking', async (req, res) => {
           });
 
           if (targetRoom) {
+            const User = require('../models/User');
+            const defaultUser = await User.findOne({ role: 'admin' }) || await User.findOne({});
+            
             await RoomBooking.create({
               roomId: targetRoom._id,
               bookingId: booking._id,
               checkInDate: checkIn,
               checkOutDate: checkOut,
-              status: 'confirmed'
+              status: 'confirmed',
+              assignedBy: defaultUser ? defaultUser._id : new mongoose.Types.ObjectId()
             });
           }
         } catch (rbErr) {
