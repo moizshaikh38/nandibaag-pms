@@ -963,8 +963,13 @@ Kya aap booking confirm karna chahte hain?`;
               .replace(/all rooms? booked/gi, '')
               .replace(/available for/gi, '');
             
-            // Add "Call to confirm" at the end
-            if (!replyToSend.toLowerCase().includes('call') && !replyToSend.includes('9257657664')) {
+            // Only add "Call to confirm" if the message is actually about booking (has dates or guest counts)
+            const hasDatePatterns = /(\d{1,2}\s*(sep|aug|september|august|nov|dec|jan|feb|mar|apr|may|jun|jul|oct|january|february|march|april|june|july|october|november|december)|(\d{1,2})[\/-](\d{1,2})|tomorrow|kal|parso)/i.test(msgLower);
+            const hasGuestCount = /(person|people|adult|kid|child|member|log|guests?|couple|group|family)/i.test(msgLower);
+            const isBookingQuery = hasDatePatterns && hasGuestCount;
+            const isConfirmQuery = /\b(confirm|book|booking|ready|kardo|kar do)\b/i.test(msgLower);
+            
+            if ((isBookingQuery || isConfirmQuery) && !replyToSend.toLowerCase().includes('call') && !replyToSend.includes('9257657664')) {
               replyToSend += `\n\n📞 To confirm booking, call us: 9257657664`;
             }
           }
