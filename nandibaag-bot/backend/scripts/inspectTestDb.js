@@ -1,7 +1,12 @@
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const mongoose = require('mongoose');
 
 async function check() {
-  const uri = 'mongodb+srv://moizsh786786_db_user:RvSja2R0ytcXg6QZ@cluster0.ly5dxxy.mongodb.net/test?retryWrites=true&w=majority';
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    console.error('MONGODB_URI not found in environment');
+    process.exit(1);
+  }
   const client = await mongoose.connect(uri);
   const db = client.connection.db;
   console.log('Connected DB Name:', db.databaseName);

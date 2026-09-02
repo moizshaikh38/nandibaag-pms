@@ -58,7 +58,8 @@ const runTest = async () => {
       resortContactNumber: mainNumber
     };
 
-    const confirmationMsg = formatBookingMessageForCustomer(sampleBooking);
+    const confirmationRes = formatBookingMessageForCustomer(sampleBooking);
+    const confirmationMsg = confirmationRes.text || confirmationRes;
     console.log('   Sample snippet:\n', confirmationMsg.split('\n').slice(-8).join('\n'));
     console.assert(confirmationMsg.includes(`Call: ${mainNumber}`), 'Confirmation message must include main contact number');
     console.log('   ✅ Confirmation message verified with new number!');
