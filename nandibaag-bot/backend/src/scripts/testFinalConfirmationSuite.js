@@ -71,11 +71,11 @@ async function testFinalConfirmation() {
     console.log('                 VERIFICATION PASS                  ');
     console.log('====================================================');
 
-    const hasTeamConnectText = lastSentText.includes('All details taken') && lastSentText.includes('connect karegi');
-    const hasNoCallUs = !lastSentText.includes('Call: 9257657665') && !lastSentText.includes('Call staff');
+    const hasCallConfirm = lastSentText.includes('9257657664') || lastSentText.includes('call');
+    const hasPricingOrTotal = /₹|TOTAL|Price/i.test(lastSentText);
 
-    console.log(`Contains "All details taken / connect karegi": ${hasTeamConnectText ? '✅ PASS' : '❌ FAIL'}`);
-    console.log(`NO "Call us / Call 9257657665" directive: ${hasNoCallUs ? '✅ PASS' : '❌ FAIL'}`);
+    console.log(`Contains call-to-confirm (9257657664): ${hasCallConfirm ? '✅ PASS' : '❌ FAIL'}`);
+    console.log(`Contains pricing/total amount: ${hasPricingOrTotal ? '✅ PASS' : '❌ FAIL'}`);
 
     await Chat.deleteMany({ customerPhone: testPhone });
     await mongoose.disconnect();

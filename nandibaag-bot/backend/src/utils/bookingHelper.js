@@ -12,7 +12,11 @@ async function mapRoomIdsToNumbers(bookings) {
         obj.roomIds = obj.roomIds.map(id => roomMap[String(id)] || id);
       }
       if (obj.roomId) {
-        obj.roomId = roomMap[String(obj.roomId)] || obj.roomId;
+        if (typeof obj.roomId === 'string' && obj.roomId.includes(',')) {
+          obj.roomId = obj.roomId.split(',').map(s => roomMap[s.trim()] || s.trim()).join(', ');
+        } else {
+          obj.roomId = roomMap[String(obj.roomId)] || obj.roomId;
+        }
       }
       return obj;
     });

@@ -1,0 +1,21 @@
+const mongoose = require('mongoose');
+
+async function check() {
+  const uri = 'mongodb+srv://moizsh786786_db_user:RvSja2R0ytcXg6QZ@cluster0.ly5dxxy.mongodb.net/test?retryWrites=true&w=majority';
+  const client = await mongoose.connect(uri);
+  const db = client.connection.db;
+  console.log('Connected DB Name:', db.databaseName);
+  const collections = await db.listCollections().toArray();
+  console.log('Collections in test:', collections.map(c => c.name));
+
+  for (const c of collections) {
+    const count = await db.collection(c.name).countDocuments();
+    console.log(`Collection ${c.name} in test count: ${count}`);
+    if (c.name === 'bookings') {
+      const docs = await db.collection(c.name).find({}).toArray();
+      console.log('Bookings in test:', docs);
+    }
+  }
+  process.exit(0);
+}
+check().catch(err => { console.error('Error:', err); process.exit(1); });

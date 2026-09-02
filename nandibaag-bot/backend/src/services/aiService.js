@@ -1251,13 +1251,13 @@ When responding about dates:
       }
     } else if (isConfirming) {
       if (languageToUse === 'roman_marathi') {
-        result = `All details taken ✅ Hamari team aapse jald hi connect karegi for booking 😊`;
+        result = `📞 Booking confirm karayla call kara: ${primaryNumber}\nAmchi team tumchi booking complete kareil! 🎉`;
       } else if (languageToUse === 'marathi') {
-        result = `सर्व माहिती मिळाली ✅ आमची टीम बुकिंगसाठी तुमच्याशी लवकरच संपर्क साधेल 😊`;
+        result = `📞 बुकिंग confirm करण्यासाठी call करा: ${primaryNumber}\nआमची टीम तुमची बुकिंग complete करेल! 🎉`;
       } else if (languageToUse === 'english') {
-        result = `All details taken ✅ Our team will connect with you shortly for booking 😊`;
+        result = `📞 To confirm your booking, please call us: ${primaryNumber}\nOur team will complete your booking! 🎉`;
       } else {
-        result = `All details taken ✅ Hamari team aapse jald hi connect karegi for booking 😊`;
+        result = `📞 Booking confirm karne ke liye call karein: ${primaryNumber}\nOur team will complete your booking! 🎉`;
       }
     } else if (msgLower.includes('contact') || msgLower.includes('phone') || msgLower.includes('number') || msgLower.includes('call')) {
       result = `Resort contact number: ${primaryNumber} 📞`;

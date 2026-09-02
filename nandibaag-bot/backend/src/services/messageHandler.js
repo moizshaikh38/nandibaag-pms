@@ -875,7 +875,7 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
             priceStr = `₹${pricingResult.raw.grandTotal.toLocaleString('en-IN')}`;
           } catch (_) {}
 
-          addSystemNote(`[SYSTEM NOTE: Customer provided their name: "${candidateName}". Output the exact FINAL CONFIRMATION SUMMARY below (do NOT ask customer to call):
+          addSystemNote(`[SYSTEM NOTE: Customer provided their name: "${candidateName}". Output the exact FINAL CONFIRMATION SUMMARY below (show full pricing with TOTAL):
 ✓ FINAL BOOKING CONFIRMATION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -886,8 +886,8 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-All details taken ✅
-Hamari team aapse jald hi connect karegi for booking 😊]`);
+📞 Booking confirm karne ke liye call karein: 9257657664
+Our team will complete your booking! 🎉]`);
         }
       } else if (isConfirmIntent && chat.bookingDraft.date && chat.bookingDraft.adults && chat.bookingDraft.availabilityConfirmed && !chat.bookingDraft.customerName) {
         console.log('[BookingFlow] Customer name not collected yet. Requesting name.');

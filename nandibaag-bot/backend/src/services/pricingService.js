@@ -188,8 +188,10 @@ TOTAL: ₹${grandTotal.toLocaleString('en-IN')}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-All details taken ✅
-Hamari team aapse jald hi connect karegi for booking 😊`
+📞 To confirm this booking, please call us:
+9257657664
+
+Our team will complete your booking! 🎉`
     };
   }
 
@@ -338,8 +340,10 @@ TOTAL: ₹${grandTotal.toLocaleString('en-IN')}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-All details taken ✅
-Hamari team aapse jald hi connect karegi for booking 😊`;
+📞 To confirm this booking, please call us:
+9257657664
+
+Our team will complete your booking! 🎉`;
 
   return {
     raw: {
