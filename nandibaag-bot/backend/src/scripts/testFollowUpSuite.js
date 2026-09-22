@@ -19,7 +19,7 @@ async function runTest() {
 
     let settings = await Settings.findOne();
     if (!settings) {
-      settings = await Settings.create({ globalMode: 'ai', followUpEnabled: true, fallbackContactPhone: '+919257657665' });
+      settings = await Settings.create({ globalMode: 'ai', followUpEnabled: true, fallbackContactPhone: '+919257657664' });
     } else if (!settings.followUpEnabled) {
       settings.followUpEnabled = true;
       await settings.save();

@@ -133,12 +133,12 @@ function calculatePricing(checkInInput, checkOutInput, adultCountOrGuestCount = 
   // Handle Picnic
   if (stayType === 'picnic') {
     const isWknd = isWeekend(checkInDate);
-    let ratePerPerson = 1250;
-    if (isWknd) {
-      ratePerPerson = (mealOption === 'breakfast_tea' || mealOption === '1000' || mealOption === '1250_tea') ? 1250 : 1500;
-    }
-    if (!isWknd) {
-      ratePerPerson = (mealOption === 'breakfast_tea' || mealOption === '1000') ? 1000 : 1250;
+    let ratePerPerson;
+    if (mealOption === 'breakfast_dinner' || mealOption === 'breakfast-to-dinner' || mealOption === '1250') {
+      ratePerPerson = isWknd ? 1500 : 1250;
+    } else {
+      // Default to breakfast_tea if unknown or specifically requested
+      ratePerPerson = isWknd ? 1250 : 1000;
     }
     const mealLabel = (ratePerPerson === 1000 || ratePerPerson === 1250 && (mealOption === 'breakfast_tea' || mealOption === '1000')) ? 'Breakfast to High Tea' : 'Breakfast to Dinner';
     const grandTotal = numGuests * ratePerPerson;

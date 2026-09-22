@@ -18,7 +18,7 @@ async function runTest() {
 
     let settings = await Settings.findOne();
     if (!settings) {
-      settings = await Settings.create({ globalMode: 'ai', fallbackContactPhone: '+919257657665' });
+      settings = await Settings.create({ globalMode: 'ai', fallbackContactPhone: '+919257657664' });
     }
 
     const testPhone = '918888777666';

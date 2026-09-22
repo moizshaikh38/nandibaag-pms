@@ -87,7 +87,7 @@ export default function BottomNav() {
   const isMoreActive = moreMenuItems.some((item) => location.pathname === item.path);
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200/80 shadow-2xl z-50 lg:hidden safe-pb">
+    <nav className="bottom-nav fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200/80 shadow-2xl z-50 lg:hidden safe-pb">
       <div className="flex justify-around items-center h-16 px-1">
         {navItems.map((item) => {
           const Icon = item.icon;

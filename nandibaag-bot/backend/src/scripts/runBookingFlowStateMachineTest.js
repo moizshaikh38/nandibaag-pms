@@ -16,7 +16,7 @@ async function testFullBookingFlow() {
     // Ensure Settings document exists
     let settings = await Settings.findOne();
     if (!settings) {
-      settings = await Settings.create({ globalMode: 'ai', fallbackContactPhone: '+919257657665' });
+      settings = await Settings.create({ globalMode: 'ai', fallbackContactPhone: '+919257657664' });
     }
 
     const testPhone = '919999888777';

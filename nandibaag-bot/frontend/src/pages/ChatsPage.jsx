@@ -232,7 +232,7 @@ export default function ChatsPage() {
   const selectedChat = chats.find(c => c._id === selectedChatId);
 
   return (
-    <div className="h-[calc(100dvh-85px)] min-h-0 md:h-[calc(100vh-7rem)] flex flex-col md:flex-row glass-card rounded-2xl overflow-hidden border border-slate-200/90 shadow-xl mb-16 lg:mb-0">
+    <div className={`${selectedChat ? 'fixed inset-0 z-50 md:static md:inset-auto md:z-auto' : 'mb-16 lg:mb-0'} h-[100dvh] md:h-[calc(100vh-7rem)] min-h-0 flex flex-col md:flex-row md:glass-card ${selectedChat ? '' : 'glass-card rounded-2xl border border-slate-200/90 shadow-xl'} md:rounded-2xl overflow-hidden md:border md:border-slate-200/90 md:shadow-xl`} data-chat-open={selectedChat ? 'true' : undefined}>
       
       {/* Chat List Panel */}
       <div className={`${selectedChat ? 'hidden md:flex' : 'flex'} w-full h-full min-h-0 md:w-80 lg:w-96 flex-col bg-white border-r border-slate-200 shrink-0`}>

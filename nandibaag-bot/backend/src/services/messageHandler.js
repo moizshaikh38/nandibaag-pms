@@ -931,7 +931,54 @@ Our team will complete your booking! 🎉]`);
           return;
         }
 
-        const systemNotes = systemNotesList.join('\n\n');
+        const extractBookingContext = (chatHistory) => {
+          const context = {
+            checkInDate: null,
+            packageType: null,
+            guestCount: null,
+            kidsInfo: null
+          };
+
+          // Scan through chat history for already-provided info
+          (chatHistory || []).forEach(msg => {
+            if (msg.role === 'user' || msg.sender === 'customer') {
+              const text = msg.content || msg.text || '';
+              // Check for date patterns
+              const dateMatch = text.match(/(\d{1,2})\s*(sep|september|aug|august|oct|october|nov|november|dec|december)/i);
+              if (dateMatch) {
+                context.checkInDate = dateMatch[0];
+              }
+              
+              // Check for package type
+              if (/one.?day|picnic/i.test(text)) {
+                context.packageType = 'one-day-picnic';
+              }
+              if (/couple/i.test(text)) {
+                context.packageType = 'couple';
+              }
+              if (/group|family/i.test(text)) {
+                context.packageType = 'group';
+              }
+            }
+          });
+
+          return context;
+        };
+
+        const bookingContext = extractBookingContext(chat.messages);
+
+        console.log('[MessageHandler] Extracted context:', bookingContext);
+
+        const contextInjection = `
+CONVERSATION CONTEXT (Already known - DO NOT ask again):
+${bookingContext.checkInDate ? `- Customer already mentioned date: ${bookingContext.checkInDate}` : '- Date: NOT YET PROVIDED'}
+${bookingContext.packageType ? `- Package type: ${bookingContext.packageType}` : '- Package: NOT YET PROVIDED'}
+
+CRITICAL RULE: If date is already in context above, DO NOT ask "Check-in date batayein" again. Use the date already provided.
+`;
+        systemNotesList.push(contextInjection);
+
+        const systemNotes = systemNotesList.join('\\n\\n');
         
         // CHECK 1: Videos
         if (msgLower.includes('video') || msgLower.includes('videos')) {

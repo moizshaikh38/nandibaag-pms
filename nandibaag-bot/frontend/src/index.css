@@ -78,6 +78,20 @@ textarea {
   }
 }
 
+/* Hide BottomNav when a chat is open full-screen on mobile */
+@media (max-width: 767px) {
+  body:has([data-chat-open="true"]) .bottom-nav {
+    display: none !important;
+  }
+
+  /* Remove main padding when chat is full-screen to prevent squeeze */
+  body:has([data-chat-open="true"]) main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+}
+
 .safe-pb {
   padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0.5rem));
 }

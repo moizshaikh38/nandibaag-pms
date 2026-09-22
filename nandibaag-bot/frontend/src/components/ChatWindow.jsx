@@ -119,6 +119,7 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
   const [messageText, setMessageText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [showBookingInfo, setShowBookingInfo] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
 
   // Quick Room Assign Modal State
   const [showAssignModal, setShowAssignModal] = useState(false);
@@ -557,18 +558,30 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
         )}
       </div>
 
-      {/* Quick Reply Template Chips Bar */}
-      <div className="px-2 py-2 bg-[#f0f2f5] border-t border-slate-200/90 overflow-x-auto overscroll-x-contain flex items-center gap-2 no-scrollbar whatsapp-quick-replies">
-        <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider pl-1 sm:pl-2 shrink-0">Templates:</span>
-        {QUICK_REPLIES.map((qr, idx) => (
-          <button
-            key={idx}
-            onClick={() => handleSendMessage(qr.text)}
-            className="min-h-9 px-3 py-1.5 text-xs bg-white hover:bg-emerald-50 hover:text-emerald-900 border border-slate-200/90 rounded-xl text-slate-800 font-bold shrink-0 transition-all active:scale-95 shadow-2xs whitespace-nowrap"
-          >
-            {qr.label}
-          </button>
-        ))}
+      {/* Quick Reply Template Chips Bar — Collapsible on Mobile */}
+      <div className="bg-[#f0f2f5] border-t border-slate-200/90 shrink-0">
+        {/* Toggle button (mobile only) */}
+        <button
+          onClick={() => setShowTemplates(!showTemplates)}
+          className="md:hidden w-full px-3 py-1.5 flex items-center justify-center gap-1 text-[10px] font-extrabold text-slate-500 uppercase tracking-wider active:bg-slate-200/50 transition-colors"
+        >
+          <span>Templates</span>
+          {showTemplates ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+        </button>
+
+        {/* Chips row — always visible on desktop, toggled on mobile */}
+        <div className={`${showTemplates ? 'flex' : 'hidden md:flex'} px-2 py-2 overflow-x-auto overscroll-x-contain items-center gap-2 no-scrollbar whatsapp-quick-replies`}>
+          <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider pl-1 sm:pl-2 shrink-0 hidden md:inline">Templates:</span>
+          {QUICK_REPLIES.map((qr, idx) => (
+            <button
+              key={idx}
+              onClick={() => handleSendMessage(qr.text)}
+              className="min-h-9 px-3 py-1.5 text-xs bg-white hover:bg-emerald-50 hover:text-emerald-900 border border-slate-200/90 rounded-xl text-slate-800 font-bold shrink-0 transition-all active:scale-95 shadow-2xs whitespace-nowrap"
+            >
+              {qr.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Spacious WhatsApp Input Reply Bar */}

@@ -15,7 +15,7 @@ async function testDiagnosticTrace() {
 
     let settings = await Settings.findOne();
     if (!settings) {
-      settings = await Settings.create({ globalMode: 'ai', fallbackContactPhone: '+919257657665' });
+      settings = await Settings.create({ globalMode: 'ai', fallbackContactPhone: '+919257657664' });
     }
 
     const testPhone = '919999111222';

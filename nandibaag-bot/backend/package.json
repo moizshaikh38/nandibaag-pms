@@ -27,7 +27,8 @@
     "cleanup-ghost": "node scripts/cleanupGhostBookings.js",
     "verify-pricing-flow": "node scripts/verifyPricingFlow.js",
     "test-pricing": "node scripts/testPricingAccuracy.js",
-    "master-check": "node scripts/masterVerification.js"
+    "master-check": "node scripts/masterVerification.js",
+    "test-conversation-memory": "node scripts/testConversationMemory.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.1.1",
