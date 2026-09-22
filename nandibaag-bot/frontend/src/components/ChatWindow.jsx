@@ -585,8 +585,8 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
       </div>
 
       {/* Spacious WhatsApp Input Reply Bar */}
-      <div className="chat-input-bar p-2 sm:p-3 bg-[#f0f2f5] border-t border-slate-200/90 flex items-end gap-1.5 sm:gap-2 safe-pb shrink-0">
-        <div className="flex-1 min-w-0 bg-white rounded-3xl shadow-sm flex items-center px-4 py-1.5 focus-within:ring-2 focus-within:ring-emerald-500 transition-all border border-slate-300">
+      <div className="chat-input-bar bg-[#f0f2f5] border-t border-slate-200/90 safe-pb shrink-0" style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', padding: '8px 10px' }}>
+        <div style={{ flex: '1 1 0%', minWidth: 0 }} className="bg-white rounded-3xl shadow-sm flex items-center px-3 py-1.5 focus-within:ring-2 focus-within:ring-emerald-500 border border-slate-300">
           <textarea
             ref={textareaRef}
             value={messageText}
@@ -603,18 +603,19 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
             autoCorrect="off"
             autoCapitalize="sentences"
             spellCheck={false}
-            className="w-full text-[15px] text-slate-900 placeholder:text-slate-400 bg-transparent focus:outline-none resize-none font-sans leading-relaxed py-1.5 custom-scrollbar"
-            style={{ maxHeight: '120px' }}
+            className="text-slate-900 placeholder:text-slate-400 bg-transparent focus:outline-none resize-none font-sans leading-relaxed custom-scrollbar"
+            style={{ width: '100%', fontSize: '16px', padding: '8px 4px', maxHeight: '120px', minHeight: '40px', color: '#0f172a', lineHeight: '1.4' }}
           />
         </div>
 
         <button
           onClick={() => handleSendMessage()}
           disabled={isSending || !messageText.trim()}
-          className="w-10 h-10 sm:w-11 sm:h-11 bg-[#00a884] hover:bg-[#06cf9c] active:scale-95 disabled:opacity-40 text-white font-extrabold text-xs rounded-full shadow-sm transition-all flex items-center justify-center shrink-0 mb-0.5"
+          className="bg-[#00a884] hover:bg-[#06cf9c] active:scale-95 disabled:opacity-40 text-white rounded-full shadow-sm transition-all flex items-center justify-center"
+          style={{ width: '44px', height: '44px', minWidth: '44px', maxWidth: '44px', flexShrink: 0 }}
           title="Send WhatsApp Message"
         >
-          {isSending ? <Loader size={18} className="animate-spin" /> : <Send size={18} className="ml-1" />}
+          {isSending ? <Loader size={18} className="animate-spin" /> : <Send size={18} className="ml-0.5" />}
         </button>
       </div>
 
