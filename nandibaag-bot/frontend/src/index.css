@@ -224,3 +224,47 @@ textarea {
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
 }
+
+/* ─── Chat Input Bar: Mobile Text Visibility & Sizing Fix ─── */
+.chat-input-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  padding-bottom: env(safe-area-inset-bottom, 8px);
+}
+
+.chat-input-bar textarea {
+  min-height: 44px;
+  max-height: 120px;
+  font-size: 16px !important; /* prevents iOS Safari auto-zoom on focus */
+  line-height: 1.4;
+  color: #0f172a !important; /* force visible dark text */
+  background: #fff !important;
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  caret-color: #059669;
+  resize: none;
+  overflow-y: auto;
+}
+
+.chat-input-bar textarea::placeholder {
+  color: #94a3b8;
+  opacity: 1;
+}
+
+.chat-input-bar textarea:focus {
+  outline: none;
+}
+
+@media (max-width: 480px) {
+  .chat-input-bar {
+    padding: 6px 8px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom, 6px));
+  }
+
+  .chat-input-bar textarea {
+    min-height: 44px;
+    padding: 10px 12px;
+    font-size: 16px !important;
+  }
+}

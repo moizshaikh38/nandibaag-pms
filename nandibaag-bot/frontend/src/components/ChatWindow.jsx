@@ -114,6 +114,7 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
   const socket = useSocket();
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
+  const textareaRef = useRef(null);
   const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
   const [messageText, setMessageText] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -352,6 +353,16 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
     }
   };
 
+  // Auto-grow textarea as user types
+  const handleMessageChange = (e) => {
+    setMessageText(e.target.value);
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+    }
+  };
+
   const handleSendMessage = async (textToSend) => {
     const text = textToSend || messageText;
     if (!text.trim() || isSending) return;
@@ -368,7 +379,13 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
           res = await api.post(`/chats/${chat._id}/send`, { text: text.trim() });
         }
       }
-      if (!textToSend) setMessageText('');
+      if (!textToSend) {
+        setMessageText('');
+        // Reset textarea height after send
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+        }
+      }
       if (res?.data?.chat && onChatUpdated) {
         onChatUpdated(res.data.chat);
       } else {
@@ -555,18 +572,19 @@ export default function ChatWindow({ chat, onClose, onModeChange, onChatUpdated 
       </div>
 
       {/* Spacious WhatsApp Input Reply Bar */}
-      <div className="p-2 sm:p-3 bg-[#f0f2f5] border-t border-slate-200/90 flex items-end gap-1.5 sm:gap-2 safe-pb shrink-0">
+      <div className="chat-input-bar p-2 sm:p-3 bg-[#f0f2f5] border-t border-slate-200/90 flex items-end gap-1.5 sm:gap-2 safe-pb shrink-0">
         <div className="flex-1 min-w-0 bg-white rounded-3xl shadow-sm flex items-center px-4 py-1.5 focus-within:ring-2 focus-within:ring-emerald-500 transition-all border border-slate-300">
           <textarea
+            ref={textareaRef}
             value={messageText}
-            onChange={(e) => setMessageText(e.target.value)}
+            onChange={handleMessageChange}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 handleSendMessage();
               }
             }}
-            rows={Math.min(5, Math.max(1, messageText.split('\n').length))}
+            rows={1}
             placeholder="Type a message..."
             autoComplete="off"
             autoCorrect="off"
