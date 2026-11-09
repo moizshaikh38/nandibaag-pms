@@ -27,4 +27,4 @@ Never commit real values. Use environment variables or a local `.env` that is no
 
 ## License
 
-No license has been granted for this repository. Contact the repository owner for permission to use the code.
+There is no `LICENSE` file at the repository root. `nandibaag-bot/README.md` states ISC for the bot project; the owner has not confirmed a license for the rest of the repository. Third-party dependencies keep their own licenses. Contact the repository owner about use of the code.
