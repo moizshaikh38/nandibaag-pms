@@ -23,6 +23,8 @@ const jwt = require('jsonwebtoken');
 
 const { jwtSecret } = require('../src/config/env');
 const models = require('../src/models');
+const RoomNightLock = require('../src/models/RoomNightLock');
+const RoomReservation = require('../src/models/RoomReservation');
 const availabilityService = require('../src/services/availabilityService');
 const roomMapper = require('../src/utils/roomMapper');
 
@@ -98,6 +100,29 @@ models.Booking.findByIdAndDelete = async (id) => {
   bookingStore.delete(String(id));
   return doc;
 };
+
+const roomNightLocks = [];
+RoomNightLock.insertMany = async (docs) => {
+  for (const d of docs) {
+    const dup = roomNightLocks.find(x => String(x.roomId) === String(d.roomId) && x.night === d.night);
+    if (dup) {
+      const err = new Error('E11000 duplicate key');
+      err.code = 11000;
+      throw err;
+    }
+    roomNightLocks.push({ ...d });
+  }
+  return docs;
+};
+RoomNightLock.deleteMany = async ({ bookingId }) => {
+  for (let i = roomNightLocks.length - 1; i >= 0; i--) {
+    if (String(roomNightLocks[i].bookingId) === String(bookingId)) {
+      roomNightLocks.splice(i, 1);
+    }
+  }
+  return { deletedCount: 1 };
+};
+RoomReservation.updateMany = async () => ({ modifiedCount: 0 });
 
 let failRoomLookup = false;
 models.Room.find = () => ({ lean: async () => [] });
