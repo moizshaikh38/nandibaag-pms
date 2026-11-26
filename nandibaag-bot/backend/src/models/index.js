@@ -31,6 +31,7 @@ module.exports = {
   RoomReservation: require('./RoomReservation'),
   RoomMaintenance: require('./RoomMaintenance'),
   ModeChangeLog: require('./ModeChangeLog'),
-  SystemSettings: require('./SystemSettings')
+  SystemSettings: require('./SystemSettings'),
+  IdempotencyRecord: require('./IdempotencyRecord')
 };
 

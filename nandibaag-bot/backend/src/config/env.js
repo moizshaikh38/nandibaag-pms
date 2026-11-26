@@ -1,11 +1,12 @@
 const path = require('path');
+const crypto = require('crypto');
 require('dotenv').config();
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 const Joi = require('joi');
 
 const envSchema = Joi.object({
-  MONGO_URI: Joi.string().allow('', null).default('mongodb+srv://moizsh786786_db_user:RvSja2R0ytcXg6QZ@cluster0.ly5dxxy.mongodb.net/nandibaag-pms?retryWrites=true&w=majority').description('MongoDB connection URI'),
-  JWT_SECRET: Joi.string().allow('', null).default('super-secret-jwt-key-nandibaag-prod-2026-x9k2').description('Secret key for JWT token signing'),
+  MONGO_URI: Joi.string().allow('', null).default('').description('MongoDB connection URI'),
+  JWT_SECRET: Joi.string().allow('', null).default('').description('Secret key for JWT token signing'),
   JWT_EXPIRES_IN: Joi.string().allow('', null).default('7d').description('JWT token expiration time (e.g., "7d")'),
   OPENROUTER_API_KEY: Joi.string().allow('', null).default('').description('OpenRouter API key for AI calls'),
   OPENROUTER_MODEL_PRIMARY: Joi.string().allow('', null).default('openai/gpt-4o-mini').description('Primary OpenRouter model to use'),
@@ -17,8 +18,9 @@ const envSchema = Joi.object({
   RESORT_CONTACT_2: Joi.string().allow('', null).default('+919257657664').description('Secondary resort contact number (Reception)'),
   RESORT_CONTACT_3: Joi.string().allow('', null).default('+917558269653').description('Tertiary resort contact number (Kitchen)'),
   ADMIN_DEFAULT_EMAIL: Joi.string().allow('', null).default('admin@nandibaag.com').description('Default admin email'),
-  ADMIN_DEFAULT_PASSWORD: Joi.string().allow('', null).default('admin12345').description('Default admin password'),
+  ADMIN_DEFAULT_PASSWORD: Joi.string().allow('', null).default('').description('Default admin password (first-run bootstrap only)'),
   FRONTEND_URL: Joi.string().allow('', null).default('http://localhost:5173').description('Frontend application URL'),
+  ALLOWED_ORIGINS: Joi.string().allow('', null).default('').description('Comma-separated list of additional trusted CORS origins'),
 
   // ── Google Gemini Tier (optional first fallback tier) ─────────────
   GEMINI_API_KEY: Joi.string().allow('', null).default('').description('Google Gemini API key'),
@@ -58,7 +60,19 @@ if (error) {
   console.warn('Environment validation warning:', error.message);
 }
 
-const rawMongoUri = envVars.MONGO_URI || 'mongodb+srv://moizsh786786_db_user:RvSja2R0ytcXg6QZ@cluster0.ly5dxxy.mongodb.net/nandibaag-pms?retryWrites=true&w=majority';
+const isTestEnv = envVars.NODE_ENV === 'test';
+const rawMongoUri = envVars.MONGO_URI || '';
+if (!isTestEnv && !rawMongoUri.trim()) {
+  throw new Error('FATAL: MONGO_URI environment variable is required.');
+}
+
+const resolvedJwtSecret = (envVars.JWT_SECRET || '').trim() || (
+  isTestEnv ? crypto.randomBytes(32).toString('hex') : ''
+);
+if (!resolvedJwtSecret) {
+  throw new Error('FATAL: JWT_SECRET environment variable is required.');
+}
+
 let cleanMongoUri = rawMongoUri.replace(/<|>/g, '').trim();
 
 if (cleanMongoUri.includes('.mongodb.net') && !cleanMongoUri.includes('/nandibaag-pms')) {
@@ -73,8 +87,9 @@ if (cleanMongoUri.includes('.mongodb.net') && !cleanMongoUri.includes('/nandibaa
 
 module.exports = {
   mongoUri: cleanMongoUri,
-  jwtSecret: envVars.JWT_SECRET,
+  jwtSecret: resolvedJwtSecret,
   jwtExpiresIn: envVars.JWT_EXPIRES_IN,
+  allowedOrigins: envVars.ALLOWED_ORIGINS,
   openrouterApiKey: envVars.OPENROUTER_API_KEY,
   openrouterModelPrimary: envVars.OPENROUTER_MODEL_PRIMARY,
   openrouterSiteUrl: envVars.OPENROUTER_SITE_URL,

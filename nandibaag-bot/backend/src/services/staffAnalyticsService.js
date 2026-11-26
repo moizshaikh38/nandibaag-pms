@@ -1,177 +1,275 @@
-const { Booking, Staff } = require('../models');
+/**
+ * Staff Analytics Service (Sprint 4 Phase 2)
+ *
+ * Server-side MongoDB aggregation for:
+ * - Staff booking performance (bookedBy, excluding cancelled/no_show)
+ * - Staff collection performance (payments[].collectedBy, filtered by payments.paidAt)
+ * - Conservative legacy handling without fabricating collector or timestamp attribution
+ */
 
-const getStaffMonthlyStats = async (staffName, monthsBack = 3) => {
-  try {
-    console.log('[StaffAnalytics:Monthly] Fetching stats for', staffName);
-    
-    const stats = {};
-    const now = new Date();
-    
-    // Get last N months data
-    for (let i = 0; i < monthsBack; i++) {
-      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const monthKey = date.toLocaleDateString('en-GB', {
-        month: 'short',
-        year: '2-digit'
-      });
-      
-      const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
-      const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 1);
-      
-      const queryFilter = {
-        $or: [
-          { 'bookedBy.name': { $regex: new RegExp(`^${staffName}$`, 'i') } },
-          { bookedBy: { $regex: new RegExp(`^${staffName}$`, 'i') } }
-        ],
-        createdAt: { $gte: monthStart, $lt: monthEnd },
-        status: { $nin: ['cancelled', 'no_show'] }
-      };
+const { Booking } = require('../models');
+const { toISTDateString } = require('../utils/dateHelper');
 
-      const bookingCount = await Booking.countDocuments(queryFilter);
-      const bookings = await Booking.find(queryFilter).lean();
-      const revenue = bookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
-      
-      const packageBreakdown = {
-        couple: 0,
-        group: 0,
-        oneDay: 0
-      };
-      
-      bookings.forEach(b => {
-        const pkg = b.packageType || b.bookingType;
-        if (pkg === 'couple') packageBreakdown.couple++;
-        else if (pkg === 'group') packageBreakdown.group++;
-        else if (pkg === 'oneDay' || pkg === 'picnic') packageBreakdown.oneDay++;
-      });
-      
-      stats[monthKey] = {
-        count: bookingCount,
-        revenue,
-        packageBreakdown
-      };
-    }
-    
-    console.log('[StaffAnalytics:Monthly] Stats for', staffName, ':', Object.keys(stats));
-    return stats;
-  } catch (error) {
-    console.error('[StaffAnalytics:Monthly] Error:', error.message);
-    throw error;
+const MAX_RANGE_DAYS = 366;
+
+class StaffAnalyticsValidationError extends Error {
+  constructor(message, statusCode = 400) {
+    super(message);
+    this.name = 'StaffAnalyticsValidationError';
+    this.statusCode = statusCode;
   }
+}
+
+function isValidYMD(str) {
+  if (typeof str !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(str)) return false;
+  const d = new Date(`${str}T00:00:00.000+05:30`);
+  if (Number.isNaN(d.getTime())) return false;
+  return toISTDateString(d) === str;
+}
+
+function validateStaffAnalyticsParams(input = {}) {
+  const query = typeof input === 'number' ? { months: input } : (input || {});
+  const todayIST = toISTDateString(new Date());
+
+  if (query.dateFrom || query.dateTo) {
+    const dateFrom = query.dateFrom ? String(query.dateFrom).trim() : todayIST;
+    const dateTo = query.dateTo ? String(query.dateTo).trim() : todayIST;
+    if (!isValidYMD(dateFrom)) throw new StaffAnalyticsValidationError('Invalid dateFrom. Expected YYYY-MM-DD.');
+    if (!isValidYMD(dateTo)) throw new StaffAnalyticsValidationError('Invalid dateTo. Expected YYYY-MM-DD.');
+    const startDate = new Date(`${dateFrom}T00:00:00.000+05:30`);
+    const endDate = new Date(`${dateTo}T23:59:59.999+05:30`);
+    if (startDate > endDate) throw new StaffAnalyticsValidationError('dateFrom must be less than or equal to dateTo.');
+    const diffDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000));
+    if (diffDays > MAX_RANGE_DAYS) throw new StaffAnalyticsValidationError(`Date range cannot exceed ${MAX_RANGE_DAYS} days.`);
+    return { dateFrom, dateTo, startDate, endDate, months: null };
+  }
+
+  const months = query.months !== undefined ? Number(query.months) : 3;
+  if (!Number.isInteger(months) || months < 1 || months > 12) {
+    throw new StaffAnalyticsValidationError('Invalid months parameter. Must be an integer between 1 and 12.');
+  }
+  const startObj = new Date(Date.now() - months * 30 * 24 * 60 * 60 * 1000);
+  const dateFrom = toISTDateString(startObj);
+  const dateTo = todayIST;
+  return {
+    dateFrom,
+    dateTo,
+    startDate: new Date(`${dateFrom}T00:00:00.000+05:30`),
+    endDate: new Date(`${dateTo}T23:59:59.999+05:30`),
+    months
+  };
+}
+
+const getAllStaffStats = async (input = 3) => {
+  const { dateFrom, dateTo, startDate, endDate, months } = validateStaffAnalyticsParams(input);
+
+  const [bookingAgg, collectionAgg, legacyAgg] = await Promise.all([
+    // 1. Booking performance by bookedBy (active bookings only)
+    Booking.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: startDate, $lte: endDate },
+          status: { $nin: ['cancelled', 'no_show'] }
+        }
+      },
+      {
+        $addFields: {
+          _staffName: {
+            $let: {
+              vars: {
+                raw: {
+                  $ifNull: [
+                    '$bookedBy.name',
+                    { $cond: [{ $eq: [{ $type: '$bookedBy' }, 'string'] }, '$bookedBy', ''] }
+                  ]
+                }
+              },
+              in: {
+                $cond: [
+                  { $gt: [{ $strLenCP: { $trim: { input: { $ifNull: ['$$raw', ''] } } } }, 0] },
+                  { $trim: { input: '$$raw' } },
+                  'Unattributed'
+                ]
+              }
+            }
+          },
+          _pkg: { $ifNull: ['$packageType', 'unknown'] },
+          _totalAmt: { $max: [0, { $ifNull: ['$totalAmount', 0] }] }
+        }
+      },
+      {
+        $group: {
+          _id: '$_staffName',
+          totalBookings: { $sum: 1 },
+          totalBookingValue: { $sum: '$_totalAmt' },
+          coupleCount: { $sum: { $cond: [{ $eq: ['$_pkg', 'couple'] }, 1, 0] } },
+          groupCount: { $sum: { $cond: [{ $eq: ['$_pkg', 'group'] }, 1, 0] } },
+          oneDayCount: { $sum: { $cond: [{ $in: ['$_pkg', ['oneDay', 'picnic']] }, 1, 0] } }
+        }
+      }
+    ]),
+
+    // 2. Collection performance by payments[].collectedBy (filtered by payments.paidAt)
+    Booking.aggregate([
+      { $match: { 'payments.paidAt': { $gte: startDate, $lte: endDate } } },
+      { $unwind: '$payments' },
+      { $match: { 'payments.paidAt': { $gte: startDate, $lte: endDate } } },
+      {
+        $addFields: {
+          _collectorName: {
+            $let: {
+              vars: { raw: { $ifNull: ['$payments.collectedBy.name', ''] } },
+              in: {
+                $cond: [
+                  { $gt: [{ $strLenCP: { $trim: { input: '$$raw' } } }, 0] },
+                  { $trim: { input: '$$raw' } },
+                  'Unattributed'
+                ]
+              }
+            }
+          },
+          _payAmt: { $max: [0, { $ifNull: ['$payments.amount', 0] }] },
+          _isCancelled: { $eq: ['$status', 'cancelled'] }
+        }
+      },
+      {
+        $group: {
+          _id: '$_collectorName',
+          collectedActive: { $sum: { $cond: ['$_isCancelled', 0, '$_payAmt'] } },
+          collectedCancelled: { $sum: { $cond: ['$_isCancelled', '$_payAmt', 0] } },
+          collectionCountActive: { $sum: { $cond: ['$_isCancelled', 0, 1] } },
+          collectionCountCancelled: { $sum: { $cond: ['$_isCancelled', 1, 0] } }
+        }
+      }
+    ]),
+
+    // 3. Legacy untimestamped advances (do not fabricate collector or paidAt)
+    Booking.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: startDate, $lte: endDate },
+          status: { $nin: ['cancelled', 'no_show'] },
+          $or: [{ payments: { $exists: false } }, { payments: { $size: 0 } }]
+        }
+      },
+      {
+        $addFields: {
+          _legacyAdv: { $max: [0, { $ifNull: ['$advancePaid', { $ifNull: ['$advancePayment', 0] }] }] }
+        }
+      },
+      { $match: { _legacyAdv: { $gt: 0 } } },
+      { $group: { _id: null, count: { $sum: 1 }, totalAmount: { $sum: '$_legacyAdv' } } }
+    ])
+  ]);
+
+  const staffMap = new Map();
+  const ensureStaff = (name) => {
+    if (!staffMap.has(name)) {
+      staffMap.set(name, {
+        name,
+        totalBookings: 0,
+        totalRevenue: 0, // booking value (kept for frontend compatibility)
+        totalBookingValue: 0,
+        collectedAmount: 0,
+        collectionCount: 0,
+        cancelledCollectedAmount: 0,
+        packageBreakdown: { couple: 0, group: 0, oneDay: 0 }
+      });
+    }
+    return staffMap.get(name);
+  };
+
+  for (const row of bookingAgg || []) {
+    const entry = ensureStaff(row._id);
+    entry.totalBookings = row.totalBookings || 0;
+    entry.totalRevenue = row.totalBookingValue || 0;
+    entry.totalBookingValue = row.totalBookingValue || 0;
+    entry.packageBreakdown = {
+      couple: row.coupleCount || 0,
+      group: row.groupCount || 0,
+      oneDay: row.oneDayCount || 0
+    };
+  }
+
+  for (const row of collectionAgg || []) {
+    const entry = ensureStaff(row._id);
+    entry.collectedAmount = row.collectedActive || 0;
+    entry.collectionCount = row.collectionCountActive || 0;
+    entry.cancelledCollectedAmount = row.collectedCancelled || 0;
+  }
+
+  const stats = Array.from(staffMap.values()).sort(
+    (a, b) => (b.collectedAmount - a.collectedAmount) || (b.totalBookings - a.totalBookings)
+  );
+
+  const legacy = legacyAgg?.[0] || { count: 0, totalAmount: 0 };
+
+  return {
+    stats,
+    filters: { dateFrom, dateTo, months },
+    metadata: {
+      timezone: 'Asia/Kolkata (+05:30)',
+      legacyUntimestampedCount: legacy.count || 0,
+      legacyUntimestampedAmount: legacy.totalAmount || 0,
+      generatedAt: new Date().toISOString()
+    }
+  };
 };
 
-const getAllStaffStats = async (monthsBack = 3) => {
-  try {
-    console.log('[StaffAnalytics:All] Fetching all staff stats');
-    
-    let staff = await Staff.find({ status: 'active' }).lean();
-    
-    if (!staff || staff.length === 0) {
-      const uniqueNames = await Booking.distinct('bookedBy.name');
-      const filtered = uniqueNames.filter(Boolean);
-      staff = filtered.map((name, idx) => ({
-        name,
-        staffId: `staff_00${idx + 1}`,
-        contact: '9876543210',
-        hireDate: new Date(),
-        status: 'active'
-      }));
-    }
+const getStaffMonthlyStats = async (staffName, monthsBack = 3) => {
+  const { startDate, endDate } = validateStaffAnalyticsParams({ months: monthsBack });
+  const escaped = String(staffName || '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const rows = await Booking.aggregate([
+    {
+      $match: {
+        createdAt: { $gte: startDate, $lte: endDate },
+        status: { $nin: ['cancelled', 'no_show'] },
+        $or: [
+          { 'bookedBy.name': { $regex: `^${escaped}$`, $options: 'i' } },
+          { bookedBy: { $regex: `^${escaped}$`, $options: 'i' } }
+        ]
+      }
+    },
+    {
+      $group: {
+        _id: { $dateToString: { format: '%Y-%m', date: '$createdAt', timezone: '+05:30' } },
+        count: { $sum: 1 },
+        revenue: { $sum: { $max: [0, { $ifNull: ['$totalAmount', 0] }] } }
+      }
+    },
+    { $sort: { _id: -1 } }
+  ]);
 
-    if (!staff || staff.length === 0) {
-      staff = [
-        { name: 'Kadambari', staffId: 'staff_001', contact: '9876543210', hireDate: new Date(), status: 'active' },
-        { name: 'Ravi', staffId: 'staff_002', contact: '9876543211', hireDate: new Date(), status: 'active' },
-        { name: 'Priti', staffId: 'staff_003', contact: '9876543212', hireDate: new Date(), status: 'active' },
-        { name: 'Mansi', staffId: 'staff_004', contact: '9876543213', hireDate: new Date(), status: 'active' }
-      ];
-    }
-    
-    const allStats = [];
-    
-    for (const member of staff) {
-      const monthlyStats = await getStaffMonthlyStats(member.name, monthsBack);
-      
-      const totalCount = Object.values(monthlyStats).reduce((sum, m) => sum + m.count, 0);
-      const totalRevenue = Object.values(monthlyStats).reduce((sum, m) => sum + m.revenue, 0);
-      const avgPerMonth = totalCount > 0 ? (totalCount / monthsBack).toFixed(1) : 0;
-      
-      const monthKeys = Object.keys(monthlyStats);
-      const currentMonth = monthlyStats[monthKeys[0]]?.count || 0;
-      const previousMonth = monthlyStats[monthKeys[1]]?.count || 0;
-      const trend = currentMonth - previousMonth;
-      const trendPercent = previousMonth > 0 
-        ? ((trend / previousMonth) * 100).toFixed(1)
-        : (currentMonth > 0 ? 100 : 0);
-      
-      allStats.push({
-        name: member.name,
-        staffId: member.staffId,
-        contact: member.contact,
-        hireDate: member.hireDate,
-        monthlyStats,
-        totalCount,
-        totalRevenue,
-        avgPerMonth: Number(avgPerMonth),
-        trend,
-        trendPercent: Number(trendPercent),
-        trendDirection: trend > 0 ? '↗' : trend < 0 ? '↘' : '→'
-      });
-    }
-    
-    allStats.sort((a, b) => b.totalCount - a.totalCount || b.totalRevenue - a.totalRevenue);
-    
-    console.log('[StaffAnalytics:All] Fetched stats for', allStats.length, 'staff');
-    return allStats;
-  } catch (error) {
-    console.error('[StaffAnalytics:All] Error:', error.message);
-    throw error;
+  const stats = {};
+  for (const r of rows || []) {
+    stats[r._id] = { count: r.count, revenue: r.revenue };
   }
+  return stats;
 };
 
 const getIndividualStaffProfile = async (staffName, monthsBack = 6) => {
-  try {
-    console.log('[StaffAnalytics:Profile] Fetching profile for', staffName);
-    
-    let staff = await Staff.findOne({ name: { $regex: new RegExp(`^${staffName}$`, 'i') } }).lean();
-    
-    if (!staff) {
-      staff = {
-        name: staffName,
-        staffId: `staff_${staffName.toLowerCase()}`,
-        contact: '9876543210',
-        role: 'Booking Manager',
-        status: 'active'
-      };
-    }
-    
-    const monthlyStats = await getStaffMonthlyStats(staffName, monthsBack);
-    
-    const now = new Date();
-    const monthsAgoDate = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
-    
-    const bookings = await Booking.find({
-      $or: [
-        { 'bookedBy.name': { $regex: new RegExp(`^${staffName}$`, 'i') } },
-        { bookedBy: { $regex: new RegExp(`^${staffName}$`, 'i') } }
-      ],
-      createdAt: { $gte: monthsAgoDate },
-      status: { $nin: ['cancelled', 'no_show'] }
-    }).sort({ createdAt: -1 }).lean();
-    
-    return {
-      ...staff,
-      monthlyStats,
-      bookings,
-      totalBookings: bookings.length,
-      totalRevenue: bookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0)
-    };
-  } catch (error) {
-    console.error('[StaffAnalytics:Profile] Error:', error.message);
-    throw error;
-  }
+  const monthlyStats = await getStaffMonthlyStats(staffName, monthsBack);
+  const { stats } = await getAllStaffStats({ months: monthsBack });
+  const staffSummary = stats.find((s) => s.name.toLowerCase() === String(staffName || '').trim().toLowerCase()) || {
+    name: staffName,
+    totalBookings: 0,
+    totalRevenue: 0,
+    totalBookingValue: 0,
+    collectedAmount: 0,
+    collectionCount: 0,
+    cancelledCollectedAmount: 0,
+    packageBreakdown: { couple: 0, group: 0, oneDay: 0 }
+  };
+
+  return {
+    ...staffSummary,
+    monthlyStats
+  };
 };
 
 module.exports = {
+  StaffAnalyticsValidationError,
+  validateStaffAnalyticsParams,
   getStaffMonthlyStats,
   getAllStaffStats,
   getIndividualStaffProfile

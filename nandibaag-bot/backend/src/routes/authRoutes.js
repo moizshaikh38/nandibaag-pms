@@ -3,7 +3,7 @@ const Joi = require('joi');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { User, Session } = require('../models');
-const { jwtSecret, jwtExpiresIn, adminDefaultEmail, adminDefaultPassword } = require('../config/env');
+const { jwtSecret, jwtExpiresIn } = require('../config/env');
 const { verifyToken } = require('../middleware/auth');
 const logger = require('../config/logger');
 const { logActivity, parseUserAgent, getClientIp } = require('../utils/activityLogger');
@@ -52,18 +52,7 @@ router.post('/login', async (req, res, next) => {
     }
 
     // Compare password
-    let isPasswordValid = await user.comparePassword(password);
-
-    // Self-healing fallback for admin user to handle cloud env password sync
-    if (!isPasswordValid && (user.email === 'admin@nandibaag.com' || user.role === 'admin')) {
-      const validDefaults = [adminDefaultPassword, 'admin12345', 'admin123'].filter(Boolean);
-      if (validDefaults.includes(password)) {
-        user.password = password;
-        await user.save();
-        isPasswordValid = true;
-        logger.info(`Self-healed admin password for ${user.email}`);
-      }
-    }
+    const isPasswordValid = await user.comparePassword(password);
 
     if (!isPasswordValid) {
       return res.status(401).json({

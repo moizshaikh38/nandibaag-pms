@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const { jwtSecret } = require('../config/env');
 const logger = require('../config/logger');
-const { Session } = require('../models');
+const { Session, User } = require('../models');
 
 /**
  * Verifies JWT token from Authorization header & validates active Session
@@ -22,7 +22,22 @@ async function verifyToken(req, res, next) {
   
   try {
     const decoded = jwt.verify(token, jwtSecret);
-    req.user = decoded;
+
+    // Ensure account still exists and is active
+    const user = await User.findById(decoded.id).select('isActive role email name').lean();
+    if (!user || !user.isActive) {
+      return res.status(401).json({
+        success: false,
+        message: 'Account is inactive or not found'
+      });
+    }
+
+    req.user = {
+      ...decoded,
+      role: user.role,
+      email: user.email,
+      name: user.name
+    };
 
     // Check session active status if token includes jti
     if (decoded.jti) {
@@ -70,7 +85,7 @@ async function verifyToken(req, res, next) {
  * Returns 403 if not admin
  */
 function requireAdmin(req, res, next) {
-  if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+  if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'super_admin')) {
     return res.status(403).json({
       success: false,
       message: 'Admin access required'

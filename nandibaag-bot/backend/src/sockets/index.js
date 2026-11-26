@@ -1,45 +1,100 @@
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
-const { jwtSecret } = require('../config/env');
-const { User } = require('../models');
+const { jwtSecret, frontendUrl, allowedOrigins: extraAllowedOrigins } = require('../config/env');
+const { User, Session } = require('../models');
 const logger = require('../config/logger');
 
 let io = null;
 const connectedSessions = new Map();
 
+function getAllowedSocketOrigins() {
+  const devOrigins = process.env.NODE_ENV !== 'production'
+    ? [
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'http://localhost:7001',
+        'http://localhost:7002',
+        'http://127.0.0.1:5173',
+        'http://127.0.0.1:7001',
+        'http://127.0.0.1:7002'
+      ]
+    : [];
+
+  const configuredOrigins = String(extraAllowedOrigins || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  return Array.from(new Set([
+    frontendUrl,
+    ...configuredOrigins,
+    ...devOrigins
+  ].filter(Boolean)));
+}
+
 /**
  * Initializes Socket.io on the HTTP server
  * 
- * - Optional JWT auth (allows guest sessions for real-time room availability sync)
+ * - Enforces JWT + active Session authentication before allowing connection
  * - Session registration & room reservation broadcasts
  * - Exports getIO() helper for services to emit events
  * 
  * @param {object} httpServer - HTTP server instance
  */
 function initializeSocket(httpServer) {
+  const allowedOrigins = getAllowedSocketOrigins();
+
   io = new Server(httpServer, {
     cors: {
-      origin: '*',
-      methods: ['GET', 'POST']
+      origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+          callback(null, true);
+        } else {
+          callback(new Error('Not allowed by CORS'));
+        }
+      },
+      methods: ['GET', 'POST'],
+      credentials: true
     }
   });
 
-  // Middleware for Socket.io — optional auth
+  // Strict JWT + Session authentication middleware for Socket.io
   io.use(async (socket, next) => {
     try {
-      const token = socket.handshake.auth?.token;
-      
-      if (token) {
-        const decoded = jwt.verify(token, jwtSecret);
-        const user = await User.findById(decoded.id);
-        if (user && user.isActive) {
-          socket.user = user;
+      const authHeader = socket.handshake.headers?.authorization;
+      const bearerToken = authHeader && authHeader.startsWith('Bearer ')
+        ? authHeader.substring(7)
+        : null;
+      const token = socket.handshake.auth?.token || bearerToken;
+
+      if (!token) {
+        return next(new Error('Authentication required'));
+      }
+
+      const decoded = jwt.verify(token, jwtSecret);
+
+      if (decoded.jti) {
+        const session = await Session.findOne({ jti: decoded.jti }).lean();
+        if (!session || !session.isActive) {
+          return next(new Error('Session terminated'));
         }
       }
+
+      const user = await User.findById(decoded.id).select('isActive role email name').lean();
+      if (!user || !user.isActive) {
+        return next(new Error('Account is inactive or not found'));
+      }
+
+      socket.user = {
+        id: String(user._id),
+        email: user.email,
+        role: user.role,
+        name: user.name
+      };
       next();
     } catch (error) {
-      // Proceed without failing unauthenticated session socket
-      next();
+      logger.warn(`Socket authentication rejected: ${error.message}`);
+      next(new Error('Invalid or expired token'));
     }
   });
 

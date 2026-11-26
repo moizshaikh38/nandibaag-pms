@@ -5,6 +5,7 @@ import { useSocket } from '../hooks/useSocket';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 import DashboardStats from '../components/DashboardStats';
+import DashboardAnalyticsSection from '../components/DashboardAnalyticsSection';
 import ManualBookingForm from '../components/ManualBookingForm';
 import {
   MessageSquare, 
@@ -342,6 +343,9 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Authoritative Revenue, Collections & Booking Analytics */}
+      <DashboardAnalyticsSection />
 
       {/* Main Grid: AI Health & Pending Handovers */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

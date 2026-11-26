@@ -2,8 +2,22 @@ const express = require('express');
 const mongoose = require('mongoose');
 const { verifyToken } = require('../middleware/auth');
 const { Booking } = require('../models');
+const {
+  BookingBusinessError,
+  prepareAuthoritativeBookingData,
+  logManualBookingAuditEvents
+} = require('../services/manualBookingProcessor');
+const {
+  IdempotencyError,
+  extractIdempotencyKey,
+  acquireIdempotencyLock,
+  attachBookingToIdempotency,
+  completeIdempotency,
+  releaseIdempotencyOnFailure
+} = require('../services/idempotencyService');
 
 const router = express.Router();
+router.use(verifyToken);
 
 /**
  * GET /api/bookings
@@ -163,6 +177,8 @@ router.delete('/staff-names/:staffId', async (req, res) => {
 
 // POST create booking with all new fields
 router.post('/manual-booking', async (req, res) => {
+  let idempotencyScopeKey = null;
+  let bookingPersisted = false;
   try {
     const {
       customerName,
@@ -176,6 +192,20 @@ router.post('/manual-booking', async (req, res) => {
       totalAmount,
       notes
     } = req.body;
+
+    const idempotencyKey = extractIdempotencyKey(req);
+    const idempLock = await acquireIdempotencyLock({
+      key: idempotencyKey,
+      userId: req.user?.id || req.user?.email || 'staff',
+      endpoint: 'POST:/api/bookings/manual-booking',
+      payload: req.body
+    });
+    if (idempLock.enabled) {
+      if (idempLock.replay) {
+        return res.status(idempLock.statusCode).json(idempLock.responseBody);
+      }
+      idempotencyScopeKey = idempLock.scopeKey;
+    }
     
     console.log('[Booking:Manual] Creating booking:', {
       customerName,
@@ -214,9 +244,17 @@ router.post('/manual-booking', async (req, res) => {
       });
     }
 
-    const checkIn = checkInDate ? new Date(checkInDate) : new Date();
-    const checkOut = checkOutDate ? new Date(checkOutDate) : new Date(checkIn.getTime() + 86400000);
-    const dateStr = checkIn.toISOString().split('T')[0];
+    const prepared = prepareAuthoritativeBookingData({
+      ...req.body,
+      packageType,
+      checkInDate: checkInDate || new Date(),
+      checkOutDate: checkOutDate || undefined,
+      adults: guestComposition.adults
+    }, req.user);
+
+    const checkIn = prepared.checkInDate;
+    const checkOut = prepared.checkOutDate;
+    const dateStr = prepared.date;
 
     const sessionId = req.body.sessionId || 'resort_primary';
 
@@ -263,31 +301,36 @@ router.post('/manual-booking', async (req, res) => {
       }
     }
     
-    // Create booking
-    const isPicnic = packageType === 'oneDay' || packageType === 'picnic' || packageType === 'one-day-picnic' || packageType === 'dayuse';
+    // Create booking using authoritative server-side pricing, snapshot, overrides, discount & payment
     const booking = new Booking({
       customerName,
       customerPhone,
       date: dateStr,
       checkInDate: checkIn,
       checkOutDate: checkOut,
-      bookingType: isPicnic ? 'picnic' : packageType,
-      packageType,
-      mealOption: req.body.mealOption || (isPicnic ? 'B->D' : null),
-      guestComposition: {
-        adults: Number(guestComposition.adults) || 2,
-        children: Number(guestComposition.children) || 0
-      },
-      adults: Number(guestComposition.adults) || 2,
+      isWeekend: prepared.isWeekend,
+      bookingType: prepared.quote.packageType === 'oneDay' ? 'picnic' : prepared.quote.packageType,
+      packageType: prepared.quote.packageType,
+      mealOption: prepared.quote.mealOption,
+      guestComposition: prepared.guestComposition,
+      adults: prepared.adults,
+      kids: prepared.kids,
       bookedBy: {
         name: bookedBy.name,
         staffId: bookedBy.staffId || ''
       },
       staffNames: staffNames || staffList,
-      advancePayment: Number(req.body.advancePayment || req.body.advancePaid) || 0,
-      advancePaid: Number(req.body.advancePaid || req.body.advancePayment) || 0,
-      remainingPayment: Number(req.body.remainingPayment) || Math.max(0, (Number(totalAmount) || 0) - (Number(req.body.advancePaid || req.body.advancePayment) || 0)),
-      totalAmount: Number(totalAmount) || 0,
+      advancePayment: prepared.advancePayment,
+      advancePaid: prepared.advancePaid,
+      remainingPayment: prepared.remainingPayment,
+      paymentStatus: prepared.paymentStatus,
+      payments: prepared.payments,
+      totalAmount: prepared.totalAmount,
+      pricingSnapshot: prepared.pricingSnapshot,
+      rateOverrides: prepared.rateOverrides,
+      discount: prepared.discount,
+      acknowledgments: prepared.acknowledgments,
+      priceBreakdown: prepared.priceBreakdown,
       roomId: roomIds.join(', ') || req.body.roomId || '',
       roomIds: roomIds,
       notes: notes || '',
@@ -296,6 +339,9 @@ router.post('/manual-booking', async (req, res) => {
     });
     
     await booking.save();
+    bookingPersisted = true;
+    await attachBookingToIdempotency({ scopeKey: idempotencyScopeKey, bookingId: booking._id });
+    await logManualBookingAuditEvents(req.user?.id, booking, prepared, req);
     console.log('[Booking:Manual] Booking created:', booking._id);
 
     // Create linked RoomBooking records for each selected room for full PMS compatibility
@@ -377,14 +423,46 @@ router.post('/manual-booking', async (req, res) => {
     const { roomIdsToNumbers } = require('../utils/roomMapper');
     const roomNumbers = await roomIdsToNumbers(booking.roomIds || []);
 
-    res.json({
+    const responseBody = {
       success: true,
       booking: { ...booking.toObject(), roomNumbers },
       messagesSent: { customerSMS: false, staffGroup: false },
       message: 'Booking created. SMS / confirmation not sent automatically. Use "Send SMS" button to send confirmation.'
+    };
+
+    await completeIdempotency({
+      scopeKey: idempotencyScopeKey,
+      statusCode: 200,
+      responseBody,
+      bookingId: booking._id
     });
+
+    res.json(responseBody);
     
   } catch (error) {
+    // Only release the idempotency lock if the booking itself was NOT persisted.
+    // If bookingPersisted is true, keep the lock with bookingId attached so retries
+    // recover the existing booking rather than creating a duplicate.
+    if (!bookingPersisted) {
+      await releaseIdempotencyOnFailure({ scopeKey: idempotencyScopeKey });
+    }
+    if (error instanceof IdempotencyError || error.name === 'IdempotencyError') {
+      return res.status(error.statusCode || 409).json({
+        success: false,
+        code: error.code,
+        error: error.message,
+        message: error.message
+      });
+    }
+    if (error instanceof BookingBusinessError || error.name === 'BookingBusinessError') {
+      return res.status(error.statusCode || 400).json({
+        success: false,
+        code: error.code,
+        error: error.message,
+        message: error.message,
+        ...(error.extra || {})
+      });
+    }
     console.error('[Booking:Manual] Error:', error.message);
     res.status(500).json({ success: false, error: error.message });
   }

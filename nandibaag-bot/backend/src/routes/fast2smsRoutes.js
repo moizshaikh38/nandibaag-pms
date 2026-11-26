@@ -9,6 +9,7 @@
 
 const express = require('express');
 const crypto = require('crypto');
+const { verifyToken, requireAdmin } = require('../middleware/auth');
 const fast2smsService = require('../services/fast2smsService');
 const channelManager = require('../services/channelManager');
 const logger = require('../config/logger');
@@ -76,10 +77,24 @@ function extractIncomingMessage(payload) {
   return null;
 }
 
-/** Check webhook authenticity using FAST2SMS_WEBHOOK_SECRET (best effort). */
+/** Constant-time string comparison helper */
+function safeCompare(provided, expected) {
+  const a = Buffer.from(String(provided || ''));
+  const b = Buffer.from(String(expected || ''));
+  if (a.length === 0 || a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
+/** Check webhook authenticity using FAST2SMS_WEBHOOK_SECRET. */
 function isAuthorized(req) {
   const secret = fast2smsService.webhookSecret;
-  if (!secret) return true; // verification disabled — accept (logged at init)
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production' && process.env.FAST2SMS_ALLOW_UNVERIFIED_WEBHOOK !== 'true') {
+      logger.warn('[Fast2SMS:Webhook] Rejected request: FAST2SMS_WEBHOOK_SECRET is not configured');
+      return false;
+    }
+    return true;
+  }
 
   const provided =
     req.headers['x-webhook-secret'] ||
@@ -87,12 +102,8 @@ function isAuthorized(req) {
     req.headers['x-signature'] ||
     req.query.secret ||
     '';
-  if (!provided) return false;
 
-  const a = Buffer.from(String(provided));
-  const b = Buffer.from(secret);
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
+  return safeCompare(provided, secret);
 }
 
 /**
@@ -104,12 +115,16 @@ router.get('/webhook', (req, res) => {
   const token = req.query['hub.verify_token'] || req.query.verify_token;
   const challenge = req.query['hub.challenge'] || req.query.challenge;
 
-  console.log('[Fast2SMS:Webhook] 🔍 GET verification request received:', { mode, token, challenge });
+  logger.info(`[Fast2SMS:Webhook] GET verification request received (mode=${mode || 'none'})`);
 
   // 1. Meta / Fast2SMS challenge-response handshake
   if (challenge) {
-    console.log('[Fast2SMS:Webhook] ✓ Responding to hub.challenge verification request');
-    return res.status(200).send(challenge);
+    const secret = fast2smsService.webhookSecret;
+    if (secret && !safeCompare(token, secret)) {
+      logger.warn('[Fast2SMS:Webhook] Invalid hub.verify_token');
+      return res.status(403).json({ success: false, message: 'Invalid verification token' });
+    }
+    return res.type('text/plain').status(200).send(String(challenge));
   }
 
   // 2. Standard status ping
@@ -134,6 +149,11 @@ function isBotReply(text) {
  * Always acknowledges quickly with HTTP 200 OK so Fast2SMS dashboard test probes pass.
  */
 router.post('/webhook', async (req, res) => {
+  if (!isAuthorized(req)) {
+    logger.warn('[Fast2SMS:Webhook] Unauthorized POST webhook request rejected');
+    return res.status(401).json({ success: false, message: 'Unauthorized webhook request' });
+  }
+
   const env = require('../config/env');
   if (!env.fast2smsEnabled) {
     console.log('[Fast2SMS:Webhook] ⚠️ Fast2SMS channel is disabled (FAST2SMS_ENABLED=false) — dropping incoming webhook.');
@@ -191,7 +211,7 @@ router.post('/webhook', async (req, res) => {
  * GET /api/fast2sms/status
  * Returns Fast2SMS channel status (for dashboard / debugging).
  */
-router.get('/status', (req, res) => {
+router.get('/status', verifyToken, requireAdmin, (req, res) => {
   res.json({
     success: true,
     channel: 'fast2sms',

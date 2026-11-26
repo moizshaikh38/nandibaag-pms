@@ -82,6 +82,38 @@ const bookingSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
+  pricingSnapshot: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null
+  },
+  rateOverrides: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null
+  },
+  discount: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null
+  },
+  payments: [{
+    amount: { type: Number, required: true, min: 0 },
+    mode: { type: String, enum: ['cash', 'upi', 'card', 'bank_transfer', 'other'], required: true },
+    utr: { type: String, trim: true, default: '' },
+    screenshotRef: { type: String, trim: true, default: '' },
+    paidAt: { type: Date, default: Date.now },
+    collectedBy: {
+      userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      name: { type: String, default: '' },
+      email: { type: String, default: '' }
+    },
+    notes: { type: String, default: '' }
+  }],
+  acknowledgments: {
+    coupleWarningAcknowledged: { type: Boolean, default: false },
+    coupleWarningCode: { type: String, default: null },
+    coupleWarningAcknowledgedAt: { type: Date, default: null },
+    zeroAdvanceAcknowledged: { type: Boolean, default: false },
+    zeroAdvanceAcknowledgedAt: { type: Date, default: null }
+  },
   priceBreakdown: {
     type: String
   },

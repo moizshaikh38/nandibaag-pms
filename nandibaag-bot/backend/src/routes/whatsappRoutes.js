@@ -158,7 +158,7 @@ router.get('/failed-messages', verifyToken, async (req, res, next) => {
  * GET /api/restart-baileys & POST /api/whatsapp/restart
  * Restart Baileys WhatsApp session cleanly on demand.
  */
-router.get('/restart-baileys', async (req, res) => {
+router.get('/restart-baileys', verifyToken, async (req, res) => {
   try {
     console.log('[API] Restart Baileys requested via /api/restart-baileys');
     const whatsappService = require('../services/whatsappService');

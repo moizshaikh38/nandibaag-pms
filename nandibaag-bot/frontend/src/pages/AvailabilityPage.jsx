@@ -166,7 +166,7 @@ export default function AvailabilityPage() {
         bookingType: 'couple',
         checkInDate,
         checkOutDate,
-        adults: room.capacity || 2,
+        adults: 2,
         totalAmount: 3500,
         roomIds: [room._id]
       });

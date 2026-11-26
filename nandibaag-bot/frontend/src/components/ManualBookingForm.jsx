@@ -61,6 +61,187 @@ const ManualBookingForm = () => {
   const [createdBooking, setCreatedBooking] = useState(null);
   const [sendingSms, setSendingSms] = useState(false);
 
+  // Sprint 2: Authoritative server-side pricing preview, overrides, discounts & payment collection
+  const [childrenAges, setChildrenAges] = useState([]);
+  const [roomAddon, setRoomAddon] = useState(false);
+  const [rateOverrides, setRateOverrides] = useState({
+    coupleBaseRate: '',
+    coupleBaseRateWeekday: '',
+    coupleBaseRateWeekend: '',
+    extraAdultRate: '',
+    extraAdultRateWeekday: '',
+    extraAdultRateWeekend: '',
+    groupAdultRate: '',
+    groupAdultRateWeekday: '',
+    groupAdultRateWeekend: '',
+    childRate: '',
+    childRateWeekday: '',
+    childRateWeekend: '',
+    oneDayPerPersonRate: '',
+    roomAddonRate: '',
+    reason: ''
+  });
+  const [discount, setDiscount] = useState({ type: 'none', value: '', reason: '' });
+  const [paymentDetails, setPaymentDetails] = useState({
+    mode: 'cash',
+    utr: '',
+    screenshotRef: '',
+    uploading: false,
+    uploadError: ''
+  });
+  const [quoteState, setQuoteState] = useState({ quote: null, loading: false, error: '' });
+  const [acknowledgeCoupleWarning, setAcknowledgeCoupleWarning] = useState(false);
+  const [acknowledgeZeroAdvance, setAcknowledgeZeroAdvance] = useState(false);
+  const previewSeqRef = React.useRef(0);
+  const generateIdempotencyKey = () => (
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? `mb-${crypto.randomUUID()}`
+      : `mb-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  );
+  const idempotencyKeyRef = React.useRef(generateIdempotencyKey());
+
+  // Sprint 2.1: Regenerate idempotency key when user materially changes booking inputs
+  useEffect(() => {
+    idempotencyKeyRef.current = generateIdempotencyKey();
+  }, [
+    formData.customerName,
+    formData.customerPhone,
+    formData.packageType,
+    formData.checkInDate,
+    formData.checkOutDate,
+    formData.guestComposition.adults,
+    formData.mealOption,
+    formData.advancePayment,
+    formData.notes,
+    childrenAges,
+    roomAddon,
+    rateOverrides,
+    discount,
+    paymentDetails.mode,
+    paymentDetails.utr,
+    paymentDetails.screenshotRef,
+    selectedRooms
+  ]);
+
+  // Sprint 2: Reset acknowledgments when core booking configuration changes
+  useEffect(() => {
+    setAcknowledgeCoupleWarning(false);
+  }, [formData.packageType, formData.guestComposition.adults, formData.checkInDate, formData.checkOutDate]);
+
+  useEffect(() => {
+    setAcknowledgeZeroAdvance(false);
+  }, [formData.advancePayment, quoteState.quote?.totalAmount]);
+
+  // Sprint 2.1: Authoritative server-side pricing preview (immediately marks quote loading/stale before debounce)
+  useEffect(() => {
+    if (!formData.packageType || !formData.checkInDate) return;
+    if (formData.packageType !== 'oneDay' && !formData.checkOutDate) return;
+
+    const seq = ++previewSeqRef.current;
+    setQuoteState(prev => ({ ...prev, loading: true, error: '' }));
+
+    const timer = setTimeout(async () => {
+      try {
+        const hasAnyOverride = Object.entries(rateOverrides).some(
+          ([k, v]) => k !== 'reason' && v !== ''
+        );
+        const hasDiscount = discount.type !== 'none' && Number(discount.value) > 0;
+
+        const payload = {
+          packageType: formData.packageType,
+          checkInDate: formData.checkInDate,
+          checkOutDate: formData.packageType === 'oneDay' ? formData.checkInDate : formData.checkOutDate,
+          adults: Number(formData.guestComposition.adults) || 1,
+          childrenAges,
+          mealOption: formData.packageType === 'oneDay' ? formData.mealOption : undefined,
+          roomAddon: formData.packageType === 'oneDay' ? roomAddon : false,
+          rateOverrides: hasAnyOverride ? rateOverrides : undefined,
+          discount: hasDiscount ? { ...discount, value: Number(discount.value) } : undefined,
+          acknowledgeCoupleWarning
+        };
+
+        const res = await api.post('/pms/pricing/preview', payload);
+        if (seq !== previewSeqRef.current) return; // Ignore stale response
+
+        const q = res.data.quote;
+        setQuoteState({ quote: q, loading: false, error: '' });
+        if (q) {
+          const breakdown = Array.isArray(q.dailyBreakdown)
+            ? q.dailyBreakdown
+            : (Array.isArray(q.snapshot?.breakdown) ? q.snapshot.breakdown : []);
+          const ratesApplied = q.snapshot?.ratesApplied || {};
+          const addOns = q.addOns || q.snapshot?.addOns || {};
+          const weekdayBreak = breakdown.find(b => b.rateCategory === 'WEEKDAY') || null;
+          const weekendBreak = breakdown.find(b => b.rateCategory === 'WEEKEND') || null;
+          const firstBreak = breakdown[0] || null;
+
+          const getExtra = (b) => (b?.guestCounts?.extraAdults > 0 && b?.extraAdultPricing != null ? String(Math.round(b.extraAdultPricing / b.guestCounts.extraAdults)) : '');
+          const getChild = (b) => (b?.guestCounts?.chargeableChildren > 0 && b?.childPricing != null ? String(Math.round(b.childPricing / b.guestCounts.chargeableChildren)) : '');
+
+          const dCoupleWd = formData.packageType === 'couple' && weekdayBreak?.roomRate != null ? String(weekdayBreak.roomRate) : '';
+          const dCoupleWe = formData.packageType === 'couple' && weekendBreak?.roomRate != null ? String(weekendBreak.roomRate) : '';
+          const dExtraWd = getExtra(weekdayBreak);
+          const dExtraWe = getExtra(weekendBreak);
+          const dGroupWd = formData.packageType === 'group' && weekdayBreak?.roomRate != null ? String(weekdayBreak.roomRate) : '';
+          const dGroupWe = formData.packageType === 'group' && weekendBreak?.roomRate != null ? String(weekendBreak.roomRate) : '';
+          const dChildWd = getChild(weekdayBreak);
+          const dChildWe = getChild(weekendBreak);
+          const dOneDay = formData.packageType === 'oneDay' && (firstBreak?.perPersonRate ?? ratesApplied?.oneDayPerPersonRate) != null
+            ? String(firstBreak?.perPersonRate ?? ratesApplied?.oneDayPerPersonRate) : '';
+          const dRoomAddon = formData.packageType === 'oneDay' && roomAddon && (addOns?.smallRoom?.amount ?? ratesApplied?.roomAddonRate) != null
+            ? String(addOns?.smallRoom?.amount ?? ratesApplied?.roomAddonRate) : '';
+
+          setRateOverrides(prev => {
+            const next = {
+              ...prev,
+              coupleBaseRateWeekday: prev.coupleBaseRateWeekday === '' && dCoupleWd !== '' ? dCoupleWd : prev.coupleBaseRateWeekday,
+              coupleBaseRateWeekend: prev.coupleBaseRateWeekend === '' && dCoupleWe !== '' ? dCoupleWe : prev.coupleBaseRateWeekend,
+              extraAdultRateWeekday: prev.extraAdultRateWeekday === '' && dExtraWd !== '' ? dExtraWd : prev.extraAdultRateWeekday,
+              extraAdultRateWeekend: prev.extraAdultRateWeekend === '' && dExtraWe !== '' ? dExtraWe : prev.extraAdultRateWeekend,
+              groupAdultRateWeekday: prev.groupAdultRateWeekday === '' && dGroupWd !== '' ? dGroupWd : prev.groupAdultRateWeekday,
+              groupAdultRateWeekend: prev.groupAdultRateWeekend === '' && dGroupWe !== '' ? dGroupWe : prev.groupAdultRateWeekend,
+              childRateWeekday: prev.childRateWeekday === '' && dChildWd !== '' ? dChildWd : prev.childRateWeekday,
+              childRateWeekend: prev.childRateWeekend === '' && dChildWe !== '' ? dChildWe : prev.childRateWeekend,
+              oneDayPerPersonRate: prev.oneDayPerPersonRate === '' && dOneDay !== '' ? dOneDay : prev.oneDayPerPersonRate,
+              roomAddonRate: prev.roomAddonRate === '' && dRoomAddon !== '' ? dRoomAddon : prev.roomAddonRate
+            };
+            const changed = Object.keys(next).some(k => next[k] !== prev[k]);
+            return changed ? next : prev;
+          });
+        }
+        setFormData(prev => {
+          const adv = prev.isFullPaid ? q.totalAmount : (parseFloat(prev.advancePayment) || 0);
+          return {
+            ...prev,
+            totalAmount: q.totalAmount,
+            advancePayment: prev.isFullPaid ? q.totalAmount : prev.advancePayment,
+            remainingPayment: Math.max(0, q.totalAmount - adv)
+          };
+        });
+      } catch (err) {
+        if (seq !== previewSeqRef.current) return;
+        setQuoteState({
+          quote: null,
+          loading: false,
+          error: err.response?.data?.message || 'Unable to calculate server pricing preview'
+        });
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [
+    formData.packageType,
+    formData.checkInDate,
+    formData.checkOutDate,
+    formData.guestComposition.adults,
+    formData.mealOption,
+    childrenAges,
+    roomAddon,
+    rateOverrides,
+    discount,
+    acknowledgeCoupleWarning
+  ]);
+
   // Group rooms by Series Name
   const roomsBySeries = useMemo(() => {
     const map = {};
@@ -243,12 +424,19 @@ const ManualBookingForm = () => {
 
     if (name.startsWith('guestComposition.')) {
       const key = name.replace('guestComposition.', '');
-      const numVal = parseInt(value) || 0;
+      const numVal = Math.max(0, parseInt(value, 10) || 0);
+      if (key === 'children') {
+        setChildrenAges(prevAges => {
+          if (numVal === prevAges.length) return prevAges;
+          if (numVal < prevAges.length) return prevAges.slice(0, numVal);
+          return [...prevAges, ...Array.from({ length: numVal - prevAges.length }, () => 8)];
+        });
+      }
       setFormData(prev => ({
         ...prev,
         guestComposition: {
           ...prev.guestComposition,
-          [key]: numVal
+          [key]: key === 'adults' ? Math.max(1, numVal) : numVal
         }
       }));
     } else if (name === 'bookedByName') {
@@ -371,12 +559,57 @@ const ManualBookingForm = () => {
       return;
     }
 
+    // VALIDATION 4: Server-side pricing preview must be fresh & valid
+    if (quoteState.loading || !quoteState.quote || quoteState.error) {
+      toast.error(quoteState.error || 'Waiting for server pricing calculation...');
+      setLoading(false);
+      return;
+    }
+
+    const requiredCoupleWarn = quoteState.quote.warnings?.find(w => w.requiresAcknowledgment);
+    if (requiredCoupleWarn && !acknowledgeCoupleWarning) {
+      toast.error('Please acknowledge the Couple Stay extra-adult warning before proceeding.');
+      setLoading(false);
+      return;
+    }
+
+    const advAmt = Number(formData.advancePayment) || 0;
+    if (advAmt === 0 && !acknowledgeZeroAdvance) {
+      toast.error('No advance payment has been collected for this booking. Please confirm before proceeding.');
+      setLoading(false);
+      return;
+    }
+
+    const hasAnyOverride = (
+      rateOverrides.coupleBaseRate !== '' ||
+      rateOverrides.extraAdultRate !== '' ||
+      rateOverrides.groupAdultRate !== '' ||
+      rateOverrides.childRate !== '' ||
+      rateOverrides.oneDayPerPersonRate !== '' ||
+      rateOverrides.roomAddonRate !== ''
+    );
+    const hasDiscount = discount.type !== 'none' && Number(discount.value) > 0;
+
     try {
       const response = await api.post('/bookings/manual-booking', {
         ...formData,
+        childrenAges,
+        roomAddon: formData.packageType === 'oneDay' ? roomAddon : false,
+        rateOverrides: hasAnyOverride ? rateOverrides : null,
+        discount: hasDiscount ? { ...discount, value: Number(discount.value) } : null,
+        payment: {
+          amount: advAmt,
+          mode: paymentDetails.mode,
+          utr: paymentDetails.utr,
+          screenshotRef: paymentDetails.screenshotRef
+        },
+        acknowledgeCoupleWarning,
+        acknowledgedCoupleWarningCode: requiredCoupleWarn ? requiredCoupleWarn.code : null,
+        acknowledgeZeroAdvance,
+        idempotencyKey: idempotencyKeyRef.current,
         roomIds: selectedRooms,
         roomId: selectedRooms.join(', '),
-        advancePaid: Number(formData.advancePayment) || 0,
+        advancePaid: advAmt,
         adults: formData.guestComposition.adults,
         sessionId
       });
@@ -386,9 +619,33 @@ const ManualBookingForm = () => {
       setMessage('✅ Booking created successfully! You can send confirmation below.');
       setCreatedBooking(newBooking);
 
-      // Reset form fields
+      // Reset ALL form & Sprint 2 states ONLY after confirmed success
       setSelectedRooms([]);
       setTotalCapacity(0);
+      setChildrenAges([]);
+      setRoomAddon(false);
+      setShowOverrides(false);
+      setRateOverrides({
+        coupleBaseRate: '',
+        extraAdultRate: '',
+        groupAdultRate: '',
+        childRate: '',
+        oneDayPerPersonRate: '',
+        roomAddonRate: '',
+        reason: ''
+      });
+      setDiscount({ type: 'none', value: '', reason: '' });
+      setPaymentDetails({
+        mode: 'cash',
+        utr: '',
+        screenshotRef: '',
+        uploading: false,
+        uploadError: ''
+      });
+      setAcknowledgeCoupleWarning(false);
+      setAcknowledgeZeroAdvance(false);
+      setQuoteState({ quote: null, loading: false, error: '' });
+      idempotencyKeyRef.current = generateIdempotencyKey();
       setFormData({
         customerName: '',
         customerPhone: '+91',
@@ -607,9 +864,9 @@ const ManualBookingForm = () => {
                 ))}
               </div>
 
-              {/* Meal Options for One Day Picnic */}
+              {/* Meal Options & Small Room Add-on for One Day Picnic */}
               {formData.packageType === 'oneDay' && (
-                <div className="p-3 rounded-xl bg-sky-50 border border-sky-200 space-y-2">
+                <div className="p-3 rounded-xl bg-sky-50 border border-sky-200 space-y-2.5">
                   <label className="block text-xs font-extrabold text-sky-950">
                     Meal Option Timing:
                   </label>
@@ -641,13 +898,26 @@ const ManualBookingForm = () => {
                       </label>
                     ))}
                   </div>
+
+                  <label className="flex items-center justify-between p-2 rounded-xl bg-white border border-sky-200 cursor-pointer">
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 block">Optional Small Room Add-on</span>
+                      <span className="text-[10px] text-slate-500">Pricing only (+₹2,000); assign room manually if needed</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={roomAddon}
+                      onChange={(e) => setRoomAddon(e.target.checked)}
+                      className="w-4 h-4 accent-sky-600 cursor-pointer"
+                    />
+                  </label>
                 </div>
               )}
 
               {/* Guest Counts */}
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Adults (12+ Yrs)</label>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Adults</label>
                   <input
                     type="number"
                     min="1"
@@ -658,7 +928,7 @@ const ManualBookingForm = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Children (&lt;12 Yrs)</label>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Children</label>
                   <input
                     type="number"
                     min="0"
@@ -669,6 +939,51 @@ const ManualBookingForm = () => {
                   />
                 </div>
               </div>
+
+              {/* Per-Child Ages */}
+              {childrenAges.length > 0 && (
+                <div className="p-2.5 rounded-xl bg-white border border-slate-200 space-y-1.5">
+                  <span className="text-[11px] font-bold text-slate-700 block">
+                    Child Ages (Years):
+                  </span>
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                    {childrenAges.map((age, idx) => (
+                      <div key={idx} className="flex items-center gap-1">
+                        <span className="text-[10px] text-slate-500 font-semibold">#{idx + 1}</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="120"
+                          value={age}
+                          onChange={(e) => {
+                            const val = Math.max(0, parseInt(e.target.value, 10) || 0);
+                            setChildrenAges(prev => prev.map((a, i) => (i === idx ? val : a)));
+                          }}
+                          className="w-full px-2 py-1 text-xs font-bold border border-slate-300 rounded-lg text-center"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Couple 3/5 Adults Warning */}
+              {quoteState.quote?.warnings?.some(w => w.requiresAcknowledgment) && (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 space-y-2">
+                  <p className="text-xs font-bold text-amber-900">
+                    ⚠️ {quoteState.quote.warnings.find(w => w.requiresAcknowledgment).message}
+                  </p>
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-amber-950">
+                    <input
+                      type="checkbox"
+                      checked={acknowledgeCoupleWarning}
+                      onChange={(e) => setAcknowledgeCoupleWarning(e.target.checked)}
+                      className="w-4 h-4 accent-amber-600"
+                    />
+                    <span>I acknowledge the extra adult charge and wish to proceed</span>
+                  </label>
+                </div>
+              )}
             </div>
 
             {/* 3. MULTI-ROOM SELECTION GRID */}
@@ -954,15 +1269,223 @@ const ManualBookingForm = () => {
                 </label>
               </div>
 
+              {/* Date-wise Authoritative Quote Breakdown */}
+              {quoteState.loading && (
+                <p className="text-[11px] text-emerald-300 animate-pulse">Calculating authoritative server quote...</p>
+              )}
+              {quoteState.error && (
+                <p className="text-xs text-rose-400 font-semibold">⚠️ {quoteState.error}</p>
+              )}
+              {quoteState.quote && (
+                <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1.5 text-[11px]">
+                  <div className="flex justify-between text-slate-400">
+                    <span>Package / Duration:</span>
+                    <span className="text-white font-bold uppercase">
+                      {quoteState.quote.packageType} • {quoteState.quote.nights > 0 ? `${quoteState.quote.nights} Night(s)` : 'Day Use'}
+                    </span>
+                  </div>
+                  {quoteState.quote.dailyBreakdown?.map((d, idx) => (
+                    <div key={idx} className="flex justify-between text-slate-300">
+                      <span>{d.dateShort} ({d.dayName.slice(0, 3)}, {d.rateCategory})</span>
+                      <span className="font-semibold">₹{d.dailySubtotal.toLocaleString('en-IN')}</span>
+                    </div>
+                  ))}
+                  {quoteState.quote.originalTotal !== quoteState.quote.totalAmount && (
+                    <div className="flex justify-between text-slate-400 border-t border-slate-800 pt-1">
+                      <span>Original Default Total:</span>
+                      <span>₹{quoteState.quote.originalTotal.toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
+                  {quoteState.quote.discountAmount > 0 && (
+                    <div className="flex justify-between text-amber-300">
+                      <span>Discount ({discount.reason}):</span>
+                      <span>-₹{quoteState.quote.discountAmount.toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Rate Overrides (Permanently Expanded) & Discount Controls */}
+              <div className="space-y-3 border-t border-slate-800 pt-3">
+                <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2.5 text-[11px]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-200">Rate Overrides</span>
+                    <span className="text-[10px] text-slate-400">Edit any applicable rate to recalculate quote</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {formData.packageType === 'couple' && (
+                      <>
+                        {(quoteState.quote?.weekdayNights ?? 1) > 0 && (
+                          <div>
+                            <label className="block text-[10px] text-slate-400 mb-0.5">Couple Base — Weekday (₹)</label>
+                            <input type="number" min="0" placeholder="Weekday Base (₹)" value={rateOverrides.coupleBaseRateWeekday} onChange={e => setRateOverrides(p => ({ ...p, coupleBaseRateWeekday: e.target.value }))} className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white" />
+                          </div>
+                        )}
+                        {(quoteState.quote?.weekendNights ?? 0) > 0 && (
+                          <div>
+                            <label className="block text-[10px] text-slate-400 mb-0.5">Couple Base — Weekend (₹)</label>
+                            <input type="number" min="0" placeholder="Weekend Base (₹)" value={rateOverrides.coupleBaseRateWeekend} onChange={e => setRateOverrides(p => ({ ...p, coupleBaseRateWeekend: e.target.value }))} className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white" />
+                          </div>
+                        )}
+                        {(Number(formData.guestComposition?.adults) || 0) > 2 && (quoteState.quote?.weekdayNights ?? 1) > 0 && (
+                          <div>
+                            <label className="block text-[10px] text-slate-400 mb-0.5">Extra Adult — Weekday (₹)</label>
+                            <input type="number" min="0" placeholder="Weekday Extra Adult (₹)" value={rateOverrides.extraAdultRateWeekday} onChange={e => setRateOverrides(p => ({ ...p, extraAdultRateWeekday: e.target.value }))} className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white" />
+                          </div>
+                        )}
+                        {(Number(formData.guestComposition?.adults) || 0) > 2 && (quoteState.quote?.weekendNights ?? 0) > 0 && (
+                          <div>
+                            <label className="block text-[10px] text-slate-400 mb-0.5">Extra Adult — Weekend (₹)</label>
+                            <input type="number" min="0" placeholder="Weekend Extra Adult (₹)" value={rateOverrides.extraAdultRateWeekend} onChange={e => setRateOverrides(p => ({ ...p, extraAdultRateWeekend: e.target.value }))} className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white" />
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {formData.packageType === 'group' && (
+                      <>
+                        {(quoteState.quote?.weekdayNights ?? 1) > 0 && (
+                          <div>
+                            <label className="block text-[10px] text-slate-400 mb-0.5">Group Adult — Weekday (₹)</label>
+                            <input type="number" min="0" placeholder="Weekday Group Adult (₹)" value={rateOverrides.groupAdultRateWeekday} onChange={e => setRateOverrides(p => ({ ...p, groupAdultRateWeekday: e.target.value }))} className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white" />
+                          </div>
+                        )}
+                        {(quoteState.quote?.weekendNights ?? 0) > 0 && (
+                          <div>
+                            <label className="block text-[10px] text-slate-400 mb-0.5">Group Adult — Weekend (₹)</label>
+                            <input type="number" min="0" placeholder="Weekend Group Adult (₹)" value={rateOverrides.groupAdultRateWeekend} onChange={e => setRateOverrides(p => ({ ...p, groupAdultRateWeekend: e.target.value }))} className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white" />
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {formData.packageType !== 'oneDay' ? (
+                      childrenAges.some(age => Number(age) >= 6) && (
+                        <>
+                          {(quoteState.quote?.weekdayNights ?? 1) > 0 && (
+                            <div>
+                              <label className="block text-[10px] text-slate-400 mb-0.5">Child Rate — Weekday (₹)</label>
+                              <input type="number" min="0" placeholder="Weekday Child (₹)" value={rateOverrides.childRateWeekday} onChange={e => setRateOverrides(p => ({ ...p, childRateWeekday: e.target.value }))} className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white" />
+                            </div>
+                          )}
+                          {(quoteState.quote?.weekendNights ?? 0) > 0 && (
+                            <div>
+                              <label className="block text-[10px] text-slate-400 mb-0.5">Child Rate — Weekend (₹)</label>
+                              <input type="number" min="0" placeholder="Weekend Child (₹)" value={rateOverrides.childRateWeekend} onChange={e => setRateOverrides(p => ({ ...p, childRateWeekend: e.target.value }))} className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white" />
+                            </div>
+                          )}
+                        </>
+                      )
+                    ) : (
+                      <>
+                        <div>
+                          <label className="block text-[10px] text-slate-400 mb-0.5">Per-Person Rate (₹)</label>
+                          <input type="number" min="0" placeholder="Per-Person (₹)" value={rateOverrides.oneDayPerPersonRate} onChange={e => setRateOverrides(p => ({ ...p, oneDayPerPersonRate: e.target.value }))} className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white" />
+                        </div>
+                        {roomAddon && (
+                          <div>
+                            <label className="block text-[10px] text-slate-400 mb-0.5">Room Add-on (₹)</label>
+                            <input type="number" min="0" placeholder="Room Add-on (₹)" value={rateOverrides.roomAddonRate} onChange={e => setRateOverrides(p => ({ ...p, roomAddonRate: e.target.value }))} className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white" />
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  <input type="text" placeholder="Override reason (optional)" value={rateOverrides.reason} onChange={e => setRateOverrides(p => ({ ...p, reason: e.target.value }))} className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white" />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+                  <select
+                    value={discount.type}
+                    onChange={e => setDiscount(p => ({ ...p, type: e.target.value }))}
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white"
+                  >
+                    <option value="none">No Discount</option>
+                    <option value="fixed">Fixed (₹)</option>
+                    <option value="percentage">Percent (%)</option>
+                  </select>
+                  {discount.type !== 'none' && (
+                    <>
+                      <input type="number" min="0" placeholder="Value" value={discount.value} onChange={e => setDiscount(p => ({ ...p, value: e.target.value }))} className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white" />
+                      <input type="text" placeholder="Discount reason (optional)" value={discount.reason} onChange={e => setDiscount(p => ({ ...p, reason: e.target.value }))} className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white" />
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Payment Mode, UTR & Screenshot */}
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 mb-1">Payment Mode</label>
+                  <select
+                    value={paymentDetails.mode}
+                    onChange={e => setPaymentDetails(p => ({ ...p, mode: e.target.value }))}
+                    className="w-full px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white"
+                  >
+                    <option value="cash">Cash</option>
+                    <option value="upi">UPI</option>
+                    <option value="card">Card</option>
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 mb-1">UTR / Ref (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="UTR / Transaction Ref"
+                    value={paymentDetails.utr}
+                    onChange={e => setPaymentDetails(p => ({ ...p, utr: e.target.value }))}
+                    className="w-full px-2 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="text-[11px] space-y-1">
+                <label className="block text-[10px] font-bold text-slate-400">Payment Screenshot (Optional, Private Cloud Storage)</label>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setPaymentDetails(p => ({ ...p, uploading: true, uploadError: '' }));
+                    try {
+                      const base64 = await new Promise((resolve, reject) => {
+                        const r = new FileReader();
+                        r.onload = () => resolve(r.result);
+                        r.onerror = reject;
+                        r.readAsDataURL(file);
+                      });
+                      const up = await api.post('/pms/uploads/payment-screenshot', {
+                        fileBase64: base64,
+                        mimeType: file.type,
+                        originalName: file.name
+                      });
+                      setPaymentDetails(p => ({ ...p, screenshotRef: up.data.screenshotRef, uploading: false }));
+                      toast.success('Payment screenshot uploaded');
+                    } catch (err) {
+                      setPaymentDetails(p => ({
+                        ...p,
+                        uploading: false,
+                        uploadError: err.response?.data?.message || 'Screenshot upload failed'
+                      }));
+                    }
+                  }}
+                  className="w-full text-[11px] text-slate-300"
+                />
+                {paymentDetails.uploadError && (
+                  <p className="text-[10px] text-amber-300">ℹ️ {paymentDetails.uploadError}</p>
+                )}
+              </div>
+
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="block text-[10px] font-extrabold text-slate-300 mb-1">Total (₹) *</label>
+                  <label className="block text-[10px] font-extrabold text-slate-300 mb-1">Final Total (₹)</label>
                   <input
                     type="number"
-                    name="totalAmount"
+                    readOnly
                     value={formData.totalAmount}
-                    onChange={handleInputChange}
-                    required
                     className="w-full px-2.5 py-2 text-sm font-extrabold border border-slate-700 rounded-xl bg-slate-900 text-white text-center shadow-inner"
                   />
                 </div>
@@ -971,6 +1494,7 @@ const ManualBookingForm = () => {
                   <label className="block text-[10px] font-extrabold text-emerald-400 mb-1">Advance (₹)</label>
                   <input
                     type="number"
+                    min="0"
                     name="advancePayment"
                     value={formData.advancePayment}
                     onChange={handleInputChange}
@@ -989,10 +1513,28 @@ const ManualBookingForm = () => {
                 </div>
               </div>
 
+              {/* Zero-Advance Warning Acknowledgment */}
+              {(Number(formData.advancePayment) || 0) === 0 && (
+                <div className="p-2.5 rounded-xl bg-amber-950/60 border border-amber-600/60 space-y-1.5">
+                  <p className="text-[11px] font-bold text-amber-300">
+                    ⚠️ No advance payment has been collected for this booking. Please confirm before proceeding.
+                  </p>
+                  <label className="flex items-center gap-2 text-[11px] text-amber-100 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={acknowledgeZeroAdvance}
+                      onChange={e => setAcknowledgeZeroAdvance(e.target.checked)}
+                      className="w-4 h-4 accent-amber-500"
+                    />
+                    <span>Confirm Unpaid / ₹0 Advance Booking</span>
+                  </label>
+                </div>
+              )}
+
               {/* Desktop Submit Button (Hidden on Mobile) */}
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || quoteState.loading || Boolean(quoteState.error)}
                 className="hidden md:flex w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-[0.99] text-white font-display font-extrabold text-sm shadow-lg transition-all items-center justify-center gap-2 disabled:opacity-50"
               >
                 {loading ? 'Creating Reservation...' : '✓ Create & Confirm Reservation'}

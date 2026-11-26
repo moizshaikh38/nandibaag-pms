@@ -17,6 +17,12 @@ const { formatDateTableForPrompt } = require('./dateHelper');
 const crypto = require('crypto');
 const { sanitizeBookingDraft } = require('../utils/sanitizeBookingDraft');
 const logger = require('../config/logger');
+const {
+  routeIncomingMessage,
+  detectConversationTopic,
+  isExactPaymentIntent,
+  isExactVideoIntent
+} = require('./messageRouter');
 
 // ⚠️ AVAILABILITY CHECK KILL SWITCH — Set to true to disable all live DB availability queries.
 // When true, customers are directed to call staff for availability instead.
@@ -113,21 +119,26 @@ function extractBookingDetails(text, today = new Date()) {
 
     let targetDate = null;
 
-    // STEP 1: Handle relative dates first (tomorrow, next week, today)
-    if (lower.includes('tomorrow') || lower.includes('kal') || lower.includes('udya')) {
+    // STEP 1: Handle relative dates first with word-boundary tokens (tomorrow, kal, udya, today, aaj, parso)
+    if (/\b(tomorrow|kal|udya)\b/i.test(lower)) {
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
       targetDate = tomorrow;
       console.log('[DateParsing] "Tomorrow" detected →', targetDate.toISOString().split('T')[0]);
-    } else if (lower.includes('next week')) {
+    } else if (/\b(next\s+week)\b/i.test(lower)) {
       const nextWeek = new Date(today);
       nextWeek.setDate(nextWeek.getDate() + 7);
       targetDate = nextWeek;
       console.log('[DateParsing] "Next week" detected →', targetDate.toISOString().split('T')[0]);
-    } else if (lower.includes('today') || lower.includes('aaj')) {
+    } else if (/\b(today|aaj)\b/i.test(lower)) {
       targetDate = new Date(today);
       console.log('[DateParsing] "Today" detected →', targetDate.toISOString().split('T')[0]);
-    } else if (lower.includes('this weekend') || lower.includes('next weekend') || lower.includes('weekend')) {
+    } else if (/\b(parso|parva)\b/i.test(lower)) {
+      const dayAfter = new Date(today);
+      dayAfter.setDate(dayAfter.getDate() + 2);
+      targetDate = dayAfter;
+      console.log('[DateParsing] "Parso" detected →', targetDate.toISOString().split('T')[0]);
+    } else if (/\b(this\s+weekend|next\s+weekend|weekend)\b/i.test(lower)) {
       targetDate = new Date(today);
       const currentDay = targetDate.getDay(); // 0 is Sun, 5 is Fri, 6 is Sat
       const daysUntilFriday = (5 - currentDay + 7) % 7 || 7;
@@ -232,7 +243,6 @@ function extractBookingDetails(text, today = new Date()) {
 
       console.log('[DateValidation:DEBUG]', {
         systemNow: new Date().toISOString(),
-        currentDateExpected: '2026-08-05',
         customerInput: text,
         extractedDates: { checkInDate: result.date, checkOutDate: checkOutStr },
         calculatedDays: n,
@@ -344,20 +354,7 @@ function detectBookingType(text) {
   return null;
 }
 
-function detectConversationTopic(text) {
-  const lower = (text || '').toLowerCase();
-  if (/\b(discount|offer|kam|kum|less|negotiate|budget|best price|final price|swast|kami)\b/i.test(lower)) return 'discount_or_price_negotiation';
-  if (/\b(day\s*picnic|one\s*day|picnic|water\s*park)\b/i.test(lower)) return 'day_picnic';
-  if (/\b(couple|husband|wife|anniversary)\b/i.test(lower)) return 'couple_stay';
-  if (/\b(group|family|friends|corporate|team)\b/i.test(lower)) return 'group_stay';
-  if (/\b(price|rate|cost|charge|package|kitn|kiti|kay)\b/i.test(lower)) return 'pricing';
-  if (/\b(available|availability|room|date|check-?in|check-?out|tarikh|tarakh)\b/i.test(lower)) return 'availability';
-  if (/\b(photo|photos|pic|image|gallery)\b/i.test(lower)) return 'photos';
-  if (/\b(location|address|map|maps|kaha|kuth)\b/i.test(lower)) return 'location';
-  if (/\b(payment|advance|upi|cash|card|refund|cancel)\b/i.test(lower)) return 'payment_or_policy';
-  if (/\b(food|breakfast|lunch|dinner|tea|veg|jain|non-veg|nonveg)\b/i.test(lower)) return 'food';
-  return null;
-}
+// detectConversationTopic is imported from ./messageRouter
 
 function updateConversationState(chat, text, sender) {
   if (!chat || !text) return;
@@ -458,7 +455,12 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
     messageText = rawMessageText;
 
     const hasMedia = !!(msg.message?.imageMessage || msg.message?.videoMessage || msg.message?.audioMessage || msg.message?.documentMessage || msg.message?.stickerMessage);
-    const messageType = hasMedia ? 'image' : 'text';
+    let messageType = 'text';
+    if (msg.message?.imageMessage) messageType = 'image';
+    else if (msg.message?.videoMessage) messageType = 'video';
+    else if (msg.message?.audioMessage) messageType = 'audio';
+    else if (msg.message?.documentMessage) messageType = 'document';
+    else if (msg.message?.stickerMessage) messageType = 'sticker';
     
     // Robust deduplication using sender + message content hash + 10s time window
     const msgHash = getMessageHash(rawJid, messageText || (hasMedia ? 'media_' + (msg.key?.id || msg.messageTimestamp || Date.now()) : ''), channel);
@@ -482,52 +484,13 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
     
     console.log('[MessageHandler:ENTRY] Processing message');
     console.log('[MessageHandler:ENTRY] From:', customerPhone);
-    let isMediaAck = false;
-    let mediaAckText = '';
 
     console.log('[Media:Check]', {
       hasMedia,
-      messageType: msg.message?.imageMessage ? 'image' : messageType,
-      messageKeys: Object.keys(msg.message || {})
+      messageType,
+      hasCaption: Boolean(rawMessageText)
     });
 
-    // MEDIA ACKNOWLEDGMENT: If media sent without caption text
-    if (hasMedia && !rawMessageText) {
-      console.log('[Media:Acknowledgment] Media received without caption');
-      isMediaAck = true;
-      
-      if (msg.message?.imageMessage) {
-        mediaAckText = '📸 Photo mil gayi! Kya ye room/property ke baare mein hai? ' +
-                      'Ya booking details poochni hain? Text mein likho toh mein help kar dunga.';
-      } 
-      else if (msg.message?.documentMessage) {
-        mediaAckText = '📄 Document mil gayi! Mujhe PDF read nahi kar sakta. ' +
-                      'Kripya booking details, dates, aur guest count text mein likho.';
-      } 
-      else if (msg.message?.audioMessage) {
-        mediaAckText = '🎙️ Voice note mil gayi! Mujhe audio samajhne mein mushkili hoti hai. ' +
-                      'Kripya apne booking details text mein likho - ' +
-                      'dates, guests, package type (Couple/Group/Day Picnic).';
-      } 
-      else if (msg.message?.videoMessage) {
-        mediaAckText = '🎥 Video mil gayi! Mujhe video dekh nahi sakta, lekin ' +
-                      'text mein bataao kya poochna hai. Dates, guests, aur package type likho.';
-      }
-      else if (msg.message?.stickerMessage) {
-        mediaAckText = '😊 Sticker mil gayi! Lekin mujhe booking mein help karne ke liye ' +
-                      'dates aur guest details text mein chahiye. Likho na! 😊';
-      }
-      
-      messageText = mediaAckText;
-      console.log('[Media:Acknowledgment] Generated response:', mediaAckText.slice(0, 50));
-    }
-
-    console.log('[Media:Result]', {
-      hasMedia,
-      messageText: (messageText || '').slice(0, 50),
-      messageLength: (messageText || '').length
-    });
-    
     if (!messageText && !hasMedia) {
       logger.debug(`Ignoring non-text/non-media message from ${customerPhone}`);
       return;
@@ -625,7 +588,7 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
     
     const senderRole = msg.key?.fromMe ? 'agent' : (isBotReplyText(messageText) ? 'bot' : 'customer');
     
-    const customerText = isMediaAck ? (rawMessageText || '📷 Photo') : (messageText || '[Media]');
+    const customerText = rawMessageText || (hasMedia ? `[${messageType.toUpperCase()}]` : '');
     const mediaUrl = msg.message?.imageMessage?.url || msg.message?.videoMessage?.url || msg.message?.documentMessage?.url || null;
 
     chat.messages.push({
@@ -639,10 +602,7 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
     updateConversationState(chat, customerText, senderRole);
     
     chat.lastMessageAt = new Date();
-    try { await cancelPendingFollowUps(chat._id, 'customer_replied'); } catch (_) {}
 
-
-    
     console.log('[ChatHistory:DEBUG] Loaded messages count:', chat.messages?.length || 0);
     console.log('[ChatHistory:DEBUG] Last 3 messages:',
       chat.messages?.slice(-3).map(m => ({ sender: m.sender, text: (m.text || '').slice(0, 50) }))
@@ -660,6 +620,38 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
     }
 
     emitRealtimeUpdate(chat, customerText, 'customer');
+
+    // ── V2 CENTRALIZED SELECTIVE-RESPONSE ROUTER ──
+    const route = routeIncomingMessage(messageText, chat, hasMedia);
+    console.log('[MessageHandler:ROUTER]', {
+      action: route.action,
+      category: route.category,
+      intent: route.intent,
+      suppressAvailability: route.suppressAvailability,
+      reason: route.reason
+    });
+
+    if (route.action === 'SILENT') {
+      // ── INTENTIONAL SILENCE ──
+      // 1. Customer message already saved and emitted to dashboard
+      // 2. Extract and preserve any useful details into bookingDraft without replying
+      const silentExtracted = extractBookingDetails(messageText);
+      if (silentExtracted.date) chat.bookingDraft.date = silentExtracted.date;
+      if (silentExtracted.adults) chat.bookingDraft.adults = silentExtracted.adults;
+      if (silentExtracted.nights) chat.bookingDraft.nights = silentExtracted.nights;
+      if (silentExtracted.kids) chat.bookingDraft.kids = silentExtracted.kids;
+      chat.bookingDraft = sanitizeBookingDraft(chat.bookingDraft);
+
+      await chat.save();
+      if (sock) {
+        try { await sock.sendPresenceUpdate('paused', msg.key.remoteJid); } catch (_) {}
+      }
+      logger.info(`[MessageHandler:SILENCE] Intentional silence for ${customerPhone} (category: ${route.category}, reason: ${route.reason})`);
+      return; // EXIT CLEANLY WITHOUT SENDING WHATSAPP MESSAGE OR GENERATING BOT MESSAGE!
+    }
+
+    // Since route.action === 'REPLY', customer is engaged in active resort query:
+    try { await cancelPendingFollowUps(chat._id, 'customer_replied'); } catch (_) {}
     
     // Primary Reply Computation Step
     try {
@@ -684,6 +676,14 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
 
       if (discountIntent) {
         addSystemNote('[SYSTEM NOTE: Customer is asking for a discount / lower price. Politely say rates are already best/final because food, activities, and facilities are included. For special approval or group offer, ask them to call staff at 9257657664.]');
+      }
+
+      if (route.suppressAvailability) {
+        addSystemNote(`[SYSTEM NOTE — MANDATORY: AVAILABILITY RESPONSE DISABLED.
+The customer also asked about availability.
+Do not confirm, deny, imply, estimate, infer, guess, or discuss availability.
+Answer ONLY the customer's other answerable Nandibaag Resort questions.
+Do not tell them to call merely because they asked availability unless another business rule independently requires it.]`);
       }
       
       const extracted = extractBookingDetails(messageText);
@@ -861,7 +861,7 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
           chat.bookingDraft.customerName = candidateName;
           chat.bookingDraft.nameRequested = false;
           chat.bookingDraft.bookingStep = 6;
-          chat.bookingStage = 'completed';
+          chat.bookingStage = 'name_given';
           console.log('[BookingFlow] Name collected:', candidateName);
           try { await chat.save(); } catch (_) {}
 
@@ -875,8 +875,8 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
             priceStr = `₹${pricingResult.raw.grandTotal.toLocaleString('en-IN')}`;
           } catch (_) {}
 
-          addSystemNote(`[SYSTEM NOTE: Customer provided their name: "${candidateName}". Output the exact FINAL CONFIRMATION SUMMARY below (show full pricing with TOTAL):
-✓ FINAL BOOKING CONFIRMATION
+          addSystemNote(`[SYSTEM NOTE: Customer provided their name: "${candidateName}". Output the exact BOOKING REQUEST SUMMARY below (show full pricing with TOTAL):
+✓ BOOKING REQUEST SUMMARY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 👤 Name: ${candidateName}
@@ -886,8 +886,8 @@ async function handleMessage(sessionId, msg, channel = 'whatsapp-web') {
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📞 Booking confirm karne ke liye call karein: 9257657664
-Our team will complete your booking! 🎉]`);
+📞 To confirm your booking and check availability, call: 9257657664
+Our team will assist you! 🎉]`);
         }
       } else if (isConfirmIntent && chat.bookingDraft.date && chat.bookingDraft.adults && chat.bookingDraft.availabilityConfirmed && !chat.bookingDraft.customerName) {
         console.log('[BookingFlow] Customer name not collected yet. Requesting name.');
@@ -898,10 +898,7 @@ Our team will complete your booking! 🎉]`);
         addSystemNote('[SYSTEM NOTE: Customer wants to confirm booking. Ask customer name: "Booking confirm karne ke liye aapka naam bata dijiye?"]');
       }
 
-      if (isMediaAck) {
-        replyToSend = mediaAckText;
-      } else {
-        // ── INJECT DATE TABLE INTO SYSTEM NOTES ──
+      // ── INJECT DATE TABLE INTO SYSTEM NOTES ──
         // Whenever check-in/check-out dates are known, inject a pre-computed
         // date table so the LLM reads exact day names instead of guessing.
         const draftForDateTable = chat.bookingDraft || {};
@@ -980,19 +977,15 @@ CRITICAL RULE: If date is already in context above, DO NOT ask "Check-in date ba
 
         const systemNotes = systemNotesList.join('\\n\\n');
         
-        // CHECK 1: Videos
-        if (msgLower.includes('video') || msgLower.includes('videos')) {
+        // CHECK 1: Videos (Safe word-boundary token)
+        if (isExactVideoIntent(messageText)) {
           console.log('[MessageHandler] Matched: VIDEOS');
           replyToSend = `🎥 Staff room videos jald hi share karenge! 
 Aap booking confirm karke waqt par videos dekh sakenge. 
 Kya aap booking karna chahte hain?`;
         }
-        // CHECK 2: Payment
-        else if (msgLower.includes('payment') || 
-            msgLower.includes('scanner') || 
-            msgLower.includes('upi') ||
-            msgLower.includes('how to pay') ||
-            msgLower.includes('payment method')) {
+        // CHECK 2: Payment (Safe word-boundary token)
+        else if (isExactPaymentIntent(messageText)) {
           console.log('[MessageHandler] Matched: PAYMENT');
           replyToSend = `💳 Staff aapko jald hi payment details provide karenge!
 Booking ke baad payment link share hoga.
@@ -1003,15 +996,17 @@ Kya aap booking confirm karna chahte hain?`;
           console.log('[MessageHandler] No keyword match - using AI');
           replyToSend = await getAIResponse(chat, messageText, settings, systemNotes);
           
-          if (AVAILABILITY_CHECK_DISABLED) {
+          if (AVAILABILITY_CHECK_DISABLED || route.suppressAvailability) {
             // Remove lines like "rooms available", "rooms booked", etc
             replyToSend = replyToSend
-              .replace(/\d+ room\(s\) available/gi, '')
-              .replace(/all rooms? booked/gi, '')
-              .replace(/available for/gi, '');
+              .replace(/\d+\s*room\(s\)\s*available/gi, '')
+              .replace(/all\s*rooms?\s*booked/gi, '')
+              .replace(/available\s*for/gi, '')
+              .replace(/we have availability for your dates!?/gi, '')
+              .replace(/rooms? (are|is) available/gi, '');
             
             // Only add "Call to confirm" if the message is actually about booking (has dates or guest counts)
-            const hasDatePatterns = /(\d{1,2}\s*(sep|aug|september|august|nov|dec|jan|feb|mar|apr|may|jun|jul|oct|january|february|march|april|june|july|october|november|december)|(\d{1,2})[\/-](\d{1,2})|tomorrow|kal|parso)/i.test(msgLower);
+            const hasDatePatterns = /(\d{1,2}\s*(sep|aug|september|august|nov|dec|jan|feb|mar|apr|may|jun|jul|oct|january|february|march|april|june|july|october|november|december)|(\d{1,2})[\/-](\d{1,2})|\b(tomorrow|kal|parso)\b)/i.test(msgLower);
             const hasGuestCount = /(person|people|adult|kid|child|member|log|guests?|couple|group|family)/i.test(msgLower);
             const isBookingQuery = hasDatePatterns && hasGuestCount;
             const isConfirmQuery = /\b(confirm|book|booking|ready|kardo|kar do)\b/i.test(msgLower);
@@ -1021,11 +1016,14 @@ Kya aap booking confirm karna chahte hain?`;
             }
           }
         }
-      }
     } catch (aiError) {
       logger.error(`[MessageHandler] Error in AI/computation flow: ${aiError.message}`);
       logger.error(`STACK: ${aiError.stack}`);
-      replyToSend = buildEmergencyFallback(messageText, chat?.language);
+      if (route && route.action === 'REPLY') {
+        replyToSend = buildEmergencyFallback(messageText, chat?.language);
+      } else {
+        replyToSend = null;
+      }
     }
 
   } catch (outerErr) {
@@ -1033,7 +1031,7 @@ Kya aap booking confirm karna chahte hain?`;
     console.error('[MessageHandler:CRASH] Stack:', outerErr.stack);
     logger.error(`[MessageHandler] Outer error: ${outerErr.message}`);
     logger.error(`OUTER STACK: ${outerErr.stack}`);
-    replyToSend = "Samajh nahi aaya, phir se try karo 😊 Ya call karein: 9257657664";
+    replyToSend = null;
   }
 
   // ─── INDEPENDENT REPLY SEND BLOCK ───────────────────────────────────
@@ -1046,7 +1044,12 @@ Kya aap booking confirm karna chahte hain?`;
     }
 
     if (!replyToSend || replyToSend.trim() === '') {
-      replyToSend = "Samajh nahi aaya, phir se try karo 😊 Ya call karein: 9257657664";
+      if (route && route.action === 'REPLY') {
+        replyToSend = buildEmergencyFallback(messageText, chat?.language);
+      } else {
+        // Intentional silence or error on unrouted query: do not send anything!
+        return;
+      }
     }
 
     const formattedMessage = replyToSend

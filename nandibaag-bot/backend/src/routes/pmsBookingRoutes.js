@@ -1,6 +1,7 @@
 const express = require('express');
 const Joi = require('joi');
 const mongoose = require('mongoose');
+const logger = require('../config/logger');
 const { verifyToken, requireAdmin } = require('../middleware/auth');
 const {
   getDetailedAvailability,
@@ -11,6 +12,39 @@ const {
 } = require('../services/availabilityService');
 const { Chat, Booking, Room, RoomBooking } = require('../models');
 const { logActivity } = require('../utils/activityLogger');
+const { calculateBookingQuote, isWeekend, PricingValidationError } = require('../services/pricingService');
+const {
+  VALID_PAYMENT_MODES,
+  PaymentConcurrencyError,
+  computePaymentSummary,
+  syncBookingPaymentFields,
+  attachPaymentSummary,
+  persistPaymentAtomically
+} = require('../services/paymentSyncService');
+const {
+  RoomConflictError,
+  claimRoomNights,
+  releaseRoomNights
+} = require('../services/roomNightLockService');
+const {
+  BookingBusinessError,
+  prepareAuthoritativeBookingData,
+  logManualBookingAuditEvents
+} = require('../services/manualBookingProcessor');
+const {
+  IdempotencyError,
+  extractIdempotencyKey,
+  acquireIdempotencyLock,
+  attachBookingToIdempotency,
+  completeIdempotency,
+  releaseIdempotencyOnFailure
+} = require('../services/idempotencyService');
+const {
+  uploadPaymentScreenshot,
+  getSignedScreenshotAccess,
+  StorageValidationError,
+  StorageNotConfiguredError
+} = require('../services/receiptStorageService');
 
 const router = express.Router();
 
@@ -71,22 +105,141 @@ const manualBookingSchema = Joi.object({
   guestAddress: Joi.string().allow('', null).optional(),
   guestIdProofType: Joi.string().valid('aadhaar', 'pan', 'license').allow(null).optional(),
   guestIdProofPhoto: Joi.string().allow('', null).optional(),
-  bookingType: Joi.string().valid('couple', 'group', 'picnic').required(),
-  checkInDate: Joi.string().isoDate().required(),
-  checkOutDate: Joi.string().isoDate().required(),
+  bookingType: Joi.string().valid('couple', 'group', 'picnic', 'oneDay', 'one-day-picnic', 'overnight', 'dayuse').required(),
+  packageType: Joi.string().valid('couple', 'group', 'picnic', 'oneDay', 'one-day-picnic', 'overnight', 'dayuse').optional(),
+  mealOption: Joi.string().allow('', null).optional(),
+  checkInDate: Joi.string().required(),
+  checkOutDate: Joi.string().allow('', null).optional(),
   adults: Joi.number().integer().min(1).required(),
-  kids: Joi.array().items(Joi.object({ age: Joi.number().integer().min(0), rate: Joi.number().min(0) })).default([]),
-  totalAmount: Joi.number().min(0).required(),
-  advancePayment: Joi.number().min(0).allow(null).optional().default(0),
-  remainingPayment: Joi.number().min(0).allow(null).optional().default(0),
-  paymentStatus: Joi.string().valid('unpaid', 'partially_paid', 'paid').allow('', null).optional(),
+  childrenAges: Joi.array().items(Joi.number().integer().min(0).max(120)).optional(),
+  kids: Joi.array().items(
+    Joi.alternatives().try(
+      Joi.number().integer().min(0).max(120),
+      Joi.object({ age: Joi.number().integer().min(0).max(120), rate: Joi.number().min(0) }).unknown(true)
+    )
+  ).default([]),
+  roomAddon: Joi.alternatives().try(Joi.boolean(), Joi.object({ enabled: Joi.boolean() }).unknown(true)).optional(),
+  rateOverrides: Joi.object().unknown(true).allow(null).optional(),
+  discount: Joi.object().unknown(true).allow(null).optional(),
+  payment: Joi.object().unknown(true).allow(null).optional(),
+  advancePayment: Joi.number().min(0).allow(null).optional(),
+  paymentMode: Joi.string().allow('', null).optional(),
+  utr: Joi.string().allow('', null).optional(),
+  paymentScreenshotRef: Joi.string().allow('', null).optional(),
+  acknowledgeCoupleWarning: Joi.boolean().optional(),
+  acknowledgedCoupleWarningCode: Joi.string().allow('', null).optional(),
+  acknowledgeZeroAdvance: Joi.boolean().optional(),
   priceBreakdown: Joi.string().allow('', null).optional(),
   specialRequests: Joi.string().allow('', null).optional(),
   roomId: Joi.string().hex().length(24).allow(null).optional(),
   roomIds: Joi.array().items(Joi.string().hex().length(24)).optional()
-});
+}).unknown(true);
+
+const pricingPreviewSchema = Joi.object({
+  packageType: Joi.string().trim().required(),
+  checkInDate: Joi.string().trim().required(),
+  checkOutDate: Joi.string().trim().allow('', null).optional(),
+  adults: Joi.number().integer().min(1).required(),
+  childrenAges: Joi.array().items(Joi.number().integer().min(0).max(120)).optional(),
+  kids: Joi.array().items(
+    Joi.alternatives().try(
+      Joi.number().integer().min(0).max(120),
+      Joi.object({ age: Joi.number().integer().min(0).max(120).required() }).unknown(true)
+    )
+  ).optional(),
+  mealOption: Joi.string().trim().allow('', null).optional(),
+  roomAddon: Joi.alternatives().try(
+    Joi.boolean(),
+    Joi.object({ enabled: Joi.boolean().required() }).unknown(true)
+  ).optional(),
+  acknowledgeCoupleWarning: Joi.boolean().optional()
+}).unknown(true); // unknown(true) allows stripping/ignoring any client-injected totalAmount safely
 
 // ── Routes ───────────────────────────────────────────────────────────
+
+/**
+ * POST /api/pms/pricing/preview
+ * Authoritative server-side pricing preview (read-only, zero DB/availability mutations).
+ * Ignores any client-provided totalAmount.
+ */
+router.post('/pricing/preview', verifyToken, (req, res, next) => {
+  try {
+    const { error, value } = pricingPreviewSchema.validate(req.body || {});
+    if (error) {
+      return res.status(400).json({ success: false, message: error.details[0].message });
+    }
+
+    const quote = calculateBookingQuote({
+      packageType: value.packageType,
+      checkInDate: value.checkInDate,
+      checkOutDate: value.checkOutDate || undefined,
+      adults: value.adults,
+      childrenAges: value.childrenAges !== undefined ? value.childrenAges : value.kids,
+      mealOption: value.mealOption || undefined,
+      roomAddon: value.roomAddon,
+      rateOverrides: value.rateOverrides || null,
+      discount: value.discount || null,
+      acknowledgeCoupleWarning: Boolean(value.acknowledgeCoupleWarning),
+      actor: req.user ? { userId: req.user.id, name: req.user.name || req.user.email, email: req.user.email } : null
+    });
+
+    res.json({
+      success: true,
+      quote,
+      pricingSnapshot: quote.snapshot,
+      warnings: quote.warnings
+    });
+  } catch (err) {
+    if (err instanceof PricingValidationError || err.name === 'PricingValidationError') {
+      return res.status(400).json({ success: false, code: err.code, message: err.message });
+    }
+    next(err);
+  }
+});
+
+/**
+ * POST /api/pms/uploads/payment-screenshot
+ * Authenticated upload boundary for private payment screenshot storage.
+ * Rejects invalid types/magic bytes/oversized files; returns 503 if cloud storage is not configured.
+ */
+router.post('/uploads/payment-screenshot', verifyToken, async (req, res, next) => {
+  try {
+    const { fileBase64, mimeType, originalName } = req.body || {};
+    if (!fileBase64 || typeof fileBase64 !== 'string') {
+      return res.status(400).json({ success: false, code: 'EMPTY_FILE', message: 'fileBase64 is required' });
+    }
+    const cleanBase64 = fileBase64.replace(/^data:[^;]+;base64,/, '');
+    const buffer = Buffer.from(cleanBase64, 'base64');
+
+    const result = await uploadPaymentScreenshot({ buffer, mimeType, originalName });
+    res.status(201).json({ success: true, ...result });
+  } catch (err) {
+    if (err instanceof StorageValidationError) {
+      return res.status(err.statusCode).json({ success: false, code: err.code, message: err.message });
+    }
+    if (err instanceof StorageNotConfiguredError) {
+      return res.status(err.statusCode).json({ success: false, code: err.code, message: err.message });
+    }
+    next(err);
+  }
+});
+
+/**
+ * GET /api/pms/uploads/payment-screenshot
+ * Authenticated signed access endpoint for private payment screenshots.
+ */
+router.get('/uploads/payment-screenshot', verifyToken, async (req, res, next) => {
+  try {
+    const ref = req.query.ref;
+    const access = await getSignedScreenshotAccess(ref);
+    res.json({ success: true, ...access });
+  } catch (err) {
+    if (err instanceof StorageValidationError || err instanceof StorageNotConfiguredError) {
+      return res.status(err.statusCode).json({ success: false, code: err.code, message: err.message });
+    }
+    next(err);
+  }
+});
 
 /**
  * GET /api/pms/pending-handovers
@@ -179,7 +332,7 @@ router.post('/bookings', verifyToken, async (req, res, next) => {
       checkOutDate: draft.date && draft.nights
         ? new Date(new Date(draft.date).getTime() + (draft.nights || 1) * 86400000)
         : new Date(Date.now() + 86400000),
-      isWeekend: [0, 6].includes(new Date(draft.date || Date.now()).getDay()),
+      isWeekend: isWeekend(draft.date || new Date()),
       adults: draft.adults || 1,
       kids: (draft.kids || []).map(k => ({ age: k.age, rate: 0 })),
       totalAmount: draft.calculatedPrice || 0,
@@ -189,6 +342,7 @@ router.post('/bookings', verifyToken, async (req, res, next) => {
     });
 
     await booking.save();
+    await releaseRoomNights({ bookingId: booking._id }).catch(() => {});
 
     // Update chat stage to completed
     chat.bookingStage = 'completed';
@@ -321,6 +475,7 @@ router.post('/bookings/:id/assign-room', verifyToken, async (req, res, next) => 
     booking.roomBookingId = roomBooking._id;
     booking.status = 'confirmed';
     await booking.save();
+    await releaseRoomNights({ bookingId: booking._id }).catch(() => {});
 
     await roomBooking.populate('roomId', 'roomNumber capacity seriesId');
     logActivity(req.user.id, 'room_assigned', `Assigned room ${roomBooking.roomId?.roomNumber || 'room'} to booking for ${booking.customerName}`, req);
@@ -470,6 +625,7 @@ router.patch('/bookings/:id/cancel', verifyToken, async (req, res, next) => {
 
     booking.status = 'cancelled';
     await booking.save();
+    await releaseRoomNights({ bookingId: booking._id }).catch(() => {});
     logActivity(req.user.id, 'booking_cancelled', `Cancelled booking for ${booking.customerName}`, req);
 
     // Emit Socket.io real-time updates so Availability grid auto-refreshes everywhere
@@ -519,8 +675,9 @@ router.patch('/bookings/:id/reschedule', verifyToken, async (req, res, next) => 
     booking.checkInDate = new Date(value.newCheckInDate);
     booking.checkOutDate = new Date(value.newCheckOutDate);
     booking.date = value.newCheckInDate.split('T')[0];
-    booking.isWeekend = [0, 6].includes(new Date(value.newCheckInDate).getDay());
+    booking.isWeekend = isWeekend(value.newCheckInDate);
     await booking.save();
+    await releaseRoomNights({ bookingId: booking._id }).catch(() => {});
 
     res.json({ success: true, booking });
   } catch (error) {
@@ -586,6 +743,7 @@ router.patch('/bookings/:id/move-room', verifyToken, async (req, res, next) => {
 
     booking.roomBookingId = newRoomBooking._id;
     await booking.save();
+    await releaseRoomNights({ bookingId: booking._id }).catch(() => {});
 
     await newRoomBooking.populate('roomId', 'roomNumber capacity seriesId');
 
@@ -621,6 +779,7 @@ router.patch('/bookings/:id/status', verifyToken, async (req, res, next) => {
 
     booking.status = value.status;
     await booking.save();
+    await releaseRoomNights({ bookingId: booking._id }).catch(() => {});
 
     res.json({ success: true, booking });
   } catch (error) {
@@ -643,6 +802,7 @@ router.patch('/bookings/:id/stop-messages', verifyToken, async (req, res, next) 
 
     booking.messagesStopped = !booking.messagesStopped;
     await booking.save();
+    await releaseRoomNights({ bookingId: booking._id }).catch(() => {});
 
     res.json({ success: true, messagesStopped: booking.messagesStopped });
   } catch (error) {
@@ -655,44 +815,61 @@ router.patch('/bookings/:id/stop-messages', verifyToken, async (req, res, next) 
  * Create a booking not from WhatsApp (walk-in, phone, etc.).
  */
 router.post('/bookings/manual', verifyToken, async (req, res, next) => {
+  let booking = null;
+  let idempotencyScopeKey = null;
+  let bookingAndRoomsCommitted = false;
   try {
+    const idempotencyKey = extractIdempotencyKey(req);
+    const idempLock = await acquireIdempotencyLock({
+      key: idempotencyKey,
+      userId: req.user?.id || req.user?.email || 'staff',
+      endpoint: 'POST:/api/pms/bookings/manual',
+      payload: req.body
+    });
+    if (idempLock.enabled) {
+      if (idempLock.replay) {
+        return res.status(idempLock.statusCode).json(idempLock.responseBody);
+      }
+      idempotencyScopeKey = idempLock.scopeKey;
+    }
+
     const { error, value } = validateBody(manualBookingSchema, req.body);
     if (error) return res.status(400).json({ success: false, message: error });
 
-    const dateError = validateDateRange(value.checkInDate, value.checkOutDate);
-    if (dateError) return res.status(400).json({ success: false, message: dateError });
+    const prepared = prepareAuthoritativeBookingData({
+      ...req.body,
+      packageType: value.packageType || value.bookingType,
+      checkInDate: value.checkInDate,
+      checkOutDate: value.checkOutDate
+    }, req.user);
 
-    const totalAmt = Number(value.totalAmount) || 0;
-    const advAmt = Number(value.advancePayment) || 0;
-    const remAmt = (value.remainingPayment !== undefined && value.remainingPayment !== null && Number(value.remainingPayment) > 0)
-      ? Number(value.remainingPayment)
-      : Math.max(0, totalAmt - advAmt);
-
-    let pStatus = value.paymentStatus;
-    if (!pStatus) {
-      if (advAmt >= totalAmt && totalAmt > 0) pStatus = 'paid';
-      else if (advAmt > 0) pStatus = 'partially_paid';
-      else pStatus = 'unpaid';
-    }
-
-    const booking = new Booking({
+    booking = new Booking({
       customerName: value.guestName,
       customerPhone: value.guestPhone,
       guestAddress: value.guestAddress || null,
       guestIdProofType: value.guestIdProofType || null,
       guestIdProofPhoto: value.guestIdProofPhoto || null,
-      bookingType: value.bookingType,
-      date: value.checkInDate.split('T')[0],
-      checkInDate: new Date(value.checkInDate),
-      checkOutDate: new Date(value.checkOutDate),
-      isWeekend: [0, 6].includes(new Date(value.checkInDate).getDay()),
-      adults: value.adults,
-      kids: value.kids || [],
-      totalAmount: totalAmt,
-      advancePayment: advAmt,
-      remainingPayment: remAmt,
-      paymentStatus: pStatus,
-      priceBreakdown: value.priceBreakdown || '',
+      bookingType: prepared.quote.packageType === 'oneDay' ? 'picnic' : prepared.quote.packageType,
+      packageType: prepared.quote.packageType,
+      mealOption: prepared.quote.mealOption,
+      date: prepared.date,
+      checkInDate: prepared.checkInDate,
+      checkOutDate: prepared.checkOutDate,
+      isWeekend: prepared.isWeekend,
+      adults: prepared.adults,
+      guestComposition: prepared.guestComposition,
+      kids: prepared.kids,
+      totalAmount: prepared.totalAmount,
+      pricingSnapshot: prepared.pricingSnapshot,
+      rateOverrides: prepared.rateOverrides,
+      discount: prepared.discount,
+      advancePayment: prepared.advancePayment,
+      advancePaid: prepared.advancePaid,
+      remainingPayment: prepared.remainingPayment,
+      paymentStatus: prepared.paymentStatus,
+      payments: prepared.payments,
+      acknowledgments: prepared.acknowledgments,
+      priceBreakdown: prepared.priceBreakdown,
       specialRequests: value.specialRequests || '',
       status: 'pending_payment',
       createdBy: 'staff',
@@ -700,6 +877,21 @@ router.post('/bookings/manual', verifyToken, async (req, res, next) => {
     });
 
     await booking.save();
+    await releaseRoomNights({ bookingId: booking._id }).catch(() => {});
+    const targetRoomIds = (value.roomIds && value.roomIds.length > 0)
+      ? value.roomIds
+      : (value.roomId ? [value.roomId] : []);
+    if (targetRoomIds.length > 0) {
+      await claimRoomNights({
+        roomIds: targetRoomIds,
+        checkInDate: prepared.checkInDate,
+        checkOutDate: prepared.checkOutDate,
+        packageType: prepared.packageType,
+        bookingId: booking._id
+      });
+    }
+    await attachBookingToIdempotency({ scopeKey: idempotencyScopeKey, bookingId: booking._id });
+    await logManualBookingAuditEvents(req.user?.id, booking, prepared, req);
 
     // Handle room assignment - either single roomId or multiple roomIds
     let warning = null;
@@ -746,6 +938,7 @@ router.post('/bookings/manual', verifyToken, async (req, res, next) => {
         booking.roomBookingId = roomBookings[0]._id;
         booking.status = 'confirmed';
         await booking.save();
+    await releaseRoomNights({ bookingId: booking._id }).catch(() => {});
 
         // Populate room details
         await Promise.all(roomBookings.map(rb => rb.populate('roomId', 'roomNumber capacity seriesId')));
@@ -793,6 +986,7 @@ router.post('/bookings/manual', verifyToken, async (req, res, next) => {
       booking.roomBookingId = roomBooking._id;
       booking.status = 'confirmed';
       await booking.save();
+    await releaseRoomNights({ bookingId: booking._id }).catch(() => {});
 
       await roomBooking.populate('roomId', 'roomNumber capacity seriesId');
       roomBookings.push(roomBooking);
@@ -802,8 +996,10 @@ router.post('/bookings/manual', verifyToken, async (req, res, next) => {
     try {
       const { getIO } = require('../sockets');
       const io = getIO();
-      io.emit('availability:updated', { checkInDate: value.checkInDate, checkOutDate: value.checkOutDate });
-      io.emit('pms:booking_created', { booking });
+      if (io) {
+        io.emit('availability:updated', { checkInDate: value.checkInDate, checkOutDate: value.checkOutDate });
+        io.emit('pms:booking_created', { booking });
+      }
     } catch (socketErr) {
       logger.error(`Socket emit failed for booking creation: ${socketErr.message}`);
     }
@@ -820,7 +1016,7 @@ router.post('/bookings/manual', verifyToken, async (req, res, next) => {
         const sessionId = activeNumber.label || activeNumber.number;
         if (activeSockets.has(sessionId)) {
           const targetPhone = value.guestPhone && value.guestPhone.length >= 10 ? value.guestPhone : resortContact1;
-          const text = `🏨 *Nandibaag Resort — Booking Confirmed!*\n\n• Guest: ${value.guestName}\n• Room: Room ${roomBookings[0]?.roomId?.roomNumber || 'Assigned'}\n• Dates: ${value.checkInDate.split('T')[0]} to ${value.checkOutDate.split('T')[0]}\n• Amount: ₹${value.totalAmount}\n• Status: Confirmed`;
+          const text = `🏨 *Nandibaag Resort — Booking Confirmed!*\n\n• Guest: ${value.guestName}\n• Room: Room ${roomBookings[0]?.roomId?.roomNumber || 'Assigned'}\n• Dates: ${booking.date} to ${prepared.quote.checkOutDate}\n• Amount: ₹${booking.totalAmount}\n• Status: Confirmed`;
           
           sendMessage(sessionId, targetPhone, text).catch(err => {
             logger.warn(`WhatsApp notification send error: ${err.message}`);
@@ -831,10 +1027,51 @@ router.post('/bookings/manual', verifyToken, async (req, res, next) => {
       logger.warn(`WhatsApp notification check error: ${waErr.message}`);
     }
 
-    res.status(201).json({ success: true, warning, booking, roomBookings });
+    const responseBody = { success: true, warning, booking, roomBookings };
+    bookingAndRoomsCommitted = true;
+    await completeIdempotency({
+      scopeKey: idempotencyScopeKey,
+      statusCode: 201,
+      responseBody,
+      bookingId: booking._id
+    });
+
+    res.status(201).json(responseBody);
   } catch (error) {
-    if (booking && booking._id) {
-      await Booking.findByIdAndDelete(booking._id).catch(() => {});
+    if (error instanceof IdempotencyError || error.name === 'IdempotencyError') {
+      return res.status(error.statusCode || 409).json({
+        success: false,
+        code: error.code,
+        message: error.message
+      });
+    }
+    if (error instanceof BookingBusinessError || error.name === 'BookingBusinessError') {
+      await releaseIdempotencyOnFailure({ scopeKey: idempotencyScopeKey });
+      return res.status(error.statusCode || 400).json({
+        success: false,
+        code: error.code,
+        message: error.message,
+        ...(error.extra || {})
+      });
+    }
+    if (error instanceof RoomConflictError || error.name === 'RoomConflictError') {
+      if (booking && booking._id) {
+        await releaseRoomNights({ bookingId: booking._id }).catch(() => {});
+        await Booking.findByIdAndDelete(booking._id).catch(() => {});
+      }
+      await releaseIdempotencyOnFailure({ scopeKey: idempotencyScopeKey });
+      return res.status(error.statusCode || 409).json({
+        success: false,
+        code: error.code,
+        message: error.message
+      });
+    }
+    if (!bookingAndRoomsCommitted) {
+      if (booking && booking._id) {
+        await releaseRoomNights({ bookingId: booking._id }).catch(() => {});
+        await Booking.findByIdAndDelete(booking._id).catch(() => {});
+      }
+      await releaseIdempotencyOnFailure({ scopeKey: idempotencyScopeKey });
     }
     if (error.message.includes('no longer available') || error.message.includes('overlap') || error.message.includes('booked')) {
       return res.status(409).json({ success: false, message: error.message });
@@ -878,8 +1115,10 @@ router.delete('/bookings/:id', verifyToken, async (req, res, next) => {
     try {
       const { getIO } = require('../sockets');
       const io = getIO();
-      io.emit('availability:updated', { checkInDate, checkOutDate });
-      io.emit('pms:booking_deleted', { bookingId: req.params.id });
+      if (io) {
+        io.emit('availability:updated', { checkInDate, checkOutDate });
+        io.emit('pms:booking_deleted', { bookingId: req.params.id });
+      }
     } catch (socketErr) {
       logger.error(`Socket emit failed for delete booking: ${socketErr.message}`);
     }
@@ -891,29 +1130,289 @@ router.delete('/bookings/:id', verifyToken, async (req, res, next) => {
 });
 
 /**
- * PATCH /api/pms/bookings/:id/settle-payment
- * Mark remaining balance as paid (remainingPayment = 0, advancePayment = totalAmount, paymentStatus = 'paid').
- * Emits pms:booking_updated real-time socket event and sends WhatsApp receipt attempt.
+ * POST /api/pms/bookings/:id/payments
+ * Record a partial or full payment against an existing booking.
+ * Server-authoritative totals, idempotency protection, and audit logging.
  */
-router.patch('/bookings/:id/settle-payment', verifyToken, async (req, res, next) => {
+router.post('/bookings/:id/payments', verifyToken, async (req, res, next) => {
+  let idempotencyScopeKey = null;
+  let paymentPersisted = false;
   try {
     if (!isValidObjectId(req.params.id)) {
       return res.status(400).json({ success: false, message: 'Invalid booking ID' });
     }
 
-    const booking = await Booking.findById(req.params.id);
-    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+    const amount = Number(req.body?.amount);
+    const mode = String(req.body?.mode || '').trim().toLowerCase();
+    const utr = typeof req.body?.utr === 'string' ? req.body.utr.trim() : '';
+    const notes = typeof req.body?.notes === 'string' ? req.body.notes.trim() : '';
+    const screenshotRef = typeof req.body?.screenshotRef === 'string' ? req.body.screenshotRef.trim() : '';
 
-    booking.advancePayment = booking.totalAmount;
-    booking.remainingPayment = 0;
-    booking.paymentStatus = 'paid';
-    await booking.save();
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ success: false, message: 'Payment amount must be greater than 0' });
+    }
+    if (!VALID_PAYMENT_MODES.includes(mode)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid payment mode. Allowed modes: ${VALID_PAYMENT_MODES.join(', ')}`
+      });
+    }
+    if (screenshotRef && screenshotRef.startsWith('data:')) {
+      return res.status(400).json({
+        success: false,
+        message: 'Raw Base64 receipt data is not allowed; provide a valid receipt reference'
+      });
+    }
+
+    const idempotencyKey = extractIdempotencyKey(req);
+    if (idempotencyKey) {
+      const lock = await acquireIdempotencyLock({
+        key: idempotencyKey,
+        endpoint: `POST:/api/pms/bookings/${req.params.id}/payments`,
+        userId: req.user?.id || req.user?._id || 'staff',
+        payload: { bookingId: req.params.id, amount, mode, utr, notes, screenshotRef }
+      });
+      if (lock.replay) {
+        return res.status(lock.statusCode || 200).json(lock.responseBody);
+      }
+      idempotencyScopeKey = lock.scopeKey;
+    }
+
+    const atomicResult = await persistPaymentAtomically(Booking, req.params.id, (booking, currentSummary) => {
+      if (currentSummary.remainingAmount <= 0) {
+        return { error: { status: 400, message: 'Booking is already fully paid' } };
+      }
+      if (amount > currentSummary.remainingAmount) {
+        return {
+          error: {
+            status: 400,
+            message: `Payment amount (₹${amount}) exceeds remaining balance (₹${currentSummary.remainingAmount})`
+          }
+        };
+      }
+
+      const nextPayments = Array.isArray(booking.payments) ? [...booking.payments] : [];
+      const legacyAdvance = Number(booking.advancePaid ?? booking.advancePayment ?? 0);
+      if (nextPayments.length === 0 && Number.isFinite(legacyAdvance) && legacyAdvance > 0) {
+        nextPayments.push({
+          amount: legacyAdvance,
+          mode: 'other',
+          utr: '',
+          screenshotRef: '',
+          paidAt: booking.createdAt || new Date(),
+          collectedBy: {
+            userId: null,
+            name: booking.bookedBy?.name || 'Legacy Record',
+            email: ''
+          },
+          notes: 'Legacy advance payment'
+        });
+      }
+
+      nextPayments.push({
+        amount,
+        mode,
+        utr,
+        screenshotRef,
+        paidAt: new Date(),
+        collectedBy: {
+          userId: req.user?.id || req.user?._id || null,
+          name: req.user?.name || req.user?.email || 'Staff',
+          email: req.user?.email || ''
+        },
+        notes
+      });
+
+      return { nextPayments };
+    });
+
+    if (atomicResult.notFound) {
+      if (idempotencyScopeKey) await releaseIdempotencyOnFailure({ scopeKey: idempotencyScopeKey });
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+    if (atomicResult.validationError) {
+      if (idempotencyScopeKey) await releaseIdempotencyOnFailure({ scopeKey: idempotencyScopeKey });
+      return res.status(atomicResult.validationError.status).json({
+        success: false,
+        message: atomicResult.validationError.message
+      });
+    }
+
+    const { booking, updatedSummary } = atomicResult;
+    paymentPersisted = true;
+
+    if (idempotencyScopeKey) {
+      await attachBookingToIdempotency({ scopeKey: idempotencyScopeKey, bookingId: booking._id });
+    }
+
+    const addedPayment = booking.payments[booking.payments.length - 1];
+
+    try {
+      await logActivity(req.user?.id || req.user?._id, 'booking_payment_recorded', {
+        bookingId: booking._id,
+        paymentId: addedPayment?._id || null,
+        amount,
+        mode,
+        utr,
+        remainingBalance: updatedSummary.remainingAmount,
+        paymentStatus: updatedSummary.paymentStatus
+      }, req.ip);
+    } catch (auditErr) {
+      logger.warn(`Audit log failed for payment on booking ${booking._id}: ${auditErr.message}`);
+    }
+
+    try {
+      const { getIO } = require('../sockets');
+      const io = getIO();
+      if (io) {
+        io.emit('pms:booking_updated', { booking: attachPaymentSummary(booking.toObject ? booking.toObject() : booking) });
+      }
+    } catch (socketErr) {
+      logger.error(`Socket emit failed for partial payment: ${socketErr.message}`);
+    }
+
+    const responseBody = {
+      success: true,
+      message: 'Payment recorded successfully',
+      payment: addedPayment,
+      paymentSummary: updatedSummary,
+      booking: attachPaymentSummary(booking.toObject ? booking.toObject() : booking)
+    };
+
+    if (idempotencyScopeKey) {
+      await completeIdempotency({
+        scopeKey: idempotencyScopeKey,
+        statusCode: 201,
+        responseBody,
+        bookingId: booking._id
+      });
+    }
+
+    return res.status(201).json(responseBody);
+  } catch (error) {
+    if (error instanceof IdempotencyError || error instanceof PaymentConcurrencyError) {
+      if (!paymentPersisted && idempotencyScopeKey && error instanceof PaymentConcurrencyError) {
+        await releaseIdempotencyOnFailure({ scopeKey: idempotencyScopeKey });
+      }
+      return res.status(error.statusCode || 409).json({
+        success: false,
+        code: error.code,
+        message: error.message
+      });
+    }
+    if (!paymentPersisted && idempotencyScopeKey) {
+      await releaseIdempotencyOnFailure({ scopeKey: idempotencyScopeKey });
+    }
+    next(error);
+  }
+});
+
+/**
+ * PATCH /api/pms/bookings/:id/settle-payment
+ * Mark remaining balance as paid via authoritative payment synchronization.
+ * Emits pms:booking_updated real-time socket event and sends WhatsApp receipt attempt.
+ */
+router.patch('/bookings/:id/settle-payment', verifyToken, async (req, res, next) => {
+  let idempotencyScopeKey = null;
+  let settlementPersisted = false;
+  try {
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid booking ID' });
+    }
+
+    const mode = VALID_PAYMENT_MODES.includes(req.body?.mode) ? req.body.mode : 'cash';
+    const utr = typeof req.body?.utr === 'string' ? req.body.utr.trim() : '';
+
+    const idempotencyKey = extractIdempotencyKey(req);
+    if (idempotencyKey) {
+      const lock = await acquireIdempotencyLock({
+        key: idempotencyKey,
+        endpoint: `PATCH:/api/pms/bookings/${req.params.id}/settle-payment`,
+        userId: req.user?.id || req.user?._id || 'staff',
+        payload: { bookingId: req.params.id, mode, utr }
+      });
+      if (lock.replay) {
+        return res.status(lock.statusCode || 200).json(lock.responseBody);
+      }
+      idempotencyScopeKey = lock.scopeKey;
+    }
+
+    const atomicResult = await persistPaymentAtomically(Booking, req.params.id, (booking, currentSummary) => {
+      if (currentSummary.remainingAmount <= 0) {
+        return { error: { status: 400, message: 'Booking is already fully paid' } };
+      }
+
+      const nextPayments = Array.isArray(booking.payments) ? [...booking.payments] : [];
+      const legacyAdvance = Number(booking.advancePaid ?? booking.advancePayment ?? 0);
+      if (nextPayments.length === 0 && Number.isFinite(legacyAdvance) && legacyAdvance > 0) {
+        nextPayments.push({
+          amount: legacyAdvance,
+          mode: 'other',
+          utr: '',
+          screenshotRef: '',
+          paidAt: booking.createdAt || new Date(),
+          collectedBy: {
+            userId: null,
+            name: booking.bookedBy?.name || 'Legacy Record',
+            email: ''
+          },
+          notes: 'Legacy advance payment'
+        });
+      }
+      nextPayments.push({
+        amount: currentSummary.remainingAmount,
+        mode,
+        utr,
+        screenshotRef: '',
+        paidAt: new Date(),
+        collectedBy: {
+          userId: req.user?.id || req.user?._id || null,
+          name: req.user?.name || req.user?.email || 'Staff',
+          email: req.user?.email || ''
+        },
+        notes: 'Full balance settlement'
+      });
+
+      return { nextPayments };
+    });
+
+    if (atomicResult.notFound) {
+      if (idempotencyScopeKey) await releaseIdempotencyOnFailure({ scopeKey: idempotencyScopeKey });
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+    if (atomicResult.validationError) {
+      if (idempotencyScopeKey) await releaseIdempotencyOnFailure({ scopeKey: idempotencyScopeKey });
+      return res.status(atomicResult.validationError.status).json({
+        success: false,
+        message: atomicResult.validationError.message
+      });
+    }
+
+    const { booking, updatedSummary, currentSummary } = atomicResult;
+    settlementPersisted = true;
+
+    if (idempotencyScopeKey) {
+      await attachBookingToIdempotency({ scopeKey: idempotencyScopeKey, bookingId: booking._id });
+    }
+
+    try {
+      await logActivity(req.user?.id || req.user?._id, 'booking_payment_settled', {
+        bookingId: booking._id,
+        settledAmount: currentSummary.remainingAmount,
+        totalPaid: updatedSummary.paidAmount,
+        paymentStatus: updatedSummary.paymentStatus
+      }, req.ip);
+    } catch (auditErr) {
+      logger.warn(`Audit log failed for settle payment on booking ${booking._id}: ${auditErr.message}`);
+    }
 
     // Broadcast Socket.io real-time update
     try {
       const { getIO } = require('../sockets');
       const io = getIO();
-      io.emit('pms:booking_updated', { booking });
+      if (io) {
+        io.emit('pms:booking_updated', { booking: attachPaymentSummary(booking.toObject ? booking.toObject() : booking) });
+      }
     } catch (socketErr) {
       logger.error(`Socket emit failed for settle payment: ${socketErr.message}`);
     }
@@ -941,51 +1440,177 @@ router.patch('/bookings/:id/settle-payment', verifyToken, async (req, res, next)
       logger.warn(`WhatsApp payment receipt check error: ${waErr.message}`);
     }
 
-    res.json({ success: true, message: 'Balance settled & marked as Paid', booking });
+    const responseBody = {
+      success: true,
+      message: 'Balance settled & marked as Paid',
+      paymentSummary: updatedSummary,
+      booking: attachPaymentSummary(booking.toObject ? booking.toObject() : booking)
+    };
+
+    if (idempotencyScopeKey) {
+      await completeIdempotency({
+        scopeKey: idempotencyScopeKey,
+        statusCode: 200,
+        responseBody,
+        bookingId: booking._id
+      });
+    }
+
+    res.json(responseBody);
   } catch (error) {
+    if (error instanceof IdempotencyError || error instanceof PaymentConcurrencyError) {
+      if (!settlementPersisted && idempotencyScopeKey && error instanceof PaymentConcurrencyError) {
+        await releaseIdempotencyOnFailure({ scopeKey: idempotencyScopeKey });
+      }
+      return res.status(error.statusCode || 409).json({
+        success: false,
+        code: error.code,
+        message: error.message
+      });
+    }
+    if (!settlementPersisted && idempotencyScopeKey) {
+      await releaseIdempotencyOnFailure({ scopeKey: idempotencyScopeKey });
+    }
     next(error);
   }
 });
 
 /**
  * GET /api/pms/bookings
- * List bookings with filters: ?status=, ?date=, ?search=
+ * List bookings with backend-driven filters & server-side pagination:
+ * ?status=, ?paymentStatus=, ?packageType=, ?stayType=, ?bookingId=,
+ * ?date=, ?dateFrom=, ?dateTo=, ?createdFrom=, ?createdTo=, ?roomId=, ?search=,
+ * ?sortOrder=asc|desc, ?page=1, ?limit=20
  */
 router.get('/bookings', verifyToken, async (req, res, next) => {
   try {
-    const { status, date, dateFrom, dateTo, search, page = 1, limit = 50 } = req.query;
+    const {
+      status,
+      paymentStatus,
+      packageType,
+      stayType,
+      bookingId,
+      date,
+      dateFrom,
+      dateTo,
+      createdFrom,
+      createdTo,
+      roomId,
+      search,
+      sortOrder = 'desc',
+      page = 1,
+      limit = 20
+    } = req.query;
+
+    const parsedPage = Math.max(1, parseInt(page, 10) || 1);
+    const parsedLimit = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+    const sortDir = sortOrder === 'asc' ? 1 : -1;
 
     const filter = {};
     if (status) filter.status = status;
+
+    if (paymentStatus) {
+      if (!['unpaid', 'partially_paid', 'paid'].includes(paymentStatus)) {
+        return res.status(400).json({ success: false, message: 'Invalid paymentStatus filter' });
+      }
+      filter.paymentStatus = paymentStatus;
+    }
+
+    const effectiveStayType = packageType || stayType;
+    if (effectiveStayType) {
+      filter.packageType = effectiveStayType;
+    }
+
+    if (bookingId) {
+      if (!isValidObjectId(bookingId)) {
+        return res.status(400).json({ success: false, message: 'Invalid bookingId filter' });
+      }
+      filter._id = bookingId;
+    }
+
+    if (roomId) {
+      if (!isValidObjectId(roomId)) {
+        return res.status(400).json({ success: false, message: 'Invalid roomId filter' });
+      }
+      filter.$or = filter.$or || [];
+      filter.roomIds = roomId;
+    }
+
     if (date) {
       const d = new Date(date);
+      if (Number.isNaN(d.getTime())) {
+        return res.status(400).json({ success: false, message: 'Invalid date filter' });
+      }
       const nextDay = new Date(d);
       nextDay.setDate(nextDay.getDate() + 1);
       filter.checkInDate = { $gte: d, $lt: nextDay };
     }
-    // Date range filter: finds bookings whose stay period overlaps [dateFrom, dateTo]
+
+    // Stay date range filter: finds bookings whose stay period overlaps [dateFrom, dateTo] in IST (+05:30)
+    const parseISTStart = (str) => (/^\d{4}-\d{2}-\d{2}$/.test(str) ? new Date(`${str}T00:00:00.000+05:30`) : new Date(str));
+    const parseISTEnd = (str) => (/^\d{4}-\d{2}-\d{2}$/.test(str) ? new Date(`${str}T23:59:59.999+05:30`) : new Date(str));
+
     if (dateFrom || dateTo) {
-      if (dateFrom && dateTo) {
-        filter.checkInDate = { $lte: new Date(dateTo + 'T23:59:59.999Z') };
-        filter.checkOutDate = { $gte: new Date(dateFrom) };
-      } else if (dateFrom) {
-        filter.checkOutDate = { $gte: new Date(dateFrom) };
-      } else if (dateTo) {
-        filter.checkInDate = { $lte: new Date(dateTo + 'T23:59:59.999Z') };
+      const df = dateFrom ? parseISTStart(dateFrom) : null;
+      const dt = dateTo ? parseISTEnd(dateTo) : null;
+      if (df && Number.isNaN(df.getTime())) {
+        return res.status(400).json({ success: false, message: 'Invalid dateFrom filter' });
+      }
+      if (dt && Number.isNaN(dt.getTime())) {
+        return res.status(400).json({ success: false, message: 'Invalid dateTo filter' });
+      }
+      if (df && dt) {
+        filter.checkInDate = { $lte: dt };
+        filter.checkOutDate = { $gte: df };
+      } else if (df) {
+        filter.checkOutDate = { $gte: df };
+      } else if (dt) {
+        filter.checkInDate = { $lte: dt };
       }
     }
-    if (search) {
-      filter.$or = [
-        { customerName: { $regex: search, $options: 'i' } },
-        { customerPhone: { $regex: search, $options: 'i' } }
-      ];
+
+    // Booking creation date range filter (distinct from stay dates, IST +05:30)
+    if (createdFrom || createdTo) {
+      filter.createdAt = {};
+      if (createdFrom) {
+        const cf = parseISTStart(createdFrom);
+        if (Number.isNaN(cf.getTime())) {
+          return res.status(400).json({ success: false, message: 'Invalid createdFrom filter' });
+        }
+        filter.createdAt.$gte = cf;
+      }
+      if (createdTo) {
+        const ct = parseISTEnd(createdTo);
+        if (Number.isNaN(ct.getTime())) {
+          return res.status(400).json({ success: false, message: 'Invalid createdTo filter' });
+        }
+        filter.createdAt.$lte = ct;
+      }
     }
+
+    if (search) {
+      const trimmedSearch = String(search).trim();
+      if (trimmedSearch.length > 100) {
+        return res.status(400).json({ success: false, message: 'Search query too long (max 100 characters)' });
+      }
+      const escapedSearch = trimmedSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const searchConditions = [
+        { customerName: { $regex: escapedSearch, $options: 'i' } },
+        { customerPhone: { $regex: escapedSearch, $options: 'i' } }
+      ];
+      if (isValidObjectId(trimmedSearch)) {
+        searchConditions.push({ _id: trimmedSearch });
+      }
+      filter.$or = searchConditions;
+    }
+
+    const total = await Booking.countDocuments(filter);
 
     const bookings = await Booking.find(filter)
       .populate('roomBookingId')
-      .sort({ createdAt: -1 })
-      .limit(parseInt(limit))
-      .skip((parseInt(page) - 1) * parseInt(limit));
+      .sort({ createdAt: sortDir, _id: sortDir })
+      .limit(parsedLimit)
+      .skip((parsedPage - 1) * parsedLimit);
 
     // Populate room details if roomBookingId exists
     let populated = await Promise.all(
@@ -998,21 +1623,20 @@ router.get('/bookings', verifyToken, async (req, res, next) => {
             obj.room = room;
           }
         }
-        return obj;
+        return attachPaymentSummary(obj);
       })
     );
     
     const { mapRoomIdsToNumbers } = require('../utils/bookingHelper');
     populated = await mapRoomIdsToNumbers(populated);
 
-    const total = await Booking.countDocuments(filter);
-
     res.json({
       success: true,
       bookings: populated,
       total,
-      page: parseInt(page),
-      totalPages: Math.ceil(total / parseInt(limit))
+      page: parsedPage,
+      limit: parsedLimit,
+      totalPages: Math.max(1, Math.ceil(total / parsedLimit))
     });
   } catch (error) {
     next(error);

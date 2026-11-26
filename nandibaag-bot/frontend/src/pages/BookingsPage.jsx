@@ -58,8 +58,20 @@ function StatusBadge({ status }) {
 export default function BookingsPage() {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ status: '', search: '', date: '' });
-  const [sortOrder, setSortOrder] = useState('asc');
+  const [fetchError, setFetchError] = useState('');
+  const [filters, setFilters] = useState({
+    status: '',
+    paymentStatus: '',
+    packageType: '',
+    search: '',
+    date: '',
+    dateFrom: '',
+    dateTo: '',
+    createdFrom: '',
+    createdTo: ''
+  });
+  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 1 });
+  const [sortOrder, setSortOrder] = useState('desc');
   const [viewMode, setViewMode] = useState('card');
 
   // Modals
@@ -67,6 +79,7 @@ export default function BookingsPage() {
   const [cancelReason, setCancelReason] = useState('');
   const [invoiceModal, setInvoiceModal] = useState(null); // Printable receipt modal
   const [idPhotoPreviewModal, setIdPhotoPreviewModal] = useState(null); // ID Photo zoom modal
+  const [paymentModal, setPaymentModal] = useState(null); // { booking, amount, mode, utr, notes, submitting, error, idempotencyKey }
   const [manualModal, setManualModal] = useState(false);
   const [manualForm, setManualForm] = useState({
     guestName: '', guestPhone: '+91', guestAddress: '', guestIdProofType: 'aadhaar', guestIdProofPhoto: null,
@@ -138,28 +151,122 @@ export default function BookingsPage() {
     }
   };
 
-  const fetchBookings = async () => {
+  const fetchBookings = async (targetPage = pagination.page) => {
     try {
       setLoading(true);
+      setFetchError('');
       const params = new URLSearchParams();
       if (filters.status) params.append('status', filters.status);
+      if (filters.paymentStatus) params.append('paymentStatus', filters.paymentStatus);
+      if (filters.packageType) params.append('packageType', filters.packageType);
       if (filters.search) params.append('search', filters.search);
       if (filters.date) params.append('date', filters.date);
+      if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
+      if (filters.dateTo) params.append('dateTo', filters.dateTo);
+      if (filters.createdFrom) params.append('createdFrom', filters.createdFrom);
+      if (filters.createdTo) params.append('createdTo', filters.createdTo);
+      params.append('sortOrder', sortOrder);
+      params.append('page', String(targetPage));
+      params.append('limit', String(pagination.limit));
+
       const res = await api.get(`/pms/bookings?${params}`);
       setBookings(res.data.bookings || []);
+      setPagination(prev => ({
+        ...prev,
+        page: res.data.page || targetPage,
+        limit: res.data.limit || prev.limit,
+        total: res.data.total ?? 0,
+        totalPages: res.data.totalPages ?? 1
+      }));
     } catch (error) {
-      toast.error('Failed to load bookings');
+      const msg = error.response?.data?.message || 'Failed to load bookings';
+      setFetchError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { 
-    fetchBookings(); 
-    const handleRefresh = () => fetchBookings();
+  useEffect(() => {
+    fetchBookings(1);
+    const handleRefresh = () => fetchBookings(1);
     window.addEventListener('refresh_bookings', handleRefresh);
     return () => window.removeEventListener('refresh_bookings', handleRefresh);
-  }, [filters.status, filters.date]);
+  }, [
+    filters.status,
+    filters.paymentStatus,
+    filters.packageType,
+    filters.date,
+    filters.dateFrom,
+    filters.dateTo,
+    filters.createdFrom,
+    filters.createdTo,
+    sortOrder
+  ]);
+
+  const openPaymentModal = (booking) => {
+    const summary = booking.paymentSummary || {
+      totalAmount: Number(booking.totalAmount || 0),
+      paidAmount: Number(booking.advancePaid ?? booking.advancePayment ?? 0),
+      remainingAmount: Number(booking.remainingPayment ?? 0),
+      paymentStatus: booking.paymentStatus || 'unpaid'
+    };
+    const key = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? `pay-${booking._id}-${crypto.randomUUID()}`
+      : `pay-${booking._id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setPaymentModal({
+      booking,
+      amount: summary.remainingAmount > 0 ? String(summary.remainingAmount) : '',
+      mode: 'upi',
+      utr: '',
+      notes: '',
+      submitting: false,
+      error: '',
+      idempotencyKey: key
+    });
+  };
+
+  const handleRecordPayment = async (e) => {
+    e.preventDefault();
+    if (!paymentModal || paymentModal.submitting) return;
+    const amt = Number(paymentModal.amount);
+    const remaining = Number(
+      paymentModal.booking?.paymentSummary?.remainingAmount ??
+      paymentModal.booking?.remainingPayment ??
+      0
+    );
+    if (!Number.isFinite(amt) || amt <= 0) {
+      setPaymentModal(prev => ({ ...prev, error: 'Enter a valid payment amount greater than ₹0' }));
+      return;
+    }
+    if (amt > remaining) {
+      setPaymentModal(prev => ({ ...prev, error: `Amount cannot exceed remaining balance (₹${remaining})` }));
+      return;
+    }
+
+    setPaymentModal(prev => ({ ...prev, submitting: true, error: '' }));
+    try {
+      await api.post(
+        `/pms/bookings/${paymentModal.booking._id}/payments`,
+        {
+          amount: amt,
+          mode: paymentModal.mode,
+          utr: paymentModal.utr.trim(),
+          notes: paymentModal.notes.trim()
+        },
+        {
+          headers: { 'Idempotency-Key': paymentModal.idempotencyKey }
+        }
+      );
+      toast.success(`Payment of ₹${amt} recorded successfully`);
+      setPaymentModal(null);
+      fetchBookings(pagination.page);
+    } catch (error) {
+      const msg = error.response?.data?.message || 'Failed to record payment';
+      setPaymentModal(prev => ({ ...prev, submitting: false, error: msg }));
+      toast.error(msg);
+    }
+  };
 
   const handleSendSMS = async (bookingId, customerName) => {
     try {
@@ -499,82 +606,158 @@ export default function BookingsPage() {
       </div>
 
       {/* Filter Bar */}
-      <div className="glass-card p-4 rounded-2xl bg-white border border-slate-200 flex flex-col md:flex-row items-center justify-between gap-3">
-        <form onSubmit={handleSearch} className="flex-1 flex items-center gap-2 w-full">
-          <div className="relative flex-1">
-            <Search size={15} className="absolute left-3.5 top-3 text-slate-400" />
-            <input
-              type="text"
-              value={filters.search}
-              onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-              placeholder="Search by guest name or phone..."
-              className="w-full pl-10 pr-4 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
-            />
-          </div>
-          <button type="submit" className="px-4 py-2 bg-slate-800 text-white text-xs font-semibold rounded-xl">
-            Search
-          </button>
-        </form>
-
-        <div className="flex items-center gap-2 w-full md:w-auto flex-wrap">
-          <button
-            type="button"
-            onClick={() => setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'))}
-            className="px-3 py-2 text-xs font-bold border border-slate-200 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 transition-colors flex items-center gap-1.5 shrink-0"
-            title="Toggle date sort order"
+      <div className="glass-card p-4 rounded-2xl bg-white border border-slate-200 space-y-3">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-3">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              fetchBookings(1);
+            }}
+            className="flex-1 flex items-center gap-2 w-full"
           >
-            <CalendarDays size={13} className="text-emerald-600" />
-            <span>{sortOrder === 'asc' ? 'Earliest First' : 'Latest First'}</span>
-          </button>
+            <div className="relative flex-1">
+              <Search size={15} className="absolute left-3.5 top-3 text-slate-400" />
+              <input
+                type="text"
+                value={filters.search}
+                onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                placeholder="Search by guest name, phone, or booking ID..."
+                className="w-full pl-10 pr-4 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+            <button type="submit" className="px-4 py-2 bg-slate-800 text-white text-xs font-semibold rounded-xl">
+              Search
+            </button>
+          </form>
 
-          <input
-            type="date"
-            value={filters.date}
-            onChange={(e) => setFilters(prev => ({ ...prev, date: e.target.value }))}
-            className="px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-white"
-            title="Filter by check-in date"
-          />
-
-          <select
-            value={filters.status}
-            onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-            className="px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-white"
-          >
-            <option value="">All Statuses</option>
-            <option value="confirmed">Confirmed</option>
-            <option value="checked_in">Checked In</option>
-            <option value="checked_out">Checked Out</option>
-            <option value="cancelled">Cancelled</option>
-            <option value="pending_payment">Pending Payment</option>
-          </select>
-
-          {/* View Mode Switcher */}
-          <div className="flex items-center p-0.5 bg-slate-100 rounded-xl border border-slate-200">
+          <div className="flex items-center gap-2 w-full md:w-auto flex-wrap">
             <button
               type="button"
-              onClick={() => setViewMode('card')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                viewMode === 'card'
-                  ? 'bg-white text-slate-800 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
+              onClick={() => setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'))}
+              className="px-3 py-2 text-xs font-bold border border-slate-200 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 transition-colors flex items-center gap-1.5 shrink-0"
+              title="Toggle date sort order"
             >
-              📋 Cards
+              <CalendarDays size={13} className="text-emerald-600" />
+              <span>{sortOrder === 'asc' ? 'Earliest First' : 'Latest First'}</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('table')}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                viewMode === 'table'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
+
+            <select
+              value={filters.status}
+              onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+              className="px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-white"
             >
-              📊 Spreadsheet Table
-            </button>
+              <option value="">All Booking Statuses</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="checked_in">Checked In</option>
+              <option value="checked_out">Checked Out</option>
+              <option value="cancelled">Cancelled</option>
+              <option value="pending_payment">Pending Payment</option>
+            </select>
+
+            <select
+              value={filters.paymentStatus}
+              onChange={(e) => setFilters(prev => ({ ...prev, paymentStatus: e.target.value }))}
+              className="px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-white"
+            >
+              <option value="">All Payment Statuses</option>
+              <option value="unpaid">Unpaid</option>
+              <option value="partially_paid">Partially Paid</option>
+              <option value="paid">Paid</option>
+            </select>
+
+            <select
+              value={filters.packageType}
+              onChange={(e) => setFilters(prev => ({ ...prev, packageType: e.target.value }))}
+              className="px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-white"
+            >
+              <option value="">All Stay Types</option>
+              <option value="couple">Couple Stay</option>
+              <option value="group">Group / Family</option>
+              <option value="oneDay">One Day</option>
+            </select>
+
+            {/* View Mode Switcher */}
+            <div className="flex items-center p-0.5 bg-slate-100 rounded-xl border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setViewMode('card')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                  viewMode === 'card'
+                    ? 'bg-white text-slate-800 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                📋 Cards
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                  viewMode === 'table'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                📊 Spreadsheet Table
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* Date Range Filters */}
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+          <span className="font-semibold text-slate-500">Stay Dates:</span>
+          <input
+            type="date"
+            value={filters.dateFrom}
+            onChange={(e) => setFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+            className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white"
+            title="Stay from date"
+          />
+          <span className="text-slate-400">to</span>
+          <input
+            type="date"
+            value={filters.dateTo}
+            onChange={(e) => setFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+            className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white"
+            title="Stay to date"
+          />
+
+          <span className="font-semibold text-slate-500 ml-2">Created:</span>
+          <input
+            type="date"
+            value={filters.createdFrom}
+            onChange={(e) => setFilters(prev => ({ ...prev, createdFrom: e.target.value }))}
+            className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white"
+            title="Booking created from"
+          />
+          <span className="text-slate-400">to</span>
+          <input
+            type="date"
+            value={filters.createdTo}
+            onChange={(e) => setFilters(prev => ({ ...prev, createdTo: e.target.value }))}
+            className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white"
+            title="Booking created to"
+          />
+
+          {(filters.status || filters.paymentStatus || filters.packageType || filters.search || filters.date || filters.dateFrom || filters.dateTo || filters.createdFrom || filters.createdTo) && (
+            <button
+              type="button"
+              onClick={() => setFilters({ status: '', paymentStatus: '', packageType: '', search: '', date: '', dateFrom: '', dateTo: '', createdFrom: '', createdTo: '' })}
+              className="ml-auto px-2.5 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200"
+            >
+              Clear Filters
+            </button>
+          )}
+        </div>
       </div>
+
+      {fetchError && (
+        <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center justify-between">
+          <span>{fetchError}</span>
+          <button onClick={() => fetchBookings(pagination.page)} className="font-bold underline">Retry</button>
+        </div>
+      )}
 
       {/* Bookings List */}
       {loading ? (
@@ -678,26 +861,36 @@ export default function BookingsPage() {
                           <span>{formatDMY(b.checkInDate || b.date)} ➔ {formatDMY(b.checkOutDate || (new Date(b.checkInDate || b.date).getTime() + 86400000))}</span>
                         </span>
 
-                        <span className="flex items-center gap-1 font-bold text-emerald-800">
-                          <DollarSign size={13} />
-                          <span>Total: ₹{b.totalAmount}</span>
-                        </span>
-
-                        {b.advancePayment > 0 && (
-                          <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                            Adv: ₹{b.advancePayment}
-                          </span>
-                        )}
-
-                        {b.remainingPayment > 0 ? (
-                          <span className="text-[11px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                            Bal: ₹{b.remainingPayment}
-                          </span>
-                        ) : (
-                          <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-300">
-                            ✓ Paid
-                          </span>
-                        )}
+                        {(() => {
+                          const ps = b.paymentSummary || {
+                            totalAmount: Number(b.totalAmount || 0),
+                            paidAmount: Number(b.advancePaid ?? b.advancePayment ?? 0),
+                            remainingAmount: Number(b.remainingPayment ?? 0),
+                            paymentStatus: b.paymentStatus || 'unpaid'
+                          };
+                          const statusBadge = ps.paymentStatus === 'paid'
+                            ? { cls: 'bg-emerald-100 text-emerald-800 border-emerald-300', label: 'Paid' }
+                            : ps.paymentStatus === 'partially_paid'
+                              ? { cls: 'bg-amber-100 text-amber-800 border-amber-300', label: 'Partially Paid' }
+                              : { cls: 'bg-rose-100 text-rose-800 border-rose-300', label: 'Unpaid' };
+                          return (
+                            <>
+                              <span className="flex items-center gap-1 font-bold text-slate-900">
+                                <DollarSign size={13} className="text-emerald-700" />
+                                <span>Total: ₹{ps.totalAmount}</span>
+                              </span>
+                              <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                                Paid: ₹{ps.paidAmount}
+                              </span>
+                              <span className="text-[11px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                                Bal: ₹{ps.remainingAmount}
+                              </span>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadge.cls}`}>
+                                {statusBadge.label}
+                              </span>
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -718,16 +911,28 @@ export default function BookingsPage() {
                         <span>{b.smsSent ? '🔄 Resend SMS' : '📱 Send SMS'}</span>
                       </button>
 
-                      {/* FEATURE #1: 1-Click Settle Balance */}
-                      {b.remainingPayment > 0 && (
-                        <button
-                          onClick={() => handleSettlePayment(b._id, b.remainingPayment)}
-                          className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold rounded-xl shadow-xs transition-all flex items-center gap-1"
-                          title="Mark Remaining Balance as Fully Paid"
-                        >
-                          <CheckCheck size={13} />
-                          <span>Settle Bal</span>
-                        </button>
+                      {/* Record Partial / Balance Payment */}
+                      {(b.paymentSummary?.remainingAmount ?? b.remainingPayment ?? 0) > 0 && (
+                        <>
+                          <button
+                            onClick={() => openPaymentModal(b)}
+                            className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-xs font-semibold rounded-xl shadow-xs transition-all flex items-center gap-1"
+                            title="Record Partial or Full Payment"
+                          >
+                            <DollarSign size={13} />
+                            <span>Record Payment</span>
+                          </button>
+
+                          {/* FEATURE #1: 1-Click Settle Balance */}
+                          <button
+                            onClick={() => handleSettlePayment(b._id, b.paymentSummary?.remainingAmount ?? b.remainingPayment)}
+                            className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold rounded-xl shadow-xs transition-all flex items-center gap-1"
+                            title="Mark Remaining Balance as Fully Paid"
+                          >
+                            <CheckCheck size={13} />
+                            <span>Settle Bal</span>
+                          </button>
+                        </>
                       )}
 
                       {/* FEATURE #2: Printable / WhatsApp PDF Receipt */}
@@ -959,6 +1164,148 @@ export default function BookingsPage() {
                 {submitting ? 'Cancelling...' : 'Confirm Cancel'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Record Partial Payment Modal */}
+      {paymentModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-display font-bold text-base text-slate-800">Record Payment</h3>
+                <p className="text-xs text-slate-500">
+                  {paymentModal.booking.customerName} • Remaining: ₹{paymentModal.booking.paymentSummary?.remainingAmount ?? paymentModal.booking.remainingPayment ?? 0}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => !paymentModal.submitting && setPaymentModal(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {Array.isArray(paymentModal.booking.payments) && paymentModal.booking.payments.length > 0 && (
+              <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 space-y-1.5 max-h-36 overflow-y-auto">
+                <p className="text-[11px] font-bold text-slate-600 uppercase">Payment History</p>
+                {paymentModal.booking.payments.map((p, idx) => (
+                  <div key={p._id || idx} className="flex items-center justify-between text-xs text-slate-700 border-b border-slate-100 last:border-0 pb-1">
+                    <div>
+                      <span className="font-bold">₹{p.amount}</span>
+                      <span className="text-slate-500 ml-1.5 uppercase text-[10px]">({p.mode})</span>
+                      {p.utr && <span className="text-slate-400 ml-1.5 text-[10px]">UTR: {p.utr}</span>}
+                    </div>
+                    <span className="text-[10px] text-slate-400">{p.collectedBy?.name || 'Staff'}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <form onSubmit={handleRecordPayment} className="space-y-3">
+              {paymentModal.error && (
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700">
+                  {paymentModal.error}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Amount (₹)</label>
+                <input
+                  type="number"
+                  min="1"
+                  step="any"
+                  required
+                  value={paymentModal.amount}
+                  onChange={(e) => setPaymentModal(prev => ({ ...prev, amount: e.target.value, error: '' }))}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Payment Mode</label>
+                <select
+                  value={paymentModal.mode}
+                  onChange={(e) => setPaymentModal(prev => ({ ...prev, mode: e.target.value, error: '' }))}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-white"
+                >
+                  <option value="upi">UPI</option>
+                  <option value="cash">Cash</option>
+                  <option value="card">Card</option>
+                  <option value="bank_transfer">Bank Transfer</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">UTR / Reference (Optional)</label>
+                <input
+                  type="text"
+                  value={paymentModal.utr}
+                  onChange={(e) => setPaymentModal(prev => ({ ...prev, utr: e.target.value }))}
+                  placeholder="Transaction / UTR reference"
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Notes (Optional)</label>
+                <input
+                  type="text"
+                  value={paymentModal.notes}
+                  onChange={(e) => setPaymentModal(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Payment notes"
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={paymentModal.submitting}
+                  onClick={() => setPaymentModal(null)}
+                  className="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-semibold rounded-xl disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={paymentModal.submitting}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl disabled:opacity-50"
+                >
+                  {paymentModal.submitting ? 'Recording...' : 'Confirm Payment'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Server-side Pagination Controls */}
+      {!loading && pagination.total > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-white border border-slate-200 text-xs">
+          <span className="text-slate-600 font-medium">
+            Showing page <strong>{pagination.page}</strong> of <strong>{pagination.totalPages}</strong> ({pagination.total} total bookings)
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={pagination.page <= 1}
+              onClick={() => fetchBookings(pagination.page - 1)}
+              className="px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 font-semibold text-slate-700 disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              disabled={pagination.page >= pagination.totalPages}
+              onClick={() => fetchBookings(pagination.page + 1)}
+              className="px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 font-semibold text-slate-700 disabled:opacity-40"
+            >
+              Next
+            </button>
           </div>
         </div>
       )}

@@ -3,8 +3,29 @@ const { verifyToken } = require('../middleware/auth');
 const { Chat, Lead, Booking, Settings } = require('../models');
 const { getSessionStatus, getAllSessionsStatus } = require('../services/whatsappService');
 const { getModelHealthLast1Hour } = require('../services/aiService');
+const { getDashboardAnalytics, AnalyticsValidationError } = require('../services/analyticsService');
 
 const router = express.Router();
+router.use(verifyToken);
+
+/**
+ * GET /api/dashboard/analytics
+ * Server-side MongoDB aggregation analytics with IST date boundaries.
+ */
+router.get('/analytics', verifyToken, async (req, res, next) => {
+  try {
+    const data = await getDashboardAnalytics(req.query);
+    res.json({ success: true, ...data });
+  } catch (error) {
+    if (error instanceof AnalyticsValidationError) {
+      return res.status(error.statusCode || 400).json({
+        success: false,
+        message: error.message
+      });
+    }
+    next(error);
+  }
+});
 
 /**
  * GET /api/dashboard/stats

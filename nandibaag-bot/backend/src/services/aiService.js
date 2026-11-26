@@ -1259,9 +1259,9 @@ When responding about dates:
       } else {
         result = `📞 Booking confirm karne ke liye call karein: ${primaryNumber}\nOur team will complete your booking! 🎉`;
       }
-    } else if (msgLower.includes('contact') || msgLower.includes('phone') || msgLower.includes('number') || msgLower.includes('call')) {
+    } else if (/\b(contact|phone|number|call)\b/i.test(msgLower)) {
       result = `Resort contact number: ${primaryNumber} 📞`;
-    } else if (msgLower.includes('location') || msgLower.includes('address') || msgLower.includes('kaha') || msgLower.includes('where') || msgLower.includes('kuth')) {
+    } else if (/\b(location|address|map|maps|kaha|kahan|where|kuth|kuthe)\b/i.test(msgLower)) {
       if (languageToUse === 'roman_marathi') {
         result = `📍 Location: Vaijnath Tata Power Road, Karjat (Mumbai/Pune ~2 hrs). Google Maps link: https://maps.app.goo.gl/h6PB4y4G4oSWyFxdA 📍`;
       } else if (languageToUse === 'marathi') {
@@ -1269,7 +1269,7 @@ When responding about dates:
       } else {
         result = `📍 Location: Vaijnath Tata Power Road, Karjat, Maharashtra. Google Maps link: https://maps.app.goo.gl/h6PB4y4G4oSWyFxdA 📍`;
       }
-    } else if (msgLower.includes('photo') || msgLower.includes('pic') || msgLower.includes('image') || msgLower.includes('gallery')) {
+    } else if (/\b(photos?|pics?|pictures?|images?|gallery)\b/i.test(msgLower)) {
       if (languageToUse === 'roman_marathi') {
         result = `Nandibaag Resort ke AC rooms ani cottages che photos gallery madhe baghu shakta: https://nandibaag.com/rooms 📷`;
       } else if (languageToUse === 'marathi') {
@@ -1287,7 +1287,7 @@ When responding about dates:
       } else {
         result = `Nandibaag Resort mein koi extra charges nahi hain — NO GST, NO service charge. Jo price bataya wahi final hai! ✅`;
       }
-    } else if (msgLower.includes('rate') || msgLower.includes('price') || msgLower.includes('cost') || msgLower.includes('kitn') || msgLower.includes('charge') || msgLower.includes('kay')) {
+    } else if (/\b(rates?|price|prices?|cost|charge|charges|kitn|kitne|kiti)\b/i.test(msgLower)) {
       if (languageToUse === 'roman_marathi') {
         result = `Nandibaag Resort Rates:\n1. 🏡 Couple Stay: ₹5,500 (Weekday) / ₹6,500 (Weekend)\n2. 👨‍👩‍👧‍👦 Group Stay: ₹2,000 (Weekday) / ₹3,000 (Weekend) per person\n3. 🌊 Day Picnic (Common room included. Private room ₹2000 extra):\n   B→Tea: ₹1,250 (Wkday) / ₹1,500 (Wkend)\n   B→Dinner: ₹1,250 (Wkday) / ₹1,500 (Wkend)\n\nDates sanga, exact total sangto! 🗓️`;
       } else if (languageToUse === 'marathi') {

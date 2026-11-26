@@ -228,17 +228,12 @@ router.post('/switch-all-chats', verifyToken, requireAdmin, async (req, res) => 
       });
     }
 
-    // STEP 2: PASSWORD CONFIRMATION (safety measure if provided)
+    // STEP 2: PASSWORD CONFIRMATION (verify against authenticated admin's actual password)
     if (confirmPassword !== undefined && confirmPassword !== null && confirmPassword !== '') {
-      const validPasswords = [
-        process.env.ADMIN_PASSWORD,
-        process.env.ADMIN_DEFAULT_PASSWORD,
-        'admin12345',
-        'admin123',
-        'admin'
-      ].filter(Boolean);
-
-      if (!validPasswords.includes(confirmPassword)) {
+      const { User } = require('../models');
+      const adminUser = await User.findById(req.user.id);
+      const isMatch = adminUser ? await adminUser.comparePassword(String(confirmPassword)) : false;
+      if (!isMatch) {
         return res.status(401).json({
           success: false,
           error: 'Invalid admin password'
@@ -297,29 +292,48 @@ router.get('/mode-change-history', verifyToken, async (req, res) => {
   }
 });
 
+const ALLOWED_SETTING_KEYS = new Set([
+  'defaultModeForNewChats',
+  'globalMode',
+  'followUpEnabled',
+  'openRouterModelOverride',
+  'resortContactNumber',
+  'resortContactNumberReception',
+  'resortContactNumberKitchen'
+]);
+
 /**
  * PATCH /api/settings/:settingKey
  * Dynamic setting update route - uses updateDefaultModeOnly for defaultModeForNewChats
  */
-router.patch('/:settingKey', async (req, res) => {
+router.patch('/:settingKey', verifyToken, requireAdmin, async (req, res) => {
   try {
     const { settingKey } = req.params;
-    const { value, updatedBy } = req.body;
+    const { value } = req.body;
+
+    if (!ALLOWED_SETTING_KEYS.has(settingKey)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid or unsupported setting key'
+      });
+    }
 
     console.log('[Settings:Patch] Updating setting:', settingKey);
 
-    if (!value) {
+    if (value === undefined || value === null || value === '') {
       return res.status(400).json({
         success: false,
         error: 'Value required'
       });
     }
 
+    const actor = req.user?.email || 'Admin';
+
     // CRITICAL: Use updateDefaultModeOnly which doesn't touch chats
     const { updateDefaultModeOnly } = require('../services/settingsService');
 
     if (settingKey === 'defaultModeForNewChats' || settingKey === 'globalMode') {
-      const result = await updateDefaultModeOnly(value, updatedBy || 'Admin');
+      const result = await updateDefaultModeOnly(value, actor);
       
       res.json({
         success: true,
@@ -328,7 +342,7 @@ router.patch('/:settingKey', async (req, res) => {
     } else {
       // For other settings, use regular update
       const { updateSetting } = require('../services/settingsService');
-      const setting = await updateSetting(settingKey, value, updatedBy || 'Admin');
+      const setting = await updateSetting(settingKey, value, actor);
 
       res.json({
         success: true,

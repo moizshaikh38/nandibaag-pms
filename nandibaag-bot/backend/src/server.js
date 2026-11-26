@@ -12,7 +12,8 @@ const http = require('http');
 const mongoose = require('mongoose');
 const connectDB = require('./config/db');
 const logger = require('./config/logger');
-const { port, frontendUrl, adminDefaultEmail, adminDefaultPassword } = require('./config/env');
+const { port, frontendUrl, allowedOrigins: extraAllowedOrigins, adminDefaultEmail, adminDefaultPassword } = require('./config/env');
+const { verifyToken, requireAdmin } = require('./middleware/auth');
 const { User, Settings, Room } = require('./models');
 const { initializeSocket, getIO } = require('./sockets');
 const {
@@ -57,18 +58,33 @@ const server = http.createServer(app);
 app.use(helmet());
 
 // CORS
-const allowedOrigins = [
+const devOrigins = process.env.NODE_ENV !== 'production'
+  ? [
+      'http://localhost:5173',
+      'http://localhost:5174',
+      'http://localhost:7001',
+      'http://localhost:7002',
+      'http://127.0.0.1:5173',
+      'http://127.0.0.1:7001',
+      'http://127.0.0.1:7002'
+    ]
+  : [];
+
+const configuredOrigins = String(extraAllowedOrigins || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+const allowedOrigins = Array.from(new Set([
   frontendUrl,
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'http://localhost:7001',
-  'http://127.0.0.1:5173',
-  'http://127.0.0.1:7001'
-].filter(Boolean);
+  ...configuredOrigins,
+  ...devOrigins
+].filter(Boolean)));
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin) || (origin && (origin.endsWith('.vercel.app') || origin.endsWith('.onrender.com'))) || process.env.NODE_ENV === 'development') {
+    // Allow non-browser/server-to-server requests (no Origin header) or explicitly trusted origins
+    if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -111,7 +127,11 @@ app.get('/', handleHealthCheck);
 app.get('/health', handleHealthCheck);
 app.get('/api/health', handleHealthCheck);
 
-app.get('/api/restart-baileys', async (req, res) => {
+// Rate limiting
+app.use('/api', generalLimiter);
+app.use('/api/auth/login', authLimiter);
+
+app.get('/api/restart-baileys', verifyToken, requireAdmin, async (req, res) => {
   console.log('[API] Restart Baileys requested via /api/restart-baileys');
   try {
     const whatsappService = require('./services/whatsappService');
@@ -123,12 +143,8 @@ app.get('/api/restart-baileys', async (req, res) => {
   }
 });
 
-// Rate limiting
-app.use('/api', generalLimiter);
-app.use('/api/auth/login', authLimiter);
-
-// Diagnostic endpoint for remote debugging (no secrets exposed)
-app.get('/health/diagnostic', async (req, res) => {
+// Diagnostic endpoint for remote debugging (admin only, no secrets exposed)
+app.get('/health/diagnostic', generalLimiter, verifyToken, requireAdmin, async (req, res) => {
   try {
     const env = require('./config/env');
     const settings = await Settings.findOne();
@@ -188,7 +204,7 @@ app.use('/api/team', teamSecurityRoutes);
 app.use('/api/fast2sms', fast2smsRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/maintenance', require('./routes/maintenanceRoutes'));
-app.use('/pms/maintenance', require('./routes/maintenanceRoutes'));
+app.use('/pms/maintenance', generalLimiter, ensureDbConnected, require('./routes/maintenanceRoutes'));
 
 // Global error handler (must be last)
 app.use(errorHandler);

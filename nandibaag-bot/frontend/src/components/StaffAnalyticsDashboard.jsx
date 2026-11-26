@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from '../utils/api';
 import StaffLeaderboard from './StaffLeaderboard';
 import StaffPerformanceChart from './StaffPerformanceChart';
@@ -8,30 +8,41 @@ import '../styles/StaffAnalyticsDashboard.css';
 
 const StaffAnalyticsDashboard = () => {
   const [stats, setStats] = useState([]);
+  const [metadata, setMetadata] = useState(null);
   const [months, setMonths] = useState(3);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [showProfile, setShowProfile] = useState(false);
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
     fetchAnalytics();
-  }, [months]);
+  }, [months, dateFrom, dateTo]);
 
   const fetchAnalytics = async () => {
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      setError('Start date must be on or before end date.');
+      return;
+    }
+    const reqId = ++requestIdRef.current;
     try {
       setLoading(true);
-      console.log('[Dashboard:Staff] Fetching analytics for', months, 'months');
-      
-      const response = await api.get('/staff/analytics', {
-        params: { months }
-      });
-      
-      console.log('[Dashboard:Staff] Data loaded:', response.data.stats?.length);
+      setError('');
+      const params = dateFrom || dateTo ? { dateFrom, dateTo } : { months };
+      const response = await api.get('/staff/analytics', { params });
+      if (reqId !== requestIdRef.current) return;
       setStats(response.data.stats || []);
-    } catch (error) {
-      console.error('[Dashboard:Staff] Error:', error);
+      setMetadata(response.data.metadata || null);
+    } catch (err) {
+      if (reqId !== requestIdRef.current) return;
+      setError(err.response?.data?.message || 'Failed to load staff analytics');
     } finally {
-      setLoading(false);
+      if (reqId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -48,9 +59,27 @@ const StaffAnalyticsDashboard = () => {
         </div>
         
         <div className="controls">
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="month-selector"
+            aria-label="Staff analytics start date"
+          />
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="month-selector"
+            aria-label="Staff analytics end date"
+          />
           <select 
             value={months} 
-            onChange={(e) => setMonths(parseInt(e.target.value))}
+            onChange={(e) => {
+              setDateFrom('');
+              setDateTo('');
+              setMonths(parseInt(e.target.value));
+            }}
             className="month-selector"
           >
             <option value={1}>Last 1 Month</option>
@@ -60,6 +89,35 @@ const StaffAnalyticsDashboard = () => {
           </select>
         </div>
       </div>
+
+      {error && (
+        <div className="p-3 mb-4 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700">
+          {error}
+        </div>
+      )}
+
+      {stats.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 text-xs">
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+            <span className="text-slate-500 uppercase font-semibold">Total Booking Value</span>
+            <p className="text-lg font-bold text-slate-900">
+              ₹{stats.reduce((s, x) => s + (x.totalBookingValue ?? x.totalRevenue ?? 0), 0).toLocaleString('en-IN')}
+            </p>
+          </div>
+          <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+            <span className="text-emerald-700 uppercase font-semibold">Actual Collected (paidAt)</span>
+            <p className="text-lg font-bold text-emerald-900">
+              ₹{stats.reduce((s, x) => s + (x.collectedAmount ?? 0), 0).toLocaleString('en-IN')}
+            </p>
+          </div>
+          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
+            <span className="text-amber-800 uppercase font-semibold">Cancelled / Legacy Untimestamped</span>
+            <p className="text-sm font-bold text-amber-900 mt-1">
+              Cancelled: ₹{stats.reduce((s, x) => s + (x.cancelledCollectedAmount ?? 0), 0).toLocaleString('en-IN')} • Legacy: ₹{(metadata?.legacyUntimestampedAmount ?? 0).toLocaleString('en-IN')}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* LEADERBOARD */}
       <div className="section">

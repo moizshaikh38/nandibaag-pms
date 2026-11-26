@@ -1,5 +1,5 @@
 const express = require('express');
-const { verifyToken, requireRole } = require('../middleware/auth');
+const { verifyToken } = require('../middleware/auth');
 const { stopSession, deleteSessionFolder } = require('../services/whatsappService');
 const { Settings } = require('../models');
 const logger = require('../config/logger');
@@ -9,9 +9,9 @@ const router = express.Router();
 /**
  * DELETE /api/numbers/:id
  * Delete a WhatsApp number & session cleanly end-to-end.
- * Role: super_admin or admin.
+ * Role: authenticated staff, admin, or super_admin.
  */
-router.delete('/:id', verifyToken, requireRole('super_admin', 'admin'), async (req, res, next) => {
+router.delete('/:id', verifyToken, async (req, res, next) => {
   try {
     const { id } = req.params;
     let sessionId = id;

@@ -1,56 +1,56 @@
 const express = require('express');
 const router = express.Router();
+const { verifyToken, requireAdmin } = require('../middleware/auth');
+router.use(verifyToken);
 const Staff = require('../models/Staff');
 const {
+  StaffAnalyticsValidationError,
   getStaffMonthlyStats,
   getAllStaffStats,
   getIndividualStaffProfile
 } = require('../services/staffAnalyticsService');
 
 // GET all staff with analytics
-router.get('/analytics', async (req, res) => {
+router.get('/analytics', async (req, res, next) => {
   try {
-    const { months = 3 } = req.query;
-    
-    console.log('[StaffAPI:Analytics] Fetching analytics for', months, 'months');
-    
-    const allStats = await getAllStaffStats(parseInt(months));
-    
+    const result = await getAllStaffStats(req.query);
     res.json({
       success: true,
-      stats: allStats,
-      period: `Last ${months} months`,
-      generatedAt: new Date().toISOString()
+      stats: result.stats,
+      filters: result.filters,
+      metadata: result.metadata,
+      period: result.filters.months ? `Last ${result.filters.months} months` : `${result.filters.dateFrom} to ${result.filters.dateTo}`,
+      generatedAt: result.metadata.generatedAt
     });
   } catch (error) {
-    console.error('[StaffAPI:Analytics] Error:', error.message);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    if (error instanceof StaffAnalyticsValidationError) {
+      return res.status(error.statusCode || 400).json({
+        success: false,
+        message: error.message
+      });
+    }
+    next(error);
   }
 });
 
 // GET individual staff profile
-router.get('/:staffName/profile', async (req, res) => {
+router.get('/:staffName/profile', async (req, res, next) => {
   try {
     const { staffName } = req.params;
     const { months = 6 } = req.query;
-    
-    console.log('[StaffAPI:Profile] Fetching profile for', staffName);
-    
-    const profile = await getIndividualStaffProfile(staffName, parseInt(months));
-    
+    const profile = await getIndividualStaffProfile(staffName, Number(months));
     res.json({
       success: true,
       profile
     });
   } catch (error) {
-    console.error('[StaffAPI:Profile] Error:', error.message);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    if (error instanceof StaffAnalyticsValidationError) {
+      return res.status(error.statusCode || 400).json({
+        success: false,
+        message: error.message
+      });
+    }
+    next(error);
   }
 });
 
@@ -75,8 +75,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST create staff
-router.post('/', async (req, res) => {
+// POST create staff (admin only)
+router.post('/', requireAdmin, async (req, res) => {
   try {
     const { name, staffId, contact, email, hireDate, role } = req.body;
     
