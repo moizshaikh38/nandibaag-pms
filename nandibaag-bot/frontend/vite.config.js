@@ -67,5 +67,16 @@ export default defineConfig({
         secure: false
       }
     }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'charts-vendor': ['recharts'],
+          'xlsx-vendor': ['xlsx']
+        }
+      }
+    }
   }
 });
