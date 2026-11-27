@@ -27,30 +27,43 @@ const StaffAnalyticsTable = ({ stats = [], onSelectStaff, months = 3 }) => {
         </thead>
         <tbody>
           {stats.map((staff, idx) => {
-            const monthKeys = Object.keys(staff.monthlyStats || {});
-            const currentMonth = staff.monthlyStats[monthKeys[0]]?.count || 0;
-            const previousMonth = staff.monthlyStats[monthKeys[1]]?.count || 0;
+            const safeStaff = staff || {};
+            const monthlyStats =
+              safeStaff.monthlyStats && typeof safeStaff.monthlyStats === 'object'
+                ? safeStaff.monthlyStats
+                : {};
+            const monthKeys = Object.keys(monthlyStats);
+            const currentMonth = monthKeys[0] ? (monthlyStats[monthKeys[0]]?.count ?? 0) : 0;
+            const previousMonth = monthKeys[1] ? (monthlyStats[monthKeys[1]]?.count ?? 0) : 0;
+            const trend = Number(safeStaff.trend ?? 0);
+            const trendPercent = Number.isFinite(Number(safeStaff.trendPercent))
+              ? Math.abs(Number(safeStaff.trendPercent))
+              : 0;
+            const totalCount = safeStaff.totalCount ?? safeStaff.totalBookings ?? 0;
+            const avgPerMonth = safeStaff.avgPerMonth ?? 0;
+            const revenue = Number(safeStaff.totalBookingValue ?? safeStaff.totalRevenue ?? 0) || 0;
+            const staffName = safeStaff.name || 'Unknown';
 
             return (
-              <tr key={staff.staffId || staff.name} className="analytics-row">
+              <tr key={safeStaff.staffId || staffName || idx} className="analytics-row">
                 <td className="rank">
                   {idx === 0 && '🥇'}
                   {idx === 1 && '🥈'}
                   {idx === 2 && '🥉'}
                   {idx > 2 && `#${idx + 1}`}
                 </td>
-                <td className="name">{staff.name}</td>
+                <td className="name">{staffName}</td>
                 <td className="center bold">{currentMonth}</td>
                 <td className="center">{previousMonth}</td>
-                <td className={`trend ${staff.trend > 0 ? 'positive' : staff.trend < 0 ? 'negative' : 'flat'}`}>
-                  {staff.trendDirection} {Math.abs(staff.trendPercent)}%
+                <td className={`trend ${trend > 0 ? 'positive' : trend < 0 ? 'negative' : 'flat'}`}>
+                  {safeStaff.trendDirection || '→'} {trendPercent}%
                 </td>
-                <td className="center bold">{staff.totalCount}</td>
-                <td className="center">{staff.avgPerMonth}</td>
-                <td className="revenue">₹{(staff.totalRevenue || 0).toLocaleString('en-IN')}</td>
+                <td className="center bold">{totalCount}</td>
+                <td className="center">{avgPerMonth}</td>
+                <td className="revenue">₹{revenue.toLocaleString('en-IN')}</td>
                 <td className="action">
                   <button 
-                    onClick={() => onSelectStaff && onSelectStaff(staff)}
+                    onClick={() => onSelectStaff && onSelectStaff(safeStaff)}
                     className="view-btn"
                   >
                     View Profile

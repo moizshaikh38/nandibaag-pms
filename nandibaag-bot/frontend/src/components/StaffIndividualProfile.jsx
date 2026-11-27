@@ -5,6 +5,7 @@ import { formatDMY } from '../utils/formatters';
 const StaffIndividualProfile = ({ staffName, onClose }) => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     fetchProfile();
@@ -13,15 +14,14 @@ const StaffIndividualProfile = ({ staffName, onClose }) => {
   const fetchProfile = async () => {
     try {
       setLoading(true);
-      console.log('[Profile] Fetching profile for', staffName);
-      
-      const response = await api.get(`/staff/${encodeURIComponent(staffName)}/profile`, {
+      setError('');
+      const response = await api.get(`/staff/${encodeURIComponent(staffName || '')}/profile`, {
         params: { months: 6 }
       });
-      
-      setProfile(response.data.profile);
-    } catch (error) {
-      console.error('[Profile] Error:', error);
+      setProfile(response.data?.profile || null);
+    } catch (err) {
+      console.error('[Profile] Error:', err);
+      setError(err.response?.data?.message || 'Failed to load staff profile');
     } finally {
       setLoading(false);
     }
@@ -38,8 +38,24 @@ const StaffIndividualProfile = ({ staffName, onClose }) => {
     );
   }
 
-  if (!profile) {
-    return null;
+  if (error || !profile) {
+    return (
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-content profile-modal" onClick={(e) => e.stopPropagation()}>
+          <button className="close-btn" onClick={onClose}>✕</button>
+          <div className="p-6 text-center space-y-3">
+            <p className="text-sm font-semibold text-rose-700">{error || 'Staff profile unavailable.'}</p>
+            <button
+              type="button"
+              onClick={fetchProfile}
+              className="px-4 py-1.5 rounded-lg bg-slate-800 text-white text-xs font-semibold hover:bg-slate-900"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // Package breakdown aggregation

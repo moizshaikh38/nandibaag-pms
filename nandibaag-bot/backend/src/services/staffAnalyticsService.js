@@ -63,7 +63,7 @@ function validateStaffAnalyticsParams(input = {}) {
 const getAllStaffStats = async (input = 3) => {
   const { dateFrom, dateTo, startDate, endDate, months } = validateStaffAnalyticsParams(input);
 
-  const [bookingAgg, collectionAgg, legacyAgg] = await Promise.all([
+  const [bookingAgg, collectionAgg, legacyAgg, monthlyAgg] = await Promise.all([
     // 1. Booking performance by bookedBy (active bookings only)
     Booking.aggregate([
       {
@@ -159,20 +159,85 @@ const getAllStaffStats = async (input = 3) => {
       },
       { $match: { _legacyAdv: { $gt: 0 } } },
       { $group: { _id: null, count: { $sum: 1 }, totalAmount: { $sum: '$_legacyAdv' } } }
+    ]),
+
+    // 4. Monthly booking trend by staff (IST YYYY-MM) for chart, table & trend calculations
+    Booking.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: startDate, $lte: endDate },
+          status: { $nin: ['cancelled', 'no_show'] }
+        }
+      },
+      {
+        $addFields: {
+          _monthlyStaffName: {
+            $let: {
+              vars: {
+                raw: {
+                  $ifNull: [
+                    '$bookedBy.name',
+                    { $cond: [{ $eq: [{ $type: '$bookedBy' }, 'string'] }, '$bookedBy', ''] }
+                  ]
+                }
+              },
+              in: {
+                $cond: [
+                  { $gt: [{ $strLenCP: { $trim: { input: { $ifNull: ['$$raw', ''] } } } }, 0] },
+                  { $trim: { input: '$$raw' } },
+                  'Unattributed'
+                ]
+              }
+            }
+          },
+          _monthKey: { $dateToString: { format: '%Y-%m', date: '$createdAt', timezone: '+05:30' } },
+          _monthlyAmt: { $max: [0, { $ifNull: ['$totalAmount', 0] }] }
+        }
+      },
+      {
+        $group: {
+          _id: { staffName: '$_monthlyStaffName', month: '$_monthKey' },
+          count: { $sum: 1 },
+          revenue: { $sum: '$_monthlyAmt' }
+        }
+      },
+      { $sort: { '_id.month': -1 } }
     ])
   ]);
+
+  // Build ordered descending YYYY-MM keys covering the selected range
+  const monthKeysDesc = [];
+  const cursor = new Date(`${dateTo.slice(0, 7)}-01T00:00:00.000Z`);
+  const minMonth = dateFrom.slice(0, 7);
+  while (monthKeysDesc.length < 13) {
+    const key = cursor.toISOString().slice(0, 7);
+    monthKeysDesc.push(key);
+    if (key <= minMonth) break;
+    cursor.setUTCMonth(cursor.getUTCMonth() - 1);
+  }
+  const monthSpan = Math.max(1, months || monthKeysDesc.length || 1);
 
   const staffMap = new Map();
   const ensureStaff = (name) => {
     if (!staffMap.has(name)) {
+      const emptyMonthly = {};
+      for (const mk of monthKeysDesc) {
+        emptyMonthly[mk] = { count: 0, revenue: 0 };
+      }
       staffMap.set(name, {
         name,
         totalBookings: 0,
+        totalCount: 0,
         totalRevenue: 0, // booking value (kept for frontend compatibility)
         totalBookingValue: 0,
         collectedAmount: 0,
         collectionCount: 0,
         cancelledCollectedAmount: 0,
+        avgPerMonth: 0,
+        trend: 0,
+        trendDirection: '→',
+        trendPercent: 0,
+        monthlyStats: emptyMonthly,
         packageBreakdown: { couple: 0, group: 0, oneDay: 0 }
       });
     }
@@ -182,8 +247,10 @@ const getAllStaffStats = async (input = 3) => {
   for (const row of bookingAgg || []) {
     const entry = ensureStaff(row._id);
     entry.totalBookings = row.totalBookings || 0;
+    entry.totalCount = row.totalBookings || 0;
     entry.totalRevenue = row.totalBookingValue || 0;
     entry.totalBookingValue = row.totalBookingValue || 0;
+    entry.avgPerMonth = Number(((row.totalBookings || 0) / monthSpan).toFixed(1));
     entry.packageBreakdown = {
       couple: row.coupleCount || 0,
       group: row.groupCount || 0,
@@ -196,6 +263,30 @@ const getAllStaffStats = async (input = 3) => {
     entry.collectedAmount = row.collectedActive || 0;
     entry.collectionCount = row.collectionCountActive || 0;
     entry.cancelledCollectedAmount = row.collectedCancelled || 0;
+  }
+
+  for (const row of monthlyAgg || []) {
+    const staffName = row._id?.staffName;
+    const monthKey = row._id?.month;
+    if (!staffName || !monthKey) continue;
+    const entry = ensureStaff(staffName);
+    entry.monthlyStats[monthKey] = {
+      count: row.count || 0,
+      revenue: row.revenue || 0
+    };
+  }
+
+  for (const entry of staffMap.values()) {
+    const curr = monthKeysDesc[0] ? (entry.monthlyStats[monthKeysDesc[0]]?.count || 0) : 0;
+    const prev = monthKeysDesc[1] ? (entry.monthlyStats[monthKeysDesc[1]]?.count || 0) : 0;
+    const diff = curr - prev;
+    entry.trend = diff;
+    entry.trendDirection = diff > 0 ? '↑' : diff < 0 ? '↓' : '→';
+    if (prev === 0) {
+      entry.trendPercent = curr > 0 ? 100 : 0;
+    } else {
+      entry.trendPercent = Math.round((diff / prev) * 100);
+    }
   }
 
   const stats = Array.from(staffMap.values()).sort(

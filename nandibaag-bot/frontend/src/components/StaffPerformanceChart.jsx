@@ -4,7 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 const StaffPerformanceChart = ({ stats = [], months = 3 }) => {
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
 
-  if (!stats || stats.length === 0) {
+  if (!Array.isArray(stats) || stats.length === 0) {
     return (
       <div className="p-8 text-center text-slate-400 bg-slate-50 rounded-xl border border-slate-200">
         No performance chart data available.
@@ -12,16 +12,32 @@ const StaffPerformanceChart = ({ stats = [], months = 3 }) => {
     );
   }
 
-  // Prepare month keys from first staff's monthlyStats
-  const monthKeys = Object.keys(stats[0]?.monthlyStats || {}).reverse();
-  
-  const chartData = monthKeys.map(monthKey => {
+  // Collect union of month keys across staff entries (sorted ascending for left-to-right chart)
+  const monthKeySet = new Set();
+  stats.forEach((staff) => {
+    if (staff?.monthlyStats && typeof staff.monthlyStats === 'object') {
+      Object.keys(staff.monthlyStats).forEach((k) => monthKeySet.add(k));
+    }
+  });
+  const monthKeys = Array.from(monthKeySet).sort();
+
+  if (monthKeys.length === 0) {
+    return (
+      <div className="p-8 text-center text-slate-400 bg-slate-50 rounded-xl border border-slate-200">
+        No monthly trend data available for this period.
+      </div>
+    );
+  }
+
+  const validStaff = stats.filter((s) => s && typeof s.name === 'string' && s.name.trim().length > 0);
+  const chartData = monthKeys.map((monthKey) => {
     const dataPoint = { month: monthKey };
-    
-    stats.forEach(staff => {
-      dataPoint[staff.name] = staff.monthlyStats[monthKey]?.count || 0;
+
+    validStaff.forEach((staff) => {
+      const val = Number(staff.monthlyStats?.[monthKey]?.count ?? 0);
+      dataPoint[staff.name] = Number.isFinite(val) ? val : 0;
     });
-    
+
     return dataPoint;
   });
 
@@ -40,9 +56,9 @@ const StaffPerformanceChart = ({ stats = [], months = 3 }) => {
           />
           <Legend wrapperStyle={{ paddingTop: '10px', fontSize: isMobile ? '10px' : '12px' }} />
           
-          {stats.slice(0, 6).map((staff, idx) => (
+          {validStaff.slice(0, 6).map((staff, idx) => (
             <Bar
-              key={staff.staffId || staff.name}
+              key={staff.staffId || staff.name || idx}
               dataKey={staff.name}
               fill={colors[idx % colors.length]}
               radius={[6, 6, 0, 0]}
