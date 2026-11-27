@@ -12,12 +12,13 @@ const http = require('http');
 const jwt = require('jsonwebtoken');
 
 const { jwtSecret } = require('../src/config/env');
-const { Booking, User } = require('../src/models');
+const { Booking, Staff, User } = require('../src/models');
 const staffRoutes = require('../src/routes/staffRoutes');
 const {
   validateStaffAnalyticsParams,
   StaffAnalyticsValidationError,
-  getAllStaffStats
+  getAllStaffStats,
+  getIndividualStaffProfile
 } = require('../src/services/staffAnalyticsService');
 
 let passed = 0;
@@ -147,6 +148,219 @@ async function run() {
       assert.deepStrictEqual(res.stats, []);
       assert.strictEqual(res.metadata.legacyUntimestampedCount, 0);
     });
+
+    const origStaffFind = Staff.find;
+    const origBookingFind = Booking.find;
+
+    try {
+      await test('6. Case-insensitive reconciliation merges "Ravi" bookings & "ravi" collections into 1 canonical entry', async () => {
+        Staff.find = () => ({
+          lean: async () => [{ name: 'Ravi', status: 'active', role: 'Front Desk', contact: '9999999999' }]
+        });
+        Booking.aggregate = async (pipeline) => {
+          if (pipeline.some((s) => s.$addFields && s.$addFields._staffName)) {
+            return [
+              { _id: 'Ravi', totalBookings: 103, totalBookingValue: 1328150, coupleCount: 80, groupCount: 20, oneDayCount: 3 }
+            ];
+          }
+          if (pipeline.some((s) => s.$unwind === '$payments')) {
+            return [
+              { _id: 'ravi', collectedActive: 500000, collectedCancelled: 5000, collectionCountActive: 40, collectionCountCancelled: 1 }
+            ];
+          }
+          if (pipeline.some((s) => s.$addFields && s.$addFields._monthlyStaffName)) {
+            return [
+              { _id: { staffName: 'Ravi', month: '2026-11' }, count: 80, revenue: 918400 },
+              { _id: { staffName: 'ravi', month: '2026-10' }, count: 23, revenue: 409750 }
+            ];
+          }
+          return [];
+        };
+
+        const res = await getAllStaffStats({ months: 3 });
+        const raviEntries = res.stats.filter((s) => s.name.toLowerCase() === 'ravi');
+        assert.strictEqual(raviEntries.length, 1);
+        assert.strictEqual(raviEntries[0].name, 'Ravi');
+        assert.strictEqual(raviEntries[0].totalBookings, 103);
+        assert.strictEqual(raviEntries[0].totalCount, 103);
+        assert.strictEqual(raviEntries[0].totalBookingValue, 1328150);
+        assert.strictEqual(raviEntries[0].collectedAmount, 500000);
+        assert.strictEqual(raviEntries[0].cancelledCollectedAmount, 5000);
+        assert.strictEqual(raviEntries[0].monthlyStats['2026-11'].count, 80);
+        assert.strictEqual(raviEntries[0].monthlyStats['2026-10'].count, 23);
+      });
+
+      await test('7. Case and whitespace variants ("Ravi", "ravi", " Ravi ") reconcile to one identity', async () => {
+        Staff.find = () => ({ lean: async () => [{ name: 'Ravi', status: 'active' }] });
+        Booking.aggregate = async (pipeline) => {
+          if (pipeline.some((s) => s.$addFields && s.$addFields._staffName)) {
+            return [
+              { _id: 'Ravi', totalBookings: 2, totalBookingValue: 10000, coupleCount: 2, groupCount: 0, oneDayCount: 0 },
+              { _id: 'ravi', totalBookings: 1, totalBookingValue: 5000, coupleCount: 1, groupCount: 0, oneDayCount: 0 }
+            ];
+          }
+          if (pipeline.some((s) => s.$unwind === '$payments')) {
+            return [
+              { _id: ' Ravi ', collectedActive: 7500, collectedCancelled: 0, collectionCountActive: 2, collectionCountCancelled: 0 }
+            ];
+          }
+          return [];
+        };
+        const res = await getAllStaffStats({ months: 3 });
+        assert.strictEqual(res.stats.length, 1);
+        assert.strictEqual(res.stats[0].name, 'Ravi');
+        assert.strictEqual(res.stats[0].totalBookings, 3);
+        assert.strictEqual(res.stats[0].totalBookingValue, 15000);
+        assert.strictEqual(res.stats[0].collectedAmount, 7500);
+      });
+
+      await test('8. Profile consistency: getIndividualStaffProfile("ravi", 6) and ("Ravi", 6) match & include packageBreakdown + <=10 recent bookings', async () => {
+        Staff.find = () => ({ lean: async () => [{ name: 'Ravi', status: 'active', role: 'Manager', contact: '9876543210' }] });
+        const fakeBookings = Array.from({ length: 10 }, (_, i) => ({
+          _id: `b_${i}`,
+          customerName: `Guest ${i + 1}`,
+          packageType: 'couple',
+          totalAmount: 5000,
+          createdAt: new Date(`2026-11-${String(20 - i).padStart(2, '0')}T10:00:00Z`),
+          status: 'confirmed',
+          guestPhone: 'SHOULD_NOT_LEAK'
+        }));
+        let capturedLimit = null;
+        Booking.find = () => ({
+          select: () => ({
+            sort: () => ({
+              limit: (n) => {
+                capturedLimit = n;
+                return { lean: async () => fakeBookings.slice(0, n) };
+              }
+            })
+          })
+        });
+        Booking.aggregate = async (pipeline) => {
+          if (pipeline.some((s) => s.$addFields && s.$addFields._staffName)) {
+            return [
+              { _id: 'Ravi', totalBookings: 106, totalBookingValue: 1382150, coupleCount: 80, groupCount: 20, oneDayCount: 6 }
+            ];
+          }
+          if (pipeline.some((s) => s.$unwind === '$payments')) {
+            return [
+              { _id: 'ravi', collectedActive: 600000, collectedCancelled: 0, collectionCountActive: 50, collectionCountCancelled: 0 }
+            ];
+          }
+          if (pipeline.some((s) => s.$match && s.$match.$or)) {
+            return [
+              { _id: '2026-11', count: 80, revenue: 918400 },
+              { _id: '2026-09', count: 18, revenue: 276250 },
+              { _id: '2026-08', count: 8, revenue: 187500 }
+            ];
+          }
+          return [];
+        };
+
+        const pLower = await getIndividualStaffProfile('ravi', 6);
+        const pUpper = await getIndividualStaffProfile('Ravi', 6);
+
+        assert.strictEqual(pLower.name, 'Ravi');
+        assert.strictEqual(pUpper.name, 'Ravi');
+        assert.strictEqual(pLower.totalBookings, 106);
+        assert.strictEqual(pUpper.totalBookings, 106);
+        assert.strictEqual(pLower.totalRevenue, 1382150);
+        assert.strictEqual(pUpper.totalRevenue, 1382150);
+        assert.strictEqual(pLower.collectedAmount, 600000);
+        assert.deepStrictEqual(pLower.packageBreakdown, { couple: 80, group: 20, oneDay: 6 });
+        assert.deepStrictEqual(pLower.monthlyStats, pUpper.monthlyStats);
+        const monthlyCountSum = Object.values(pLower.monthlyStats).reduce((s, m) => s + m.count, 0);
+        assert.strictEqual(monthlyCountSum, pLower.totalBookings);
+        assert.strictEqual(capturedLimit, 10);
+        assert.strictEqual(pLower.bookings.length, 10);
+        assert.strictEqual(pLower.bookings[0].guestPhone, undefined);
+      });
+
+      await test('9. Missing, empty, whitespace-only, and malformed identity records do not crash', async () => {
+        Staff.find = () => ({ lean: async () => [{ name: '  ', status: 'active' }, null] });
+        Booking.find = () => ({
+          select: () => ({ sort: () => ({ limit: () => ({ lean: async () => [] }) }) })
+        });
+        Booking.aggregate = async (pipeline) => {
+          if (pipeline.some((s) => s.$addFields && s.$addFields._staffName)) {
+            return [
+              null,
+              { _id: null, totalBookings: 1, totalBookingValue: 3000 },
+              { _id: '   ', totalBookings: 2, totalBookingValue: 4000 }
+            ];
+          }
+          if (pipeline.some((s) => s.$unwind === '$payments')) {
+            return [
+              { _id: '', collectedActive: 1000, collectedCancelled: 0, collectionCountActive: 1, collectionCountCancelled: 0 }
+            ];
+          }
+          return [];
+        };
+
+        const res = await getAllStaffStats({ months: 3 });
+        assert.strictEqual(res.stats.length, 1);
+        assert.strictEqual(res.stats[0].name, 'Unattributed');
+        assert.strictEqual(res.stats[0].totalBookings, 3);
+        assert.strictEqual(res.stats[0].collectedAmount, 1000);
+
+        const emptyProfile = await getIndividualStaffProfile('   ', 6);
+        assert.strictEqual(emptyProfile.name, 'Unattributed');
+        assert.deepStrictEqual(emptyProfile.bookings, []);
+      });
+
+      await test('10. F-01: bookingAgg falls back from packageType to bookingType to unknown without double counting', async () => {
+        Staff.find = () => ({ lean: async () => [{ name: 'Ravi', status: 'active' }] });
+        const syntheticBookings = [
+          { _id: '1', bookedBy: { name: 'Ravi' }, packageType: 'group', bookingType: 'couple', totalAmount: 8000 },
+          { _id: '2', bookedBy: { name: 'Ravi' }, bookingType: 'couple', totalAmount: 5500 },
+          { _id: '3', bookedBy: { name: 'Ravi' }, packageType: '', bookingType: 'picnic', totalAmount: 2000 },
+          { _id: '4', bookedBy: { name: 'Ravi' }, totalAmount: 3000 }
+        ];
+
+        let capturedPkgExpr = null;
+        Booking.aggregate = async (pipeline) => {
+          const addFieldsStage = pipeline.find((s) => s.$addFields && s.$addFields._staffName);
+          if (addFieldsStage) {
+            capturedPkgExpr = addFieldsStage.$addFields._pkg;
+            const groupStage = pipeline.find((s) => s.$group);
+            const oneDaySet = new Set(groupStage.$group.oneDayCount.$sum.$cond[0].$in[1]);
+            // Evaluate the exact package fallback semantics across synthetic bookings
+            let coupleCount = 0;
+            let groupCount = 0;
+            let oneDayCount = 0;
+            let totalBookingValue = 0;
+            for (const doc of syntheticBookings) {
+              const pkg = String(doc.packageType ?? '').trim();
+              const bType = String(doc.bookingType ?? '').trim();
+              const resolved = pkg.length > 0 ? pkg : (bType.length > 0 ? bType : 'unknown');
+              if (resolved === 'couple') coupleCount++;
+              else if (resolved === 'group') groupCount++;
+              else if (oneDaySet.has(resolved)) oneDayCount++;
+              totalBookingValue += doc.totalAmount || 0;
+            }
+            return [{
+              _id: 'Ravi',
+              totalBookings: syntheticBookings.length,
+              totalBookingValue,
+              coupleCount,
+              groupCount,
+              oneDayCount
+            }];
+          }
+          return [];
+        };
+
+        const res = await getAllStaffStats({ months: 3 });
+        assert.ok(capturedPkgExpr && capturedPkgExpr.$let, 'bookingAgg _pkg must use $let fallback');
+        assert.strictEqual(res.stats.length, 1);
+        assert.strictEqual(res.stats[0].totalBookings, 4);
+        assert.strictEqual(res.stats[0].totalBookingValue, 18500);
+        assert.deepStrictEqual(res.stats[0].packageBreakdown, { couple: 1, group: 1, oneDay: 1 });
+      });
+    } finally {
+      Staff.find = origStaffFind;
+      Booking.find = origBookingFind;
+    }
   } finally {
     server.close();
     Booking.aggregate = origAggregate;

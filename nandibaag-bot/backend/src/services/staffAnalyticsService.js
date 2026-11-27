@@ -7,10 +7,51 @@
  * - Conservative legacy handling without fabricating collector or timestamp attribution
  */
 
-const { Booking } = require('../models');
+const mongoose = require('mongoose');
+const { Booking, Staff } = require('../models');
 const { toISTDateString } = require('../utils/dateHelper');
 
 const MAX_RANGE_DAYS = 366;
+
+function normalizeStaffKey(rawName) {
+  if (typeof rawName !== 'string') return 'unattributed';
+  const trimmed = rawName.trim();
+  return trimmed.length > 0 ? trimmed.toLowerCase() : 'unattributed';
+}
+
+function escapeRegex(str) {
+  return String(str || '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function canQueryModel(model, methodName) {
+  return mongoose.connection.readyState === 1 || model[methodName] !== mongoose.Model[methodName];
+}
+
+async function getStaffMasterByNormalizedKey() {
+  if (!canQueryModel(Staff, 'find')) return new Map();
+  try {
+    const query = Staff.find({}, 'name status role contact');
+    const docs = typeof query?.lean === 'function' ? await query.lean() : await query;
+    const master = new Map();
+    for (const s of docs || []) {
+      const key = normalizeStaffKey(s?.name);
+      if (key === 'unattributed') continue;
+      const existing = master.get(key);
+      // Prefer active Staff master record when duplicates exist
+      if (!existing || (existing.status !== 'active' && s.status === 'active')) {
+        master.set(key, {
+          name: String(s.name).trim(),
+          status: s.status || 'active',
+          role: s.role || 'Staff',
+          contact: s.contact || ''
+        });
+      }
+    }
+    return master;
+  } catch (_) {
+    return new Map();
+  }
+}
 
 class StaffAnalyticsValidationError extends Error {
   constructor(message, statusCode = 400) {
@@ -63,7 +104,7 @@ function validateStaffAnalyticsParams(input = {}) {
 const getAllStaffStats = async (input = 3) => {
   const { dateFrom, dateTo, startDate, endDate, months } = validateStaffAnalyticsParams(input);
 
-  const [bookingAgg, collectionAgg, legacyAgg, monthlyAgg] = await Promise.all([
+  const [bookingAgg, collectionAgg, legacyAgg, monthlyAgg, staffMaster] = await Promise.all([
     // 1. Booking performance by bookedBy (active bookings only)
     Booking.aggregate([
       {
@@ -93,7 +134,27 @@ const getAllStaffStats = async (input = 3) => {
               }
             }
           },
-          _pkg: { $ifNull: ['$packageType', 'unknown'] },
+          _pkg: {
+            $let: {
+              vars: {
+                pkg: { $trim: { input: { $ifNull: ['$packageType', ''] } } },
+                bType: { $trim: { input: { $ifNull: ['$bookingType', ''] } } }
+              },
+              in: {
+                $cond: [
+                  { $gt: [{ $strLenCP: '$$pkg' }, 0] },
+                  '$$pkg',
+                  {
+                    $cond: [
+                      { $gt: [{ $strLenCP: '$$bType' }, 0] },
+                      '$$bType',
+                      'unknown'
+                    ]
+                  }
+                ]
+              }
+            }
+          },
           _totalAmt: { $max: [0, { $ifNull: ['$totalAmount', 0] }] }
         }
       },
@@ -104,7 +165,7 @@ const getAllStaffStats = async (input = 3) => {
           totalBookingValue: { $sum: '$_totalAmt' },
           coupleCount: { $sum: { $cond: [{ $eq: ['$_pkg', 'couple'] }, 1, 0] } },
           groupCount: { $sum: { $cond: [{ $eq: ['$_pkg', 'group'] }, 1, 0] } },
-          oneDayCount: { $sum: { $cond: [{ $in: ['$_pkg', ['oneDay', 'picnic']] }, 1, 0] } }
+          oneDayCount: { $sum: { $cond: [{ $in: ['$_pkg', ['oneDay', 'picnic', 'one-day-picnic', 'dayuse']] }, 1, 0] } }
         }
       }
     ]),
@@ -202,7 +263,10 @@ const getAllStaffStats = async (input = 3) => {
         }
       },
       { $sort: { '_id.month': -1 } }
-    ])
+    ]),
+
+    // 5. Authoritative Staff master display names (when DB connected or stubbed)
+    getStaffMasterByNormalizedKey()
   ]);
 
   // Build ordered descending YYYY-MM keys covering the selected range
@@ -218,14 +282,20 @@ const getAllStaffStats = async (input = 3) => {
   const monthSpan = Math.max(1, months || monthKeysDesc.length || 1);
 
   const staffMap = new Map();
-  const ensureStaff = (name) => {
-    if (!staffMap.has(name)) {
+  const ensureStaff = (rawName, preferDisplayName = false) => {
+    const key = normalizeStaffKey(rawName);
+    const trimmedName = typeof rawName === 'string' && rawName.trim().length > 0 ? rawName.trim() : 'Unattributed';
+    const masterInfo = staffMaster.get(key);
+
+    if (!staffMap.has(key)) {
       const emptyMonthly = {};
       for (const mk of monthKeysDesc) {
         emptyMonthly[mk] = { count: 0, revenue: 0 };
       }
-      staffMap.set(name, {
-        name,
+      staffMap.set(key, {
+        name: key === 'unattributed' ? 'Unattributed' : (masterInfo?.name || trimmedName),
+        role: masterInfo?.role || undefined,
+        contact: masterInfo?.contact || undefined,
         totalBookings: 0,
         totalCount: 0,
         totalRevenue: 0, // booking value (kept for frontend compatibility)
@@ -240,40 +310,44 @@ const getAllStaffStats = async (input = 3) => {
         monthlyStats: emptyMonthly,
         packageBreakdown: { couple: 0, group: 0, oneDay: 0 }
       });
+    } else if (preferDisplayName && !masterInfo && key !== 'unattributed' && trimmedName !== 'Unattributed') {
+      // Prefer booking-attribution casing (bookedBy) over collection-only casing when no Staff master record exists
+      staffMap.get(key).name = trimmedName;
     }
-    return staffMap.get(name);
+    return staffMap.get(key);
   };
 
   for (const row of bookingAgg || []) {
-    const entry = ensureStaff(row._id);
-    entry.totalBookings = row.totalBookings || 0;
-    entry.totalCount = row.totalBookings || 0;
-    entry.totalRevenue = row.totalBookingValue || 0;
-    entry.totalBookingValue = row.totalBookingValue || 0;
-    entry.avgPerMonth = Number(((row.totalBookings || 0) / monthSpan).toFixed(1));
-    entry.packageBreakdown = {
-      couple: row.coupleCount || 0,
-      group: row.groupCount || 0,
-      oneDay: row.oneDayCount || 0
-    };
+    if (!row) continue;
+    const entry = ensureStaff(row._id, true);
+    entry.totalBookings += row.totalBookings || 0;
+    entry.totalCount = entry.totalBookings;
+    entry.totalBookingValue += row.totalBookingValue || 0;
+    entry.totalRevenue = entry.totalBookingValue;
+    entry.avgPerMonth = Number((entry.totalBookings / monthSpan).toFixed(1));
+    entry.packageBreakdown.couple += row.coupleCount || 0;
+    entry.packageBreakdown.group += row.groupCount || 0;
+    entry.packageBreakdown.oneDay += row.oneDayCount || 0;
   }
 
   for (const row of collectionAgg || []) {
-    const entry = ensureStaff(row._id);
-    entry.collectedAmount = row.collectedActive || 0;
-    entry.collectionCount = row.collectionCountActive || 0;
-    entry.cancelledCollectedAmount = row.collectedCancelled || 0;
+    if (!row) continue;
+    const entry = ensureStaff(row._id, false);
+    entry.collectedAmount += row.collectedActive || 0;
+    entry.collectionCount += row.collectionCountActive || 0;
+    entry.cancelledCollectedAmount += row.collectedCancelled || 0;
   }
 
   for (const row of monthlyAgg || []) {
-    const staffName = row._id?.staffName;
-    const monthKey = row._id?.month;
-    if (!staffName || !monthKey) continue;
-    const entry = ensureStaff(staffName);
-    entry.monthlyStats[monthKey] = {
-      count: row.count || 0,
-      revenue: row.revenue || 0
-    };
+    const rawStaffName = row?._id?.staffName;
+    const monthKey = row?._id?.month;
+    if (!monthKey) continue;
+    const entry = ensureStaff(rawStaffName, false);
+    if (!entry.monthlyStats[monthKey]) {
+      entry.monthlyStats[monthKey] = { count: 0, revenue: 0 };
+    }
+    entry.monthlyStats[monthKey].count += row.count || 0;
+    entry.monthlyStats[monthKey].revenue += row.revenue || 0;
   }
 
   for (const entry of staffMap.values()) {
@@ -309,16 +383,31 @@ const getAllStaffStats = async (input = 3) => {
 
 const getStaffMonthlyStats = async (staffName, monthsBack = 3) => {
   const { startDate, endDate } = validateStaffAnalyticsParams({ months: monthsBack });
-  const escaped = String(staffName || '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const key = normalizeStaffKey(staffName);
+  const nameFilter = key === 'unattributed'
+    ? {
+        $or: [
+          { bookedBy: { $exists: false } },
+          { bookedBy: null },
+          { bookedBy: '' },
+          { 'bookedBy.name': { $exists: false } },
+          { 'bookedBy.name': null },
+          { 'bookedBy.name': /^\s*$/ }
+        ]
+      }
+    : {
+        $or: [
+          { 'bookedBy.name': { $regex: `^\\s*${escapeRegex(staffName)}\\s*$`, $options: 'i' } },
+          { bookedBy: { $regex: `^\\s*${escapeRegex(staffName)}\\s*$`, $options: 'i' } }
+        ]
+      };
+
   const rows = await Booking.aggregate([
     {
       $match: {
         createdAt: { $gte: startDate, $lte: endDate },
         status: { $nin: ['cancelled', 'no_show'] },
-        $or: [
-          { 'bookedBy.name': { $regex: `^${escaped}$`, $options: 'i' } },
-          { bookedBy: { $regex: `^${escaped}$`, $options: 'i' } }
-        ]
+        ...nameFilter
       }
     },
     {
@@ -338,12 +427,67 @@ const getStaffMonthlyStats = async (staffName, monthsBack = 3) => {
   return stats;
 };
 
+async function getRecentBookingsForStaff(staffName, startDate, endDate) {
+  if (!canQueryModel(Booking, 'find')) return [];
+  try {
+    const key = normalizeStaffKey(staffName);
+    const nameFilter = key === 'unattributed'
+      ? {
+          $or: [
+            { bookedBy: { $exists: false } },
+            { bookedBy: null },
+            { bookedBy: '' },
+            { 'bookedBy.name': { $exists: false } },
+            { 'bookedBy.name': null },
+            { 'bookedBy.name': /^\s*$/ }
+          ]
+        }
+      : {
+          $or: [
+            { 'bookedBy.name': { $regex: `^\\s*${escapeRegex(staffName)}\\s*$`, $options: 'i' } },
+            { bookedBy: { $regex: `^\\s*${escapeRegex(staffName)}\\s*$`, $options: 'i' } }
+          ]
+        };
+
+    const docs = await Booking.find({
+      createdAt: { $gte: startDate, $lte: endDate },
+      status: { $nin: ['cancelled', 'no_show'] },
+      ...nameFilter
+    })
+      .select('_id customerName packageType bookingType totalAmount createdAt status')
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
+
+    return (docs || []).map((b) => ({
+      _id: b._id,
+      customerName: b.customerName || 'Guest',
+      packageType: b.packageType || b.bookingType || 'couple',
+      totalAmount: Number(b.totalAmount || 0),
+      createdAt: b.createdAt,
+      status: b.status
+    }));
+  } catch (_) {
+    return [];
+  }
+}
+
 const getIndividualStaffProfile = async (staffName, monthsBack = 6) => {
-  const monthlyStats = await getStaffMonthlyStats(staffName, monthsBack);
-  const { stats } = await getAllStaffStats({ months: monthsBack });
-  const staffSummary = stats.find((s) => s.name.toLowerCase() === String(staffName || '').trim().toLowerCase()) || {
-    name: staffName,
+  const { startDate, endDate } = validateStaffAnalyticsParams({ months: monthsBack });
+  const targetKey = normalizeStaffKey(staffName);
+
+  const [monthlyStats, allResult, bookings] = await Promise.all([
+    getStaffMonthlyStats(staffName, monthsBack),
+    getAllStaffStats({ months: monthsBack }),
+    getRecentBookingsForStaff(staffName, startDate, endDate)
+  ]);
+
+  const staffSummary = (allResult.stats || []).find(
+    (s) => normalizeStaffKey(s?.name) === targetKey
+  ) || {
+    name: targetKey === 'unattributed' ? 'Unattributed' : String(staffName || '').trim() || 'Unknown',
     totalBookings: 0,
+    totalCount: 0,
     totalRevenue: 0,
     totalBookingValue: 0,
     collectedAmount: 0,
@@ -354,13 +498,15 @@ const getIndividualStaffProfile = async (staffName, monthsBack = 6) => {
 
   return {
     ...staffSummary,
-    monthlyStats
+    monthlyStats,
+    bookings
   };
 };
 
 module.exports = {
   StaffAnalyticsValidationError,
   validateStaffAnalyticsParams,
+  normalizeStaffKey,
   getStaffMonthlyStats,
   getAllStaffStats,
   getIndividualStaffProfile

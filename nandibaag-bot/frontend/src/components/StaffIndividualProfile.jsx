@@ -58,16 +58,26 @@ const StaffIndividualProfile = ({ staffName, onClose }) => {
     );
   }
 
-  // Package breakdown aggregation
-  const packageCounts = Object.values(profile.monthlyStats || {}).reduce(
-    (acc, month) => {
-      acc.couple += month.packageBreakdown?.couple || 0;
-      acc.group += month.packageBreakdown?.group || 0;
-      acc.oneDay += month.packageBreakdown?.oneDay || 0;
-      return acc;
-    },
-    { couple: 0, group: 0, oneDay: 0 }
-  );
+  // Prefer authoritative packageBreakdown returned by profile service; fall back to monthlyStats only when absent
+  const packageCounts = profile.packageBreakdown
+    ? {
+        couple: Number(profile.packageBreakdown.couple || 0),
+        group: Number(profile.packageBreakdown.group || 0),
+        oneDay: Number(profile.packageBreakdown.oneDay || 0)
+      }
+    : Object.values(profile.monthlyStats || {}).reduce(
+        (acc, month) => {
+          acc.couple += month?.packageBreakdown?.couple || 0;
+          acc.group += month?.packageBreakdown?.group || 0;
+          acc.oneDay += month?.packageBreakdown?.oneDay || 0;
+          return acc;
+        },
+        { couple: 0, group: 0, oneDay: 0 }
+      );
+
+  const totalBookings = Number(profile.totalBookings ?? profile.totalCount ?? 0) || 0;
+  const totalRevenue = Number(profile.totalRevenue ?? profile.totalBookingValue ?? 0) || 0;
+  const recentBookings = Array.isArray(profile.bookings) ? profile.bookings.slice(0, 10) : [];
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -75,7 +85,7 @@ const StaffIndividualProfile = ({ staffName, onClose }) => {
         <button className="close-btn" onClick={onClose}>✕</button>
 
         <div className="profile-header">
-          <h2>👤 {profile.name}</h2>
+          <h2>👤 {profile.name || staffName || 'Staff Member'}</h2>
           <p className="subtitle">{profile.role || 'Staff Member'} • Contact: {profile.contact || 'N/A'}</p>
         </div>
 
@@ -85,17 +95,17 @@ const StaffIndividualProfile = ({ staffName, onClose }) => {
             <h3>📊 Overview</h3>
             <div className="stat-item">
               <label>Total Bookings:</label>
-              <span className="value">{profile.totalBookings}</span>
+              <span className="value">{totalBookings}</span>
             </div>
             <div className="stat-item">
               <label>Total Revenue:</label>
-              <span className="value">₹{(profile.totalRevenue || 0).toLocaleString('en-IN')}</span>
+              <span className="value">₹{totalRevenue.toLocaleString('en-IN')}</span>
             </div>
             <div className="stat-item">
               <label>Avg per Booking:</label>
               <span className="value">
-                ₹{profile.totalBookings > 0 
-                  ? Math.round((profile.totalRevenue || 0) / profile.totalBookings).toLocaleString('en-IN') 
+                ₹{totalBookings > 0 
+                  ? Math.round(totalRevenue / totalBookings).toLocaleString('en-IN') 
                   : 0}
               </span>
             </div>
@@ -145,21 +155,21 @@ const StaffIndividualProfile = ({ staffName, onClose }) => {
           <div className="card wide">
             <h3>📋 Recent Bookings</h3>
             <div className="bookings-list">
-              {(profile.bookings || []).length > 0 ? (
-                profile.bookings.slice(0, 10).map((booking, idx) => (
-                  <div key={booking._id || idx} className="booking-item">
+              {recentBookings.length > 0 ? (
+                recentBookings.map((booking, idx) => (
+                  <div key={booking?._id || idx} className="booking-item">
                     <div className="booking-info">
-                      <strong>{booking.customerName}</strong>
-                      <small>{formatDMY(booking.createdAt)}</small>
+                      <strong>{booking?.customerName || 'Guest'}</strong>
+                      <small>{booking?.createdAt ? formatDMY(booking.createdAt) : '—'}</small>
                     </div>
                     <div className="booking-package">
                       <span className="badge">
-                        {booking.packageType === 'couple' ? 'Couple' :
-                         booking.packageType === 'group' ? 'Group' : 'One Day'}
+                        {booking?.packageType === 'couple' ? 'Couple' :
+                         booking?.packageType === 'group' ? 'Group' : 'One Day'}
                       </span>
                     </div>
                     <div className="booking-amount">
-                      ₹{(booking.totalAmount || 0).toLocaleString('en-IN')}
+                      ₹{(Number(booking?.totalAmount || 0) || 0).toLocaleString('en-IN')}
                     </div>
                   </div>
                 ))
