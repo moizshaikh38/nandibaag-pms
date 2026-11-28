@@ -144,6 +144,7 @@ function prepareAuthoritativeBookingData(payload = {}, user = null) {
       roomAddon: payload.roomAddon,
       rateOverrides: payload.rateOverrides ? { ...payload.rateOverrides, actor } : null,
       discount: payload.discount ? { ...payload.discount, actor } : null,
+      customTotal: payload.customTotal,
       acknowledgeCoupleWarning: Boolean(payload.acknowledgeCoupleWarning),
       actor
     });
@@ -243,6 +244,15 @@ async function logManualBookingAuditEvents(userId, booking, prepared, req = null
     finalTotal: prepared.totalAmount,
     ruleVersion: prepared.quote.pricingRuleVersion
   }, req);
+
+  if (prepared.quote.customTotalApplied) {
+    await logActivity(userId, 'custom_total_applied', {
+      bookingId: bookingRef,
+      calculatedTotal: prepared.quote.calculatedTotal,
+      customTotal: prepared.totalAmount,
+      manualTotalAdjustment: prepared.quote.manualTotalAdjustment
+    }, req);
+  }
 
   if (prepared.rateOverrides && prepared.rateOverrides.length > 0) {
     await logActivity(userId, 'rate_override_applied', {

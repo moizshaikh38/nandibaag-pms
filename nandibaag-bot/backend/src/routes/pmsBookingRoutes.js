@@ -121,6 +121,7 @@ const manualBookingSchema = Joi.object({
   roomAddon: Joi.alternatives().try(Joi.boolean(), Joi.object({ enabled: Joi.boolean() }).unknown(true)).optional(),
   rateOverrides: Joi.object().unknown(true).allow(null).optional(),
   discount: Joi.object().unknown(true).allow(null).optional(),
+  customTotal: Joi.number().min(0).allow(null, '').optional(),
   payment: Joi.object().unknown(true).allow(null).optional(),
   advancePayment: Joi.number().min(0).allow(null).optional(),
   paymentMode: Joi.string().allow('', null).optional(),
@@ -179,6 +180,7 @@ router.post('/pricing/preview', verifyToken, (req, res, next) => {
       roomAddon: value.roomAddon,
       rateOverrides: value.rateOverrides || null,
       discount: value.discount || null,
+      customTotal: value.customTotal,
       acknowledgeCoupleWarning: Boolean(value.acknowledgeCoupleWarning),
       actor: req.user ? { userId: req.user.id, name: req.user.name || req.user.email, email: req.user.email } : null
     });
@@ -1303,6 +1305,92 @@ router.post('/bookings/:id/payments', verifyToken, async (req, res, next) => {
     if (!paymentPersisted && idempotencyScopeKey) {
       await releaseIdempotencyOnFailure({ scopeKey: idempotencyScopeKey });
     }
+    next(error);
+  }
+});
+
+/**
+ * PATCH /api/pms/bookings/:id/total
+ * Update a booking's custom final total without modifying recorded payments.
+ * Recalculates remainingPayment & paymentStatus via paymentSyncService.
+ */
+router.patch('/bookings/:id/total', verifyToken, async (req, res, next) => {
+  try {
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid booking ID' });
+    }
+
+    const rawTotal = req.body?.totalAmount ?? req.body?.customTotal;
+    if (rawTotal === undefined || rawTotal === null || rawTotal === '') {
+      return res.status(400).json({ success: false, message: 'Valid non-negative totalAmount is required' });
+    }
+    const parsedTotal = Number(rawTotal);
+    if (!Number.isFinite(parsedTotal) || parsedTotal < 0) {
+      return res.status(400).json({ success: false, message: 'totalAmount must be a non-negative finite number' });
+    }
+
+    const nextTotal = Math.round(parsedTotal * 100) / 100;
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    const previousTotal = Number(booking.totalAmount || 0);
+    const existingSnap = booking.pricingSnapshot && typeof booking.pricingSnapshot === 'object'
+      ? booking.pricingSnapshot
+      : {};
+    const calculatedTotal = existingSnap.calculatedTotal ?? existingSnap.originalTotal ?? previousTotal;
+    const originalTotal = existingSnap.originalTotal ?? calculatedTotal;
+    const manualTotalAdjustment = Math.round((nextTotal - calculatedTotal) * 100) / 100;
+
+    booking.totalAmount = nextTotal;
+    booking.pricingSnapshot = {
+      ...existingSnap,
+      originalTotal,
+      calculatedTotal,
+      customTotal: nextTotal,
+      manualTotalAdjustment,
+      customTotalApplied: true,
+      customTotalSetBy: {
+        userId: req.user?.id || req.user?._id || null,
+        name: req.user?.name || req.user?.email || 'Staff',
+        email: req.user?.email || ''
+      },
+      customTotalSetAt: new Date().toISOString(),
+      quotedTotal: nextTotal
+    };
+
+    const summary = syncBookingPaymentFields(booking);
+    await booking.save();
+
+    await logActivity(req.user?.id || req.user?._id, 'booking_total_updated', {
+      bookingId: String(booking._id),
+      previousTotal,
+      calculatedTotal,
+      newTotal: nextTotal,
+      manualTotalAdjustment,
+      paidAmount: summary.paidAmount,
+      remainingAmount: summary.remainingAmount
+    }, req);
+
+    const io = req.app?.get('io');
+    if (io) {
+      io.emit('pms:booking_updated', { bookingId: String(booking._id), totalAmount: nextTotal });
+    }
+
+    const overpaidAmount = Math.max(0, Math.round((summary.paidAmount - nextTotal) * 100) / 100);
+    const warning = overpaidAmount > 0
+      ? `Recorded payments (₹${summary.paidAmount}) exceed the new total (₹${nextTotal}) by ₹${overpaidAmount}. No automatic refund was created.`
+      : null;
+
+    const bookingObj = typeof booking.toObject === 'function' ? booking.toObject() : booking;
+    res.json({
+      success: true,
+      booking: attachPaymentSummary(bookingObj),
+      overpaidAmount,
+      warning
+    });
+  } catch (error) {
     next(error);
   }
 });

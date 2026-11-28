@@ -543,6 +543,7 @@ export default function BookingsPage() {
         notes,
         adults: parseInt(guestComposition.adults) || 1,
         totalAmount: parseFloat(manualForm.totalAmount) || 0,
+        customTotal: manualForm.totalAmount !== '' && Number.isFinite(parseFloat(manualForm.totalAmount)) ? parseFloat(manualForm.totalAmount) : undefined,
         advancePayment: parseFloat(manualForm.advancePayment) || 0,
         remainingPayment: parseFloat(manualForm.remainingPayment) || 0,
         roomId: manualForm.roomId || null,

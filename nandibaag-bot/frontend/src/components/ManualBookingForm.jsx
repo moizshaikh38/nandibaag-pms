@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { getSessionId } from '../utils/sessionManager';
 import { connectSocket } from '../utils/socket';
 import { formatDateDDMMYYYY, getDayName, formatDateWithDay } from '../utils/dateFormatter';
+import { computeEffectiveRate } from '../utils/effectiveRate';
 import {
   FileEdit,
   User,
@@ -90,6 +91,7 @@ const ManualBookingForm = () => {
     uploadError: ''
   });
   const [quoteState, setQuoteState] = useState({ quote: null, loading: false, error: '' });
+  const [customTotal, setCustomTotal] = useState('');
   const [acknowledgeCoupleWarning, setAcknowledgeCoupleWarning] = useState(false);
   const [acknowledgeZeroAdvance, setAcknowledgeZeroAdvance] = useState(false);
   const previewSeqRef = React.useRef(0);
@@ -117,6 +119,7 @@ const ManualBookingForm = () => {
     roomAddon,
     rateOverrides,
     discount,
+    customTotal,
     paymentDetails.mode,
     paymentDetails.utr,
     paymentDetails.screenshotRef,
@@ -189,6 +192,7 @@ const ManualBookingForm = () => {
           roomAddon: formData.packageType === 'oneDay' ? roomAddon : false,
           rateOverrides: hasAnyOverride ? rateOverrides : undefined,
           discount: hasDiscount ? { ...discount, value: Number(discount.value) } : undefined,
+          customTotal: customTotal !== '' ? Number(customTotal) : undefined,
           acknowledgeCoupleWarning
         };
 
@@ -227,6 +231,7 @@ const ManualBookingForm = () => {
     roomAddon,
     rateOverrides,
     discount,
+    customTotal,
     acknowledgeCoupleWarning
   ]);
 
@@ -241,6 +246,17 @@ const ManualBookingForm = () => {
     }
     return map;
   }, [roomsList]);
+
+  const effectiveRateSummary = useMemo(() => {
+    const activeTotal = customTotal !== '' ? Number(customTotal) : Number(formData.totalAmount);
+    return computeEffectiveRate({
+      quote: quoteState.quote,
+      packageType: formData.packageType,
+      adults: formData.guestComposition.adults,
+      childrenAges,
+      finalTotal: activeTotal
+    });
+  }, [quoteState.quote, formData.packageType, formData.guestComposition.adults, childrenAges, customTotal, formData.totalAmount]);
 
   // Connect socket and listen for real-time room updates
   useEffect(() => {
@@ -580,6 +596,7 @@ const ManualBookingForm = () => {
         roomAddon: formData.packageType === 'oneDay' ? roomAddon : false,
         rateOverrides: hasAnyOverride ? rateOverrides : null,
         discount: hasDiscount ? { ...discount, value: Number(discount.value) } : null,
+        customTotal: customTotal !== '' ? Number(customTotal) : undefined,
         payment: {
           amount: advAmt,
           mode: paymentDetails.mode,
@@ -635,6 +652,7 @@ const ManualBookingForm = () => {
       });
       setAcknowledgeCoupleWarning(false);
       setAcknowledgeZeroAdvance(false);
+      setCustomTotal('');
       setQuoteState({ quote: null, loading: false, error: '' });
       idempotencyKeyRef.current = generateIdempotencyKey();
       setFormData({
@@ -1293,6 +1311,40 @@ const ManualBookingForm = () => {
                       <span>-₹{quoteState.quote.discountAmount.toLocaleString('en-IN')}</span>
                     </div>
                   )}
+                  {(quoteState.quote.customTotalApplied || customTotal !== '') && (() => {
+                    const calcTotal = Number(quoteState.quote.calculatedTotal ?? quoteState.quote.originalTotal ?? 0);
+                    const activeTotal = customTotal !== '' ? Number(customTotal) : Number(quoteState.quote.totalAmount ?? calcTotal);
+                    const liveAdj = Math.round((activeTotal - calcTotal) * 100) / 100;
+                    return (
+                      <>
+                        <div className="flex justify-between text-slate-400 border-t border-slate-800 pt-1">
+                          <span>System Calculated Total:</span>
+                          <span>₹{calcTotal.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="flex justify-between text-sky-300 font-semibold">
+                          <span>Manual Adjustment:</span>
+                          <span>
+                            {liveAdj >= 0 ? '+' : '-'}₹{Math.abs(liveAdj).toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                      </>
+                    );
+                  })()}
+                  {effectiveRateSummary && effectiveRateSummary.effectiveRate !== null && (
+                    <div className="flex justify-between items-center border-t border-slate-800 pt-1 text-[11px]">
+                      <span className="text-slate-400">
+                        {effectiveRateSummary.pricingModel === 'per_person' ? 'Effective Rate / Person:' : 'Effective Rate / Night:'}
+                        {effectiveRateSummary.originalRate !== null && effectiveRateSummary.effectiveRate !== effectiveRateSummary.originalRate && (
+                          <span className="text-slate-500 ml-1">
+                            (Orig: ₹{effectiveRateSummary.originalRate.toLocaleString('en-IN', { maximumFractionDigits: 2 })})
+                          </span>
+                        )}
+                      </span>
+                      <span className={`font-bold ${effectiveRateSummary.effectiveRate !== effectiveRateSummary.originalRate ? 'text-emerald-300' : 'text-slate-200'}`}>
+                        ₹{effectiveRateSummary.effectiveRate.toLocaleString('en-IN', { maximumFractionDigits: 2 })} {effectiveRateSummary.unitLabel}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1472,12 +1524,66 @@ const ManualBookingForm = () => {
 
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="block text-[10px] font-extrabold text-slate-300 mb-1">Final Total (₹)</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] font-extrabold text-slate-300">Final Total (₹)</label>
+                    {customTotal !== '' && quoteState.quote && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCustomTotal('');
+                          const calc = quoteState.quote.calculatedTotal ?? quoteState.quote.totalAmount ?? 0;
+                          setFormData(prev => {
+                            const adv = prev.isFullPaid ? calc : (parseFloat(prev.advancePayment) || 0);
+                            return {
+                              ...prev,
+                              totalAmount: calc,
+                              advancePayment: prev.isFullPaid ? calc : prev.advancePayment,
+                              remainingPayment: Math.max(0, calc - adv)
+                            };
+                          });
+                        }}
+                        className="text-[9px] text-sky-400 hover:text-sky-300 underline font-semibold"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="number"
-                    readOnly
-                    value={formData.totalAmount}
-                    className="w-full px-2.5 py-2 text-sm font-extrabold border border-slate-700 rounded-xl bg-slate-900 text-white text-center shadow-inner"
+                    min="0"
+                    step="any"
+                    name="totalAmount"
+                    value={customTotal !== '' ? customTotal : formData.totalAmount}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (raw === '') {
+                        setCustomTotal('');
+                        const fallbackTotal = quoteState.quote?.calculatedTotal ?? quoteState.quote?.totalAmount ?? 0;
+                        setFormData(prev => {
+                          const adv = prev.isFullPaid ? fallbackTotal : (parseFloat(prev.advancePayment) || 0);
+                          return {
+                            ...prev,
+                            totalAmount: fallbackTotal,
+                            advancePayment: prev.isFullPaid ? fallbackTotal : prev.advancePayment,
+                            remainingPayment: Math.max(0, fallbackTotal - adv)
+                          };
+                        });
+                        return;
+                      }
+                      const parsed = Number(raw);
+                      if (!Number.isFinite(parsed) || parsed < 0) return;
+                      setCustomTotal(raw);
+                      setFormData(prev => {
+                        const adv = prev.isFullPaid ? parsed : (parseFloat(prev.advancePayment) || 0);
+                        return {
+                          ...prev,
+                          totalAmount: parsed,
+                          advancePayment: prev.isFullPaid ? parsed : prev.advancePayment,
+                          remainingPayment: Math.max(0, parsed - adv)
+                        };
+                      });
+                    }}
+                    className="w-full px-2.5 py-2 text-sm font-extrabold border border-sky-600/70 rounded-xl bg-slate-900 text-white text-center shadow-inner focus:ring-2 focus:ring-sky-500"
                   />
                 </div>
 

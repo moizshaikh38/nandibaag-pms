@@ -281,9 +281,138 @@ function validateAndApplyDiscount(discountInput, subtotalAfterOverrides, actor =
   };
 }
 
+function computeEffectiveRateSummary(quote, finalTotalInput) {
+  const calculatedTotal = Number(quote?.calculatedTotal ?? quote?.totalAmount ?? 0);
+  const parsedFinal = Number(finalTotalInput);
+  const finalTotal = Number.isFinite(parsedFinal) && parsedFinal >= 0 ? parsedFinal : calculatedTotal;
+  const pkg = quote?.packageType || 'couple';
+  const guestSummary = quote?.guestSummary || {};
+
+  if (pkg === 'oneDay') {
+    const applicableGuestCount = Number(guestSummary.effectiveAdults ?? ((guestSummary.inputAdults || 0) + (guestSummary.inputChildren || 0)));
+    const originalRate = Number(
+      quote?.dailyBreakdown?.[0]?.perPersonRate ??
+      quote?.snapshot?.ratesApplied?.oneDayPerPersonRate ??
+      (applicableGuestCount > 0 ? Math.round((calculatedTotal / applicableGuestCount) * 100) / 100 : 0)
+    );
+    const effectiveRate = applicableGuestCount > 0
+      ? Math.round((finalTotal / applicableGuestCount) * 100) / 100
+      : null;
+    return {
+      pricingModel: 'per_person',
+      applicableGuestCount,
+      nights: 0,
+      unitLabel: '/ person',
+      originalRate,
+      effectiveRate
+    };
+  }
+
+  const nights = Math.max(1, Number(quote?.nights || 1));
+  if (pkg === 'group') {
+    const effectiveAdults = Number(guestSummary.effectiveAdults || 0);
+    const chargeableChildren = Number(guestSummary.chargeableChildren || 0);
+    // Free children (0-5) are excluded from the paying guest denominator
+    const applicableGuestCount = chargeableChildren === 0
+      ? effectiveAdults
+      : (effectiveAdults + chargeableChildren);
+    const denom = applicableGuestCount * nights;
+    const originalRate = denom > 0 ? Math.round((calculatedTotal / denom) * 100) / 100 : null;
+    const effectiveRate = denom > 0 ? Math.round((finalTotal / denom) * 100) / 100 : null;
+    const unitLabel = chargeableChildren === 0
+      ? (nights > 1 ? '/ adult / night' : '/ adult')
+      : (nights > 1 ? '/ paying guest / night' : '/ paying guest');
+    return {
+      pricingModel: 'per_person',
+      applicableGuestCount,
+      nights,
+      unitLabel,
+      originalRate,
+      effectiveRate
+    };
+  }
+
+  // Couple Stay is package/room-based (not per-person)
+  return {
+    pricingModel: 'package_per_night',
+    applicableGuestCount: null,
+    nights,
+    unitLabel: '/ night',
+    originalRate: Math.round((calculatedTotal / nights) * 100) / 100,
+    effectiveRate: Math.round((finalTotal / nights) * 100) / 100
+  };
+}
+
+function applyCustomTotalToQuote(quote, customTotalInput, actor = null) {
+  const calculatedTotal = quote.totalAmount;
+  if (customTotalInput === undefined || customTotalInput === null || customTotalInput === '') {
+    const effectiveRateSummary = computeEffectiveRateSummary(quote, calculatedTotal);
+    return {
+      ...quote,
+      calculatedTotal,
+      customTotal: null,
+      manualTotalAdjustment: 0,
+      customTotalApplied: false,
+      effectiveRateSummary,
+      snapshot: {
+        ...quote.snapshot,
+        calculatedTotal,
+        customTotal: null,
+        manualTotalAdjustment: 0,
+        customTotalApplied: false
+      }
+    };
+  }
+
+  const parsed = Number(customTotalInput);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new PricingValidationError(
+      'Invalid customTotal: must be a non-negative finite number',
+      'INVALID_CUSTOM_TOTAL'
+    );
+  }
+
+  const finalCustomTotal = Math.round(parsed * 100) / 100;
+  const manualTotalAdjustment = Math.round((finalCustomTotal - calculatedTotal) * 100) / 100;
+  const effectiveRateSummary = computeEffectiveRateSummary({ ...quote, calculatedTotal }, finalCustomTotal);
+  const adjSign = manualTotalAdjustment >= 0 ? '+' : '-';
+  const adjAbs = Math.abs(manualTotalAdjustment).toLocaleString('en-IN');
+  const effRateLine = effectiveRateSummary.pricingModel === 'per_person' && effectiveRateSummary.effectiveRate !== null
+    ? `\nEffective Rate: ₹${effectiveRateSummary.effectiveRate.toLocaleString('en-IN', { maximumFractionDigits: 2 })} ${effectiveRateSummary.unitLabel}`
+    : '';
+
+  const updatedFormatted = quote.formatted.replace(
+    `TOTAL: ₹${calculatedTotal.toLocaleString('en-IN')}`,
+    manualTotalAdjustment !== 0
+      ? `Calculated Total: ₹${calculatedTotal.toLocaleString('en-IN')}\nManual Adjustment: ${adjSign}₹${adjAbs}${effRateLine}\nTOTAL: ₹${finalCustomTotal.toLocaleString('en-IN')}`
+      : `TOTAL: ₹${finalCustomTotal.toLocaleString('en-IN')}`
+  );
+
+  return {
+    ...quote,
+    calculatedTotal,
+    customTotal: finalCustomTotal,
+    manualTotalAdjustment,
+    customTotalApplied: true,
+    effectiveRateSummary,
+    totalAmount: finalCustomTotal,
+    formatted: updatedFormatted,
+    snapshot: {
+      ...quote.snapshot,
+      calculatedTotal,
+      customTotal: finalCustomTotal,
+      manualTotalAdjustment,
+      customTotalApplied: true,
+      customTotalSetBy: actor || null,
+      customTotalSetAt: new Date().toISOString(),
+      quotedTotal: finalCustomTotal
+    }
+  };
+}
+
 /**
  * Authoritative deterministic pricing engine.
- * Never trusts any client-supplied totalAmount.
+ * Ignores unflagged client totalAmount; honors explicit customTotal when provided.
  */
 function calculateBookingQuote(input = {}) {
   const rates = getRateConfig(input.rateConfig || null);
@@ -460,7 +589,7 @@ TOTAL: ₹${totalAmount.toLocaleString('en-IN')}
 
 Our team will complete your booking! 🎉`;
 
-    return {
+    return applyCustomTotalToQuote({
       pricingRuleVersion: PRICING_RULE_VERSION,
       packageType: 'oneDay',
       mealOption,
@@ -479,7 +608,7 @@ Our team will complete your booking! 🎉`;
       totalAmount,
       snapshot,
       formatted
-    };
+    }, input.customTotal, actor);
   }
 
   // ── OVERNIGHT STAYS (COUPLE / GROUP) ────────────────────────────────────
@@ -833,7 +962,7 @@ TOTAL: ₹${totalAmount.toLocaleString('en-IN')}
 
 Our team will complete your booking! 🎉`;
 
-  return {
+  return applyCustomTotalToQuote({
     pricingRuleVersion: PRICING_RULE_VERSION,
     packageType,
     mealOption: null,
@@ -856,7 +985,7 @@ Our team will complete your booking! 🎉`;
     totalAmount,
     snapshot,
     formatted
-  };
+  }, input.customTotal, actor);
 }
 
 /**
@@ -977,6 +1106,7 @@ module.exports = {
   getDayName,
   parseLocalDate,
   calculateBookingQuote,
+  computeEffectiveRateSummary,
   calculatePricing,
   calculateBookingPrice,
   formatDateShort
