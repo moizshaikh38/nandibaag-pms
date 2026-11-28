@@ -28,7 +28,7 @@ const getCheckInCheckOutTimes = (packageType, mealOption) => {
 
   // ONE-DAY PICNIC
   if (packageType === 'one-day-picnic' || packageType === 'oneDay' || packageType === 'picnic' || packageType === 'dayuse') {
-    if (mealOption === 'breakfast-to-tea' || mealOption === 'B->T') {
+    if (mealOption === 'breakfast_tea' || mealOption === 'breakfast-to-tea' || mealOption === 'B->T') {
       return {
         checkIn: '9:00 AM',
         checkOut: '6:30 PM',
@@ -36,7 +36,7 @@ const getCheckInCheckOutTimes = (packageType, mealOption) => {
         checkOutTime: '6:30 PM',
         description: 'Check-in: 9:00 AM | Check-out: 6:30 PM (same day)'
       };
-    } else if (mealOption === 'breakfast-to-dinner' || mealOption === 'B->D') {
+    } else if (mealOption === 'breakfast_dinner' || mealOption === 'breakfast-to-dinner' || mealOption === 'B->D') {
       return {
         checkIn: '9:00 AM',
         checkOut: '9:30 PM',

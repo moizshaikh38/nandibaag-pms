@@ -44,9 +44,13 @@ const BookingsTableView = ({ bookings = [], onRefresh }) => {
       
       switch(booking.mealOption) {
         case 'B->D':
+        case 'breakfast_dinner':
+        case 'breakfast-to-dinner':
           checkOut = '9:30 PM';
           break;
         case 'B->T':
+        case 'breakfast_tea':
+        case 'breakfast-to-tea':
           checkOut = '6:30 PM';
           break;
         case 'B->L':
@@ -82,7 +86,7 @@ const BookingsTableView = ({ bookings = [], onRefresh }) => {
 
       const formatPackageType = (p, m) => {
         if (p === 'one-day-picnic' || p === 'oneDay' || p === 'picnic' || p === 'dayuse') {
-          const mealText = (m === 'breakfast-to-tea' || m === 'B->T') ? 'B→T' : (m === 'B->L' ? 'B→L' : 'B→D');
+          const mealText = (m === 'breakfast_tea' || m === 'breakfast-to-tea' || m === 'B->T') ? 'B→T' : (m === 'B->L' ? 'B→L' : 'B→D');
           return `🎉 One-Day (${mealText})`;
         } else if (p === 'couple') {
           return '👫 Couple';

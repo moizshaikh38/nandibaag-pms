@@ -123,6 +123,38 @@ const ManualBookingForm = () => {
     selectedRooms
   ]);
 
+  // Reset numeric rate overrides when packageType, mealOption, or dates change to prevent stale overrides
+  useEffect(() => {
+    setRateOverrides(prev => {
+      const hasAny = Object.entries(prev).some(([k, v]) => k !== 'reason' && v !== '');
+      if (!hasAny) return prev;
+      return {
+        coupleBaseRate: '',
+        coupleBaseRateWeekday: '',
+        coupleBaseRateWeekend: '',
+        extraAdultRate: '',
+        extraAdultRateWeekday: '',
+        extraAdultRateWeekend: '',
+        groupAdultRate: '',
+        groupAdultRateWeekday: '',
+        groupAdultRateWeekend: '',
+        childRate: '',
+        childRateWeekday: '',
+        childRateWeekend: '',
+        oneDayPerPersonRate: '',
+        roomAddonRate: '',
+        reason: prev.reason
+      };
+    });
+  }, [formData.packageType, formData.mealOption, formData.checkInDate, formData.checkOutDate]);
+
+  // Clear roomAddonRate override if roomAddon is disabled
+  useEffect(() => {
+    if (!roomAddon && rateOverrides.roomAddonRate !== '') {
+      setRateOverrides(prev => ({ ...prev, roomAddonRate: '' }));
+    }
+  }, [roomAddon, rateOverrides.roomAddonRate]);
+
   // Sprint 2: Reset acknowledgments when core booking configuration changes
   useEffect(() => {
     setAcknowledgeCoupleWarning(false);
@@ -165,50 +197,6 @@ const ManualBookingForm = () => {
 
         const q = res.data.quote;
         setQuoteState({ quote: q, loading: false, error: '' });
-        if (q) {
-          const breakdown = Array.isArray(q.dailyBreakdown)
-            ? q.dailyBreakdown
-            : (Array.isArray(q.snapshot?.breakdown) ? q.snapshot.breakdown : []);
-          const ratesApplied = q.snapshot?.ratesApplied || {};
-          const addOns = q.addOns || q.snapshot?.addOns || {};
-          const weekdayBreak = breakdown.find(b => b.rateCategory === 'WEEKDAY') || null;
-          const weekendBreak = breakdown.find(b => b.rateCategory === 'WEEKEND') || null;
-          const firstBreak = breakdown[0] || null;
-
-          const getExtra = (b) => (b?.guestCounts?.extraAdults > 0 && b?.extraAdultPricing != null ? String(Math.round(b.extraAdultPricing / b.guestCounts.extraAdults)) : '');
-          const getChild = (b) => (b?.guestCounts?.chargeableChildren > 0 && b?.childPricing != null ? String(Math.round(b.childPricing / b.guestCounts.chargeableChildren)) : '');
-
-          const dCoupleWd = formData.packageType === 'couple' && weekdayBreak?.roomRate != null ? String(weekdayBreak.roomRate) : '';
-          const dCoupleWe = formData.packageType === 'couple' && weekendBreak?.roomRate != null ? String(weekendBreak.roomRate) : '';
-          const dExtraWd = getExtra(weekdayBreak);
-          const dExtraWe = getExtra(weekendBreak);
-          const dGroupWd = formData.packageType === 'group' && weekdayBreak?.roomRate != null ? String(weekdayBreak.roomRate) : '';
-          const dGroupWe = formData.packageType === 'group' && weekendBreak?.roomRate != null ? String(weekendBreak.roomRate) : '';
-          const dChildWd = getChild(weekdayBreak);
-          const dChildWe = getChild(weekendBreak);
-          const dOneDay = formData.packageType === 'oneDay' && (firstBreak?.perPersonRate ?? ratesApplied?.oneDayPerPersonRate) != null
-            ? String(firstBreak?.perPersonRate ?? ratesApplied?.oneDayPerPersonRate) : '';
-          const dRoomAddon = formData.packageType === 'oneDay' && roomAddon && (addOns?.smallRoom?.amount ?? ratesApplied?.roomAddonRate) != null
-            ? String(addOns?.smallRoom?.amount ?? ratesApplied?.roomAddonRate) : '';
-
-          setRateOverrides(prev => {
-            const next = {
-              ...prev,
-              coupleBaseRateWeekday: prev.coupleBaseRateWeekday === '' && dCoupleWd !== '' ? dCoupleWd : prev.coupleBaseRateWeekday,
-              coupleBaseRateWeekend: prev.coupleBaseRateWeekend === '' && dCoupleWe !== '' ? dCoupleWe : prev.coupleBaseRateWeekend,
-              extraAdultRateWeekday: prev.extraAdultRateWeekday === '' && dExtraWd !== '' ? dExtraWd : prev.extraAdultRateWeekday,
-              extraAdultRateWeekend: prev.extraAdultRateWeekend === '' && dExtraWe !== '' ? dExtraWe : prev.extraAdultRateWeekend,
-              groupAdultRateWeekday: prev.groupAdultRateWeekday === '' && dGroupWd !== '' ? dGroupWd : prev.groupAdultRateWeekday,
-              groupAdultRateWeekend: prev.groupAdultRateWeekend === '' && dGroupWe !== '' ? dGroupWe : prev.groupAdultRateWeekend,
-              childRateWeekday: prev.childRateWeekday === '' && dChildWd !== '' ? dChildWd : prev.childRateWeekday,
-              childRateWeekend: prev.childRateWeekend === '' && dChildWe !== '' ? dChildWe : prev.childRateWeekend,
-              oneDayPerPersonRate: prev.oneDayPerPersonRate === '' && dOneDay !== '' ? dOneDay : prev.oneDayPerPersonRate,
-              roomAddonRate: prev.roomAddonRate === '' && dRoomAddon !== '' ? dRoomAddon : prev.roomAddonRate
-            };
-            const changed = Object.keys(next).some(k => next[k] !== prev[k]);
-            return changed ? next : prev;
-          });
-        }
         setFormData(prev => {
           const adv = prev.isFullPaid ? q.totalAmount : (parseFloat(prev.advancePayment) || 0);
           return {
@@ -580,13 +568,8 @@ const ManualBookingForm = () => {
       return;
     }
 
-    const hasAnyOverride = (
-      rateOverrides.coupleBaseRate !== '' ||
-      rateOverrides.extraAdultRate !== '' ||
-      rateOverrides.groupAdultRate !== '' ||
-      rateOverrides.childRate !== '' ||
-      rateOverrides.oneDayPerPersonRate !== '' ||
-      rateOverrides.roomAddonRate !== ''
+    const hasAnyOverride = Object.entries(rateOverrides).some(
+      ([k, v]) => k !== 'reason' && v !== ''
     );
     const hasDiscount = discount.type !== 'none' && Number(discount.value) > 0;
 
@@ -627,9 +610,17 @@ const ManualBookingForm = () => {
       setShowOverrides(false);
       setRateOverrides({
         coupleBaseRate: '',
+        coupleBaseRateWeekday: '',
+        coupleBaseRateWeekend: '',
         extraAdultRate: '',
+        extraAdultRateWeekday: '',
+        extraAdultRateWeekend: '',
         groupAdultRate: '',
+        groupAdultRateWeekday: '',
+        groupAdultRateWeekend: '',
         childRate: '',
+        childRateWeekday: '',
+        childRateWeekend: '',
         oneDayPerPersonRate: '',
         roomAddonRate: '',
         reason: ''
@@ -1379,7 +1370,7 @@ const ManualBookingForm = () => {
                       <>
                         <div>
                           <label className="block text-[10px] text-slate-400 mb-0.5">Per-Person Rate (₹)</label>
-                          <input type="number" min="0" placeholder="Per-Person (₹)" value={rateOverrides.oneDayPerPersonRate} onChange={e => setRateOverrides(p => ({ ...p, oneDayPerPersonRate: e.target.value }))} className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white" />
+                          <input type="number" min="0" placeholder={quoteState.quote?.snapshot?.ratesApplied?.oneDayPerPersonRate != null ? `Default ₹${quoteState.quote.snapshot.ratesApplied.oneDayPerPersonRate}` : 'Per-Person (₹)'} value={rateOverrides.oneDayPerPersonRate} onChange={e => setRateOverrides(p => ({ ...p, oneDayPerPersonRate: e.target.value }))} className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white" />
                         </div>
                         {roomAddon && (
                           <div>

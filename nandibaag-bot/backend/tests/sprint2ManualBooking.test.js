@@ -410,6 +410,110 @@ async function run() {
     assert.strictEqual(apiRes.json.code, 'STORAGE_NOT_CONFIGURED');
   });
 
+  await test('One Day Picnic B->T: Mongoose schema accepts breakfast_tea & breakfast_dinner, rejects invalid mealOption', () => {
+    const validOptions = ['breakfast_tea', 'breakfast_dinner', 'breakfast-to-tea', 'breakfast-to-dinner', 'B->D', 'B->T', 'B->L', 'none', null];
+    for (const opt of validOptions) {
+      const doc = new models.Booking({
+        customerName: 'Meal Test',
+        customerPhone: '9876543210',
+        date: '2026-11-28',
+        totalAmount: 2500,
+        packageType: 'oneDay',
+        mealOption: opt
+      });
+      const err = doc.validateSync();
+      assert.strictEqual(err, undefined, `Expected mealOption=${opt} to pass validation`);
+    }
+
+    const badDoc = new models.Booking({
+      customerName: 'Bad Meal',
+      customerPhone: '9876543210',
+      date: '2026-11-28',
+      totalAmount: 2500,
+      packageType: 'oneDay',
+      mealOption: 'invalid_meal'
+    });
+    const badErr = badDoc.validateSync();
+    assert.ok(badErr && badErr.errors && badErr.errors.mealOption, 'Invalid mealOption must fail Mongoose validation');
+  });
+
+  await test('One Day Picnic B->T manual booking succeeds end-to-end with weekend ₹1,250/pp & weekday ₹1,000/pp', async () => {
+    savedBookings.length = 0;
+    // Weekend (Saturday 2026-11-28): 2 adults × ₹1,250 = ₹2,500
+    const wkendRes = await reqJson(baseUrl, 'POST', '/api/bookings/manual-booking', {
+      customerName: 'Picnic Weekend',
+      customerPhone: '9876543210',
+      checkInDate: '2026-11-28',
+      checkOutDate: '2026-11-28',
+      packageType: 'oneDay',
+      mealOption: 'B->T',
+      guestComposition: { adults: 2, children: 0 },
+      bookedBy: { name: 'Ravi', staffId: 'staff_1' },
+      payment: { amount: 1000, mode: 'cash' }
+    }, staffToken);
+    assert.strictEqual(wkendRes.status, 200);
+    assert.strictEqual(wkendRes.json.booking.mealOption, 'breakfast_tea');
+    assert.strictEqual(wkendRes.json.booking.totalAmount, 2500);
+    assert.strictEqual(wkendRes.json.booking.pricingSnapshot.originalTotal, 2500);
+    assert.strictEqual(wkendRes.json.booking.pricingSnapshot.ratesApplied.oneDayPerPersonRate, 1250);
+    assert.strictEqual(wkendRes.json.booking.remainingPayment, 1500);
+
+    // Ensure Mongoose validateSync() passes on the persisted fields
+    const persistedCheck = new models.Booking({
+      customerName: wkendRes.json.booking.customerName,
+      customerPhone: wkendRes.json.booking.customerPhone,
+      date: wkendRes.json.booking.date,
+      packageType: wkendRes.json.booking.packageType,
+      mealOption: wkendRes.json.booking.mealOption,
+      totalAmount: wkendRes.json.booking.totalAmount
+    });
+    assert.strictEqual(persistedCheck.validateSync(), undefined);
+
+    // Weekday (Tuesday 2026-11-24): 3 adults + 2 children = 5 guests × ₹1,000 = ₹5,000
+    const wkdayRes = await reqJson(baseUrl, 'POST', '/api/bookings/manual-booking', {
+      customerName: 'Picnic Weekday',
+      customerPhone: '9876543211',
+      checkInDate: '2026-11-24',
+      checkOutDate: '2026-11-24',
+      packageType: 'oneDay',
+      mealOption: 'B->T',
+      guestComposition: { adults: 3, children: 2 },
+      childrenAges: [4, 9],
+      bookedBy: { name: 'Ravi', staffId: 'staff_1' },
+      payment: { amount: 5000, mode: 'upi' }
+    }, staffToken);
+    assert.strictEqual(wkdayRes.status, 200);
+    assert.strictEqual(wkdayRes.json.booking.mealOption, 'breakfast_tea');
+    assert.strictEqual(wkdayRes.json.booking.totalAmount, 5000);
+    assert.strictEqual(wkdayRes.json.booking.paymentStatus, 'paid');
+  });
+
+  await test('One Day Picnic B->T rate override preserves originalTotal and rejects invalid mealOption via API', async () => {
+    const previewRes = await reqJson(baseUrl, 'POST', '/api/pms/pricing/preview', {
+      packageType: 'oneDay',
+      checkInDate: '2026-11-28',
+      adults: 2,
+      mealOption: 'B->T',
+      rateOverrides: { oneDayPerPersonRate: '1100', reason: 'Regular guest' }
+    }, staffToken);
+    assert.strictEqual(previewRes.status, 200);
+    assert.strictEqual(previewRes.json.quote.originalTotal, 2500);
+    assert.strictEqual(previewRes.json.quote.totalAmount, 2200);
+    assert.strictEqual(previewRes.json.quote.dailyBreakdown[0].perPersonRate, 1100);
+
+    const badMealRes = await reqJson(baseUrl, 'POST', '/api/bookings/manual-booking', {
+      customerName: 'Invalid Meal',
+      customerPhone: '9876543210',
+      checkInDate: '2026-11-28',
+      packageType: 'oneDay',
+      mealOption: 'invalid_meal',
+      guestComposition: { adults: 2, children: 0 },
+      bookedBy: { name: 'Ravi' },
+      payment: { amount: 1000, mode: 'cash' }
+    }, staffToken);
+    assert.strictEqual(badMealRes.status, 400);
+  });
+
   server.close();
   console.log(`\n══════════════════════════════════════════════════════════════`);
   console.log(`SPRINT 2 TEST SUITE SUMMARY: Total: ${passed + failed} | Passed: ${passed} | Failed: ${failed}`);
